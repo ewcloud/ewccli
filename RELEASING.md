@@ -1,4 +1,4 @@
-# Releasing metoppy
+# Releasing ewccli
 
 1. checkout main branch
 2. pull from repo

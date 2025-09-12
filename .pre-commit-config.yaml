@@ -1,0 +1,69 @@
+# Package Name: ewccli
+# License: GPL-3.0-or-later
+# Copyright (c) 2025 EUMETSAT, ECMWF for European Weather Cloud
+# See the LICENSE file for more details
+
+---
+repos:
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.5.5
+    hooks:
+      - id: remove-tabs
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+#      - id: check-added-large-files
+      - id: check-ast
+      - id: check-byte-order-marker
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: debug-statements
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: name-tests-test
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Ruff version.
+    rev: v0.12.4
+    hooks:
+      # Run the linter.
+      - id: ruff-check
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.0
+    hooks:
+      - id: mypy
+        exclude: '^(docs|tasks|tests)|setup\.py'
+        additional_dependencies:
+          - types-requests
+          - types-PyYAML
+          - types-setuptools
+
+  - repo: https://github.com/psf/black
+    rev: "25.1.0"
+    hooks:
+      - id: black
+
+  - repo: https://github.com/PyCQA/flake8
+    rev: "7.3.0"
+    hooks:
+      - id: flake8
+        additional_dependencies:
+          - flake8-comprehensions
+          - flake8-cognitive-complexity
+          - flake8-functions
+          - flake8-length
+          - pep8-naming
+        # args:
+        #   - --max-line-length=120
+        #   - --max-complexity=10

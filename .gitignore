@@ -1,0 +1,14 @@
+.vscode
+**/__pycache__
+.coverage
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.ewc-source*
+dist/
+docs/dist/
+test_results/
+TESTLOGS*
+coverage.xml
+report.xml
+**/.local

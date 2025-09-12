@@ -1,0 +1,6 @@
+name: images
+license_spdx: CC-BY-SA-4.0
+copyright: EUMETSAT, ECMWF
+home_url: https://gitlab.eumetsat.int/HP-EWC/ewc-community-hub/ewccli
+about_resource: ./images/*
+These shareAlike photos are used unmodified so they do not require the larger work to be ShareAlike or compatible.

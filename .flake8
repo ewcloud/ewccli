@@ -1,0 +1,12 @@
+# Package Name: ewccli
+# License: GPL-3.0-or-later
+# Copyright (c) 2025 EUMETSAT, ECMWF for European Weather Cloud
+# See the LICENSE file for more details
+
+[flake8]
+functions-max-args = 5
+functions-max-locals = 10
+functions-max-length = 50
+max-line-length = 120
+max-complexity = 10
+ignore = E203, W503
