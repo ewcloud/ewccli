@@ -1,6 +1,6 @@
 # ewccli
 
-`ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). This tool is developed to support EWC users on the deployment of items from the EWC Community Hub.
+`ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). This tool is developed to support EWC users on the use of the EWC services.
 
 For more info about this SW, you may contact the [European Weather Cloud](http://support.europeanweather.cloud/) 
 <[support@europeanweather.cloud](mailto:support@europeanweather.cloud)>.
@@ -61,7 +61,7 @@ pip install --user -e .
 
 Then run `ewc` to verify everything works:
 
-![ewccli-default](./images/ewccli-default.png)
+![ewccli-default](https://raw.githubusercontent.com/ewcloud/ewccli/main/images/ewccli-default.png)
 
 If you get a WARNING like `WARNING: The script ewc is installed in '~/.local/bin' which is not on PATH.` Add the following to your profile configuration file:
 
@@ -89,16 +89,15 @@ The following command shows the current available items. Official items are list
 ```bash
 ewc hub list
 ```
-
-![ewccli-hub-list](./images/ewccli-hub-list.png)
+![ewccli-hub-list](https://raw.githubusercontent.com/ewcloud/ewccli/main/images/ewccli-hub-list.png)
 
 
 ## Deploy an item
 
-![ewccli-hub-deploy](./images/ewccli-hub-deploy.png)
+![ewccli-hub-deploy](https://raw.githubusercontent.com/ewcloud/ewccli/main/images/ewccli-hub-deploy.png)
 
 ```bash
-ewccli hub deploy ITEM
+ewc hub deploy ITEM
 ```
 where ITEM is taken from `ewc hub list` command under Item column.
 
