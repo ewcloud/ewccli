@@ -13,7 +13,7 @@ authors = [
 readme = "README.md"
 license = { file = "LICENSE" }
 maintainers = [
-  {name = "EWC", email = "support@europeanweather.cloud"}
+  { name = "EWC", email = "support@europeanweather.cloud"}
 ]
 requires-python = ">3.10"
 dependencies = [
@@ -57,12 +57,12 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.eumetsat.int/HP-EWC/ewc-community-hub/ewccli"
-"Bug Tracker" = "https://gitlab.eumetsat.int/HP-EWC/ewc-community-hub/ewccli/issues"
-Documentation = "https://gitlab.eumetsat.int/HP-EWC/ewc-community-hub/ewccli/blob/main/README.md"
-"Source Code" = "https://gitlab.eumetsat.int/HP-EWC/ewc-community-hub/ewccli"
-Organization = "EUMETSAT,ECMWF"
-"Release Notes" = "https://gitlab.eumetsat.int/HP-EWC/ewc-community-hub/ewccli/blob/main/CHANGELOG.md"
+Homepage = "https://www.europeanweather.cloud/"
+"Bug Tracker" = "https://github.com/ewcloud/ewccli/issues"
+Documentation = "https://github.com/ewcloud/ewccli/blob/main/README.md"
+"Source Code" = "https://github.com/ewcloud/ewccli"
+Organization = "https://www.europeanweather.cloud/"
+"Release Notes" = "https://github.com/ewcloud/ewccli/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling>=1.5"]
