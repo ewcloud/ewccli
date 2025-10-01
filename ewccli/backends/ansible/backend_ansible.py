@@ -132,9 +132,11 @@ class AnsibleBackend:
 
     def install_ansible_roles(self, requirements_path: str, dry_run: bool = False):
         """Install Ansible roles."""
+        command = f"ansible-galaxy role install -r {requirements_path} --force"
+        _LOGGER.info(f"Installing ansible roles from requirements: \n{command}\n")
         return_code, message = run_command_from_host(
             description="Install ansible roles",
-            command=[f"ansible-galaxy role install -r {requirements_path}"],
+            command=[command],
             timeout=None,
             # cwd=requirements_path,
             dry_run=dry_run,
