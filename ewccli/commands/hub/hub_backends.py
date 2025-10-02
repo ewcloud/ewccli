@@ -227,7 +227,6 @@ def run_ansible_item(
         return 0, "Dry run. No actions"
 
     requirements_file_path = f"{cwd_command}/{repo_name}/{requirements_file_relative_path}"
-    _LOGGER.info(f"Installing ansible roles from requirements: \nansible-galaxy role install -r {requirements_file_path}\n")
     # Install roles
     ansible_backend.install_ansible_roles(
         requirements_path=requirements_file_path, dry_run=dry_run
