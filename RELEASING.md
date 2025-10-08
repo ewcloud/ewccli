@@ -29,9 +29,80 @@
    the changelog (the portion under the version section header) in the
    "Describe this release" box. Finally click "Publish release".
 
-9. Now you can start the process to release on PyPI, using steps from:
-Before 8. look at https://github.com/pytroll/satpy/blob/main/.github/workflows/deploy-sdist.yaml
+9. Now you can start the process to release on PyPI (only admins)
 
-alternative automation:
-9. Verify the GitHub actions for deployment succeed and the release is on PyPI.
-If you want to automate this, look at https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
+9.1 Build package
+
+Now generate the distribution. To build the package, use PyPA build.
+
+1. Install the build tool
+```bash
+pip install -q build
+```
+
+```bash
+python3 -m build
+```
+
+you will end up with a `/dist` file. The .whl file and .tar.gz can then be distributed and installed or pushed to PyPI.
+
+9.2 Push package to PyPI
+
+Install twine
+```bash
+pip install twine
+```
+
+If you want to test first, use TestPyPI:
+```bash
+twine upload --repository testpypi dist/*
+```
+
+To upload your package to PyPI, use Twine:
+```bash
+twine upload dist/*
+```
+You'll be prompted for your PyPI username & password.
+
+10. Once release is on PyPI, you can create the change on conda-forge (only admins) https://www.pyopensci.org/python-package-guide/tutorials/publish-conda-forge.html#
+
+Step 1: Install grayskull
+```bash
+pip install grayskull
+```
+
+Step 2: Fork and clone the conda-forge staged-recipes repository
+```
+git clone git@github.com:conda-forge/staged-recipes.git
+```
+
+
+Step 3: Create your conda-forge recipe
+
+```
+cd staged-recipes/
+```
+
+```
+cd examples/
+```
+
+```
+grayskull pypi ewccli
+```
+
+When you run grayskull, it will grab the latest distribution of your package from PyPI and will use that to create a new recipe.
+
+The recipe will be saved in a directory named after your package’s name, wherever you run the command.
+
+recipes/packagename/meta.yaml
+
+Step 3b: Bug fix - add a home url to the about: section
+
+There is currently a small bug in Grayskull where it doesn’t populate the home: element of the recipe. If you don’t include this, you will receive an error message from the friendly conda-forge linter bot.
+
+Step 4: tests for conda-forge
+
+If you need to
+
+Step 4: Submit a pull request to the staged-recipes repository

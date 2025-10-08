@@ -51,7 +51,19 @@ pip install ewccli
 git clone THIS_REPO && cd ewccli
 ```
 
-2. Install the package
+2. create virtualenv with minimum python version > 3.10
+
+```bash
+python3 -m venv test-ewccli
+```
+
+3. Upgrade pip
+
+```bash
+pip install --upgrade pip
+```
+
+3. Install the package
 
 ```bash
 pip install --user -e .
@@ -130,16 +142,16 @@ The following dependencies are not included in the package but they are required
 |------|---------|---------|--------------|
 | requests | 2.32.5 | Apache Software License (Apache-2.0) | https://requests.readthedocs.io/en/latest |
 | click | 8.1.8 | BSD-3-Clause | https://github.com/pallets/click |
-| click-extra | 4.15.0 | GNU General Public License v2 or later (GPLv2+) | https://github.com/kdeldycke/click-extra |
 | rich | 14.1.0 | MIT License (MIT) | https://github.com/Textualize/rich |
 | rich-click | 1.8.9 | MIT License (MIT License) | https://pypi.org/project/rich-click |
 | prompt_toolkit | 3.0.51 | BSD-3-Clause License | https://python-prompt-toolkit.readthedocs.io/en/stable |
 | pyyaml | 6.0.2 | MIT License (MIT) | https://pyyaml.org |
 | cryptography | 45.0.6 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
 | python-openstackclient | 8.2.0 | Apache Software License (Apache-2.0) | https://docs.openstack.org/python-openstackclient/latest |
-| ansible | 10.7.0 | GNU General Public License v3 or later (GPLv3+) (GPL-3.0-or-later) | https://www.redhat.com/en/ansible-collaborative |
+| ansible | 11.10.0 | GNU General Public License v3 or later (GPLv3+) (GPL-3.0-or-later) | https://www.redhat.com/en/ansible-collaborative |
 | ansible-runner | 2.4.1 | Apache Software License (Apache Software License, Version 2.0) | https://ansible.readthedocs.io/projects/runner/en/latest |
 | kubernetes | 33.1.0 | Apache Software License (Apache License Version 2.0) | https://github.com/kubernetes-client/python |
+
 
 ### Build/Edit/Test Dependencies
 The following dependencies are only required for building/editing/testing the software:
@@ -189,57 +201,28 @@ pip install --user -e .[test]
 4. When you are happy, push code to your fork and open a MR (Gitlab) or PR (Github)
 
 
-### Generate docs
+## Generate docs
 
 ```bash
 sphinx-build -b html docs/source/ Documentation/
 ```
 
-### Check coverage
+## Check coverage
 
 ```bash
 coverage run -m pytest
 ```
 
-## Build package and push it to PyPI
-
-### Build package
-
-Now generate the distribution. To build the package, use PyPA build.
-
-1. Install the build tool
-```bash
-pip install -q build
-```
+## Run tests
 
 ```bash
-python3 -m build
+pytest
 ```
 
-you will end up with a `/dist` file. The .whl file and .tar.gz can then be distributed and installed or pushed to PyPI.
-
-### Test in a container
+## Test in a container
 Once you create the .dist/ repo you can create a container if you need to test anything before.
 
 ```bash
 podman build -t test-ewccli -f ./Containerfile .
 ```
 or same command with `docker` if you use it.
-
-### Push package to PyPI
-
-Install twine
-```bash
-pip install twine
-```
-
-If you want to test first, use TestPyPI:
-```bash
-twine upload --repository testpypi dist/*
-```
-
-To upload your package to PyPI, use Twine:
-```bash
-twine upload dist/*
-```
-You'll be prompted for your PyPI username & password.
