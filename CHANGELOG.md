@@ -2,12 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+# 0.1.1 (2025-10-08)
+
+### Bug Fixes
+
+* Force ansible roles download when new versions exist ([#22](https://github.com/ewcloud/ewccli/pull/22)) ([#3](https://github.com/ewcloud/ewccli/issues/3)) ([9263391](https://github.com/ewcloud/ewccli/commit/92633917a71d3cf5cf6aea23f4fef83e052f3f92))
+* Remove dependency not used ([#19](https://github.com/ewcloud/ewccli/pull/19)) ([#6](https://github.com/ewcloud/ewccli/issues/6)) ([d44135b](https://github.com/ewcloud/ewccli/commit/d44135bbaf8864722dc324f201d0ad4f61c5a89d))
+
 # 0.1.0 (2025-09-12)
 
 In this initial release, basic funcionality for ewc login, ewc hub and ewc infra command groups have been released. This is also the first release on GitHub with all public code.
 
 ### Features
 
-- code for v0.1.0 [4c425d5](https://github.com/ewcloud/ewccli/commit/4c425d57e0d24a64161c8faddb59643107547625)
-- initial files [6321a7e](https://github.com/ewcloud/ewccli/commit/6321a7e8b42e68e0b19042f42382e8ad030f469a) 
+* code for v0.1.0 [4c425d5](https://github.com/ewcloud/ewccli/commit/4c425d57e0d24a64161c8faddb59643107547625)
+* initial files [6321a7e](https://github.com/ewcloud/ewccli/commit/6321a7e8b42e68e0b19042f42382e8ad030f469a) 
 
