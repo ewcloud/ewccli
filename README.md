@@ -51,19 +51,25 @@ pip install ewccli
 git clone THIS_REPO && cd ewccli
 ```
 
-2. create virtualenv with minimum python version > 3.10
+2. Create virtualenv with minimum python version > 3.10
 
 ```bash
-python3 -m venv test-ewccli
+python3 -m venv ewcclienv
 ```
 
-3. Upgrade pip
+3. Activate the virtual environment
+
+```bash
+source ./ewcclienv/bin/activate
+```
+
+4. Upgrade pip
 
 ```bash
 pip install --upgrade pip
 ```
 
-3. Install the package
+5. Install the package
 
 ```bash
 pip install --user -e .
