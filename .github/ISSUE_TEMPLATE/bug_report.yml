@@ -1,0 +1,82 @@
+name: 🐛 Bug Report
+description: Report a problem or unexpected behavior in the EWC CLI
+title: "[BUG] "
+labels:
+  - bug
+  - cli
+assignees:
+  - pacospace
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue with **EWC CLI**!  
+        Please fill out the details below so we can reproduce and fix it.
+
+  - type: input
+    id: command
+    attributes:
+      label: Affected Command
+      description: Which command or subcommand caused the issue?
+      placeholder: ewc projects list
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the issue
+      description: What went wrong? Include any error messages or unexpected behavior.
+      placeholder: The command hangs when running `ewc auth login`
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: What steps can we take to reproduce the problem?
+      placeholder: |
+        1. Run `ewc login`
+        2. Enter credentials
+        3. CLI crashes with traceback
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen instead?
+      placeholder: The login should complete and show my EWC profile.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or Output
+      description: Paste relevant CLI output or stack traces (if any).
+      render: shell
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Environment
+      description: Which platform are you using?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+      multiple: false
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: EWC CLI Version
+      description: Run `ewc --version`
+      placeholder: e.g. 0.4.1
+    validations:
+      required: true

@@ -1,0 +1,61 @@
+name: 🚀 Feature Request
+description: Suggest a new command, flag, or improvement to EWC CLI
+title: "[FEATURE] "
+labels:
+  - enhancement
+assignees:
+  - pacospace
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in improving **EWC CLI**!  
+        Please describe your proposed feature in detail.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe what feature you want to add.
+      placeholder: Add support for `ewc datasets download`
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this feature useful? What problem does it solve?
+      placeholder: |
+        It would allow users to download EUMETSAT datasets directly without using the web portal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Implementation
+      description: How could this be implemented? What would the CLI interface look like?
+      placeholder: |
+        Example usage:
+        ```bash
+        ewc datasets download --id MSG-SEVIRI --output ./data/
+        ```
+  
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you thought of other approaches or workarounds?
+      placeholder: Using the web API manually or `curl` for now.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Nice to have
+        - Important
+        - Critical
+      description: How important is this feature to you?
