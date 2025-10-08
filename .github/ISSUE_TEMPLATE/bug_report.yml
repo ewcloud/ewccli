@@ -3,7 +3,6 @@ description: Report a problem or unexpected behavior in the EWC CLI
 title: "[BUG] "
 labels:
   - bug
-  - cli
 assignees:
   - pacospace
 
