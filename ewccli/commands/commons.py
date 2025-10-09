@@ -353,7 +353,7 @@ def list_items_table(hub_items: dict):
         title="EWC HUB Items",
         box=box.MINIMAL_DOUBLE_HEAD,
     )
-    table.add_column("Item")
+    table.add_column("Item", overflow="fold")
     table.add_column("Title")
     table.add_column("Version")
     table.add_column("Summary")
