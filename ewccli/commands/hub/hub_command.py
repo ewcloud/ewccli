@@ -476,7 +476,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         server_inputs = {
             "server_name": server_name,
             "is_gpu": is_gpu,
-            "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value) or image_name,
+            "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value)
+            or image_name,
             "keypair_name": keypair_name,
             "flavour_name": flavour_name,
             "external_ip": external_ip,
@@ -524,13 +525,19 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                     item_inputs[default_item_input_name] = d_item.get("default")
 
         # Install requirements for ansible playbook
-        requirements_file_relative_path = item_info_ewccli.get(HubItemCLIKeys.ITEM_PATH_TO_REQUIREMENTS_FILE.value, "requirements.yml")
+        requirements_file_relative_path = item_info_ewccli.get(
+            HubItemCLIKeys.ITEM_PATH_TO_REQUIREMENTS_FILE.value, "requirements.yml"
+        )
 
         # Run main ansible playbook
-        main_file_relative_path = item_info_ewccli.get(HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value)
+        main_file_relative_path = item_info_ewccli.get(
+            HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value
+        )
 
         if not main_file_relative_path:
-            raise ClickException(f"{HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value} key for {item} is not set. The Ansible playbook item cannot be installed.")
+            raise ClickException(
+                f"{HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value} key for {item} is not set. The Ansible playbook item cannot be installed."
+            )
 
         main_file_path = f"{command_path}/{repo_name}/{main_file_relative_path}"
 

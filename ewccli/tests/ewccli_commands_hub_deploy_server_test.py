@@ -13,8 +13,8 @@ from typing import Optional
 import pytest
 from pydantic import BaseModel
 
-from ewccli.tests.test_ewccli_base import ServerInfo
-from ewccli.tests.test_ewccli_base import Address
+from ewccli.tests.ewccli_base_test import ServerInfo
+from ewccli.tests.ewccli_base_test import Address
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.enums import Federee
 from ewccli.commands.commons_infra import resolve_image_and_flavor
@@ -32,6 +32,7 @@ class DeployRequest(BaseModel):
         image_name (Optional[str]): Optional OS image name.
         is_gpu (bool): Whether GPU-enabled flavour is required.
     """
+
     federee: str
     flavour_name: str | None = None
     image_name: str | None = None
@@ -51,7 +52,9 @@ class DeployRequest(BaseModel):
         ),
         # GPU image with invalid flavour
         (
-            DeployRequest(federee=Federee.ECMWF.value, flavour_name="invalid-flavour", is_gpu=True),
+            DeployRequest(
+                federee=Federee.ECMWF.value, flavour_name="invalid-flavour", is_gpu=True
+            ),
             1,
             None,
             None,
@@ -67,15 +70,23 @@ class DeployRequest(BaseModel):
         ),
         # Custom CPU image (must use full image ID)
         (
-            DeployRequest(federee=Federee.EUMETSAT.value, image_name=ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"], is_gpu=False),
+            DeployRequest(
+                federee=Federee.EUMETSAT.value,
+                image_name=ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"],
+                is_gpu=False,
+            ),
             0,
             ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"],
             ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP[Federee.EUMETSAT.value],
-            ewc_hub_config.EWC_CLI_IMAGES_USER[ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"]],
+            ewc_hub_config.EWC_CLI_IMAGES_USER[
+                ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"]
+            ],
         ),
         # Unsupported image
         (
-            DeployRequest(federee=Federee.EUMETSAT.value, image_name="nonexistent", is_gpu=False),
+            DeployRequest(
+                federee=Federee.EUMETSAT.value, image_name="nonexistent", is_gpu=False
+            ),
             1,
             None,
             None,
@@ -136,6 +147,7 @@ def test_resolve_image_and_flavor(
 
 # Pydantic models
 
+
 class IPResult(BaseModel):
     """
     Pydantic model representing the result of resolving a machine's IPs.
@@ -144,6 +156,7 @@ class IPResult(BaseModel):
         internal_ip_machine (Optional[str]): The internal/private IP of the machine.
         external_ip_machine (Optional[str]): The external/public IP of the machine.
     """
+
     internal_ip_machine: Optional[str]
     external_ip_machine: Optional[str]
 
@@ -163,13 +176,17 @@ class IPResult(BaseModel):
                 addresses={
                     "private": [
                         Address(addr="10.0.0.5", **{"OS-EXT-IPS:type": "fixed"}),
-                        Address(addr="192.168.1.100", **{"OS-EXT-IPS:type": "floating"}),
+                        Address(
+                            addr="192.168.1.100", **{"OS-EXT-IPS:type": "floating"}
+                        ),
                     ]
                 },
                 security_groups=[],
             ),
             0,
-            IPResult(internal_ip_machine="10.0.0.5", external_ip_machine="192.168.1.100"),
+            IPResult(
+                internal_ip_machine="10.0.0.5", external_ip_machine="192.168.1.100"
+            ),
         ),
         # ECMWF with default private/external IP
         (
@@ -181,13 +198,18 @@ class IPResult(BaseModel):
                 key_name="key2",
                 status="ACTIVE",
                 addresses={
-                    "private-1": [Address(addr="10.1.1.5"), Address(addr="136.10.10.10")],
+                    "private-1": [
+                        Address(addr="10.1.1.5"),
+                        Address(addr="136.10.10.10"),
+                    ],
                     "external-net": [Address(addr="200.100.50.1")],
                 },
                 security_groups=[],
             ),
             0,
-            IPResult(internal_ip_machine="10.1.1.5", external_ip_machine="136.10.10.10"),
+            IPResult(
+                internal_ip_machine="10.1.1.5", external_ip_machine="136.10.10.10"
+            ),
         ),
         # ECMWF specifying external network
         (
@@ -205,7 +227,9 @@ class IPResult(BaseModel):
                 security_groups=[],
             ),
             0,
-            IPResult(internal_ip_machine="10.1.1.5", external_ip_machine="200.100.50.1"),
+            IPResult(
+                internal_ip_machine="10.1.1.5", external_ip_machine="200.100.50.1"
+            ),
         ),
         # Missing addresses (should fail)
         (

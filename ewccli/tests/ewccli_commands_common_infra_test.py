@@ -8,9 +8,8 @@
 
 """Tests for EWC commands common methods."""
 
-
-from ewccli.tests.test_ewccli_base import SecurityGroup
-from ewccli.tests.test_ewccli_base import ServerInfo
+from ewccli.tests.ewccli_base_test import SecurityGroup
+from ewccli.tests.ewccli_base_test import ServerInfo
 
 from ewccli.enums import Federee
 from ewccli.commands.commons_infra import get_deployed_server_info
@@ -29,13 +28,13 @@ def test_get_deployed_server_info_eumetsat_private_and_manila():
             "private": [{"addr": "10.0.0.5", "OS-EXT-IPS:type": "fixed"}],
             "manila-network": [{"addr": "192.168.1.5"}],
         },
-        security_groups=[SecurityGroup(name="ssh")]
+        security_groups=[SecurityGroup(name="ssh")],
     )
 
     vm_info = get_deployed_server_info(
         Federee.EUMETSAT.value,
         server.model_dump(by_alias=True),
-        image_name="ubuntu-20.04"
+        image_name="ubuntu-20.04",
     )
 
     assert vm_info["id"] == "02406c28-a84a-4829-bd6b-5562cd6eae8c"
@@ -58,7 +57,7 @@ def test_get_deployed_server_info_ecmwf_multiple_networks():
             "net1": [{"addr": "172.16.0.10"}, {"addr": "172.16.0.11"}],
             "net2": [{"addr": "10.10.10.5"}],
         },
-        security_groups=[SecurityGroup(name="sec1"), SecurityGroup(name="sec2")]
+        security_groups=[SecurityGroup(name="sec1"), SecurityGroup(name="sec2")],
     )
 
     vm_info = get_deployed_server_info(Federee.ECMWF.value, server.model_dump())
@@ -79,7 +78,7 @@ def test_get_deployed_server_info_no_addresses():
         key_name="none",
         status="SHUTOFF",
         addresses=None,
-        security_groups=[]
+        security_groups=[],
     )
 
     vm_info = get_deployed_server_info(Federee.EUMETSAT.value, server.model_dump())

@@ -17,6 +17,7 @@ class GroupVersionResource:
         version (str): The API version of the resource (e.g., "v1", "v1alpha1").
         resource (str): The plural name of the resource (e.g., "pods", "records").
     """
+
     def __init__(self, group: str, version: str, resource: str):
         self.group = group
         self.version = version

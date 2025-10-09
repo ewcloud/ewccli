@@ -26,6 +26,7 @@ class ClusterSpec:
         nodeSize (Optional[str]): Size/flavor of the worker nodes.
         region (Optional[str]): The region where the cluster will be deployed.
     """
+
     siteName: str
     clusterName: str
     kubernetesVersion: Optional[str] = None
@@ -44,6 +45,7 @@ class Metadata:
         namespace (Optional[str]): Kubernetes namespace (optional).
         labels (Optional[dict]): Dictionary of key-value labels.
     """
+
     name: str
     namespace: Optional[str] = None
     labels: Optional[dict] = field(default_factory=dict)
@@ -60,6 +62,7 @@ class ClusterConfig:
         metadata (Metadata): Resource metadata.
         spec (RecordSpec): Specification of the cluster.
     """
+
     apiVersion: str
     kind: str
     metadata: Metadata
@@ -67,7 +70,5 @@ class ClusterConfig:
 
 
 ClusterGVR = GroupVersionResource(
-    group="k8s.europeanweather.cloud",
-    version="v1alpha1",
-    resource="ewcclusters"
+    group="k8s.europeanweather.cloud", version="v1alpha1", resource="ewcclusters"
 )

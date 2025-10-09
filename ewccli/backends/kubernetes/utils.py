@@ -44,7 +44,9 @@ def get_reason_from_conditions(conditions: list) -> str:
         return ready["reason"]
 
     # 2. Look for first condition with status 'False'
-    failed = next((c for c in conditions if c.get("status") == "False" and c.get("reason")), None)
+    failed = next(
+        (c for c in conditions if c.get("status") == "False" and c.get("reason")), None
+    )
     if failed:
         return failed["reason"]
 

@@ -8,7 +8,6 @@
 
 """Test ssh keys methods."""
 
-
 import base64
 
 import pytest
@@ -129,7 +128,9 @@ def test_save_ssh_key_creates_file(tmp_path):
     assert oct(path.stat().st_mode & 0o777) == "0o600"
 
 
-def test_save_ssh_keys_writes_files(tmp_path, valid_private_key_pem, valid_public_key_openssh, monkeypatch):
+def test_save_ssh_keys_writes_files(
+    tmp_path, valid_private_key_pem, valid_public_key_openssh, monkeypatch
+):
     """
     Test that `save_ssh_keys` writes both private and public keys when provided.
     """
@@ -139,8 +140,12 @@ def test_save_ssh_keys_writes_files(tmp_path, valid_private_key_pem, valid_publi
     monkeypatch.setattr(ewc_hub_config, "EWC_CLI_PRIVATE_SSH_KEY_PATH", str(priv_path))
     monkeypatch.setattr(ewc_hub_config, "EWC_CLI_PUBLIC_SSH_KEY_PATH", str(pub_path))
 
-    encoded_priv = base64.b64encode(valid_private_key_pem.encode("utf-8")).decode("utf-8")
-    encoded_pub = base64.b64encode(valid_public_key_openssh.encode("utf-8")).decode("utf-8")
+    encoded_priv = base64.b64encode(valid_private_key_pem.encode("utf-8")).decode(
+        "utf-8"
+    )
+    encoded_pub = base64.b64encode(valid_public_key_openssh.encode("utf-8")).decode(
+        "utf-8"
+    )
 
     save_ssh_keys(ssh_public_encoded=encoded_pub, ssh_private_encoded=encoded_priv)
 

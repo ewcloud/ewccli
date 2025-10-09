@@ -567,7 +567,12 @@ def deploy_server(
         else:
             networks = tuple([default_network])
 
-    security_groups = security_groups or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(federee)
+    security_groups = security_groups or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(
+        federee
+    )
+
+    if not security_groups:
+        security_groups = ()
 
     # if "default" not in security_groups:
     #     security_groups += ("default",)
@@ -649,11 +654,12 @@ def deploy_server(
     # Extract image ID (usually a dict with id field)
     server_info_image = server_info.get("image")
 
-    image_id = (
-        server_info_image.get("id")
-        if isinstance(server_info_image, dict)
-        else server_info_image.id
-    )
+    if server_info_image is None:
+        image_id = None
+    elif isinstance(server_info_image, dict):
+        image_id = server_info_image.get("id")
+    else:
+        image_id = getattr(server_info_image, "id", None)
 
     try:
         # Fetch image name from the image ID
@@ -674,7 +680,12 @@ def deploy_server(
         federee=federee, server_info=server_info
     )
 
-    if external_ip and not resolve_ip_outputs.get("external_ip_machine"):
+    if not resolve_ip_outputs:
+        external_ip_machine = None
+    else:
+        external_ip_machine = resolve_ip_outputs.get("external_ip_machine")
+
+    if external_ip and not external_ip_machine:
         openstack_floatingip_status, message, _ = openstack_backend.add_external_ip(
             conn=openstack_api, server=server_info, federee=federee
         )

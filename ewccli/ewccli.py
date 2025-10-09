@@ -14,6 +14,7 @@ from ewccli.commands.login_command import init_command, init_options
 
 # Multiple backends
 from ewccli.commands.hub.hub_command import ewc_hub_command
+
 # Openstack backend
 from ewccli.commands.infra_command import ewc_infra_command
 
