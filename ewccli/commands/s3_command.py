@@ -24,7 +24,7 @@ _LOGGER = get_logger(__name__)
 cb_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 
 
-@click.group(name='s3')
+@click.group(name="s3")
 @cb_context
 def ewc_s3_command(ctx):
     """EWC S3 commands group."""
@@ -35,7 +35,7 @@ def ewc_s3_command(ctx):
     )
 
 
-@click.group(name='bucket')
+@click.group(name="bucket")
 def ewc_s3_bucket_command():
     """EWC S3 bucket commands group."""
 
@@ -49,7 +49,10 @@ def get(ctx):
     plural = BucketGVR.resource
 
     objects = ctx.k8s_backend.list_custom_resources(
-        group=BucketGVR.group, version=BucketGVR.version, namespace=namespace, plural=plural
+        group=BucketGVR.group,
+        version=BucketGVR.version,
+        namespace=namespace,
+        plural=plural,
     )
 
     if not objects:
@@ -57,7 +60,10 @@ def get(ctx):
         return
 
     show_objects(
-        title=f"{BucketGVR.resource}", objects=objects, plural=plural, namespace=namespace
+        title=f"{BucketGVR.resource}",
+        objects=objects,
+        plural=plural,
+        namespace=namespace,
     )
 
 
@@ -90,25 +96,25 @@ def delete(ctx, bucket_name: str):
     "--write-access-id",
     multiple=True,
     type=str,
-    help="ID(s) that have write access to the S3 bucket (can be passed multiple times)"
+    help="ID(s) that have write access to the S3 bucket (can be passed multiple times)",
 )
 @click.option(
     "--write-access-refs-id",
     multiple=True,
     type=str,
-    help="Reference ID(s) that have write access to the S3 bucket (can be passed multiple times)"
+    help="Reference ID(s) that have write access to the S3 bucket (can be passed multiple times)",
 )
 @click.option(
     "--read-access-id",
     multiple=True,
     type=str,
-    help="ID(s) that have read access to the S3 bucket (can be passed multiple times)"
+    help="ID(s) that have read access to the S3 bucket (can be passed multiple times)",
 )
 @click.option(
     "--read-access-refs-id",
     multiple=True,
     type=str,
-    help="Reference ID(s) that have read access to the S3 bucket (can be passed multiple times)"
+    help="Reference ID(s) that have read access to the S3 bucket (can be passed multiple times)",
 )
 @click.option("--geo-enabled", is_flag=True, help="Enable georedundancy")
 @click.option("--dry-run", is_flag=True, help="Simulate creation without applying")
@@ -140,11 +146,7 @@ ewc s3 bucket create \
     site_name = ctx.cli_config["region"]
 
     # Mandatory
-    spec = {
-        "siteName": site_name,
-        "bucketName": bucket_name,
-        "owner": access_id
-    }
+    spec = {"siteName": site_name, "bucketName": bucket_name, "owner": access_id}
 
     # Optional
     if write_access_id:
@@ -160,13 +162,11 @@ ewc s3 bucket create \
         spec["readAccessRefsIds"] = list(read_access_refs_id)
 
     if geo_enabled:
-        spec["georedundancy"] = {
-            "enabled": geo_enabled
-        }
+        spec["georedundancy"] = {"enabled": geo_enabled}
 
     crd_config = {
         "apiVersion": f"{BucketGVR.group}/{BucketGVR.version}",
-        "kind": f"Bucket",
+        "kind": "Bucket",
         "metadata": {"name": bucket_name, "namespace": namespace},
         "spec": spec,
     }
@@ -184,7 +184,7 @@ ewc s3 bucket create \
         )
 
 
-@click.group(name='credentials')
+@click.group(name="credentials")
 @cb_context
 def ewc_s3_credentials_command():
     """EWC S3 credentials commands group."""

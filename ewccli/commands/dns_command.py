@@ -67,7 +67,7 @@ def get(ctx):
         group=RecordGVR.group,
         version=RecordGVR.version,
         namespace=namespace,
-        plural=plural
+        plural=plural,
     )
 
     show_objects(
@@ -88,7 +88,7 @@ def describe(ctx, record_name: str):
         group=RecordGVR.group,
         version=RecordGVR.version,
         namespace=namespace,
-        plural=plural
+        plural=plural,
     )
     describe_object(object)
 

@@ -108,7 +108,6 @@ class AnsibleBackend:
 
         return runner.rc
 
-
     def run_ansible(
         self,
         description: str,

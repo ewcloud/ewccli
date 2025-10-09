@@ -368,7 +368,7 @@ def list_items_table(hub_items: dict):
         others_annotations = annotations.get("others", "").split(",")
 
         # Filter items not EWCCLI compatible
-        if HubItemOherAnnotation.EWCCLI_COMPATIBLE.value not in  others_annotations:
+        if HubItemOherAnnotation.EWCCLI_COMPATIBLE.value not in others_annotations:
             continue
 
         table.add_row(
@@ -493,7 +493,6 @@ def show_objects(title: str, objects: list, plural: str, namespace: str) -> None
         click.echo(f"No {plural} found.")
         return None
 
-
     table = Table(title=title)
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Namespace", style="yellow")
@@ -562,9 +561,18 @@ def describe_object(obj: dict) -> None:
     }
 
     # Print header
-    click.secho(f"Name: {obj.get('metadata', {}).get('name', '<unknown>')}", fg="cyan", bold=True)
-    click.secho(f"Namespace: {obj.get('metadata', {}).get('namespace', '<default>')}", fg="cyan")
-    click.secho(f"Kind: {obj.get('kind', '<unknown>')} | API: {obj.get('apiVersion', '')}", fg="cyan")
+    click.secho(
+        f"Name: {obj.get('metadata', {}).get('name', '<unknown>')}",
+        fg="cyan",
+        bold=True,
+    )
+    click.secho(
+        f"Namespace: {obj.get('metadata', {}).get('namespace', '<default>')}", fg="cyan"
+    )
+    click.secho(
+        f"Kind: {obj.get('kind', '<unknown>')} | API: {obj.get('apiVersion', '')}",
+        fg="cyan",
+    )
     click.echo()
 
     # Print sections

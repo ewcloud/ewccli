@@ -10,7 +10,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for your interest in improving **EWC CLI**!  
+        Thanks for your interest in improving **EWC CLI**!
         Please describe your proposed feature in detail.
 
   - type: input
@@ -42,7 +42,7 @@ body:
         ```bash
         ewc datasets download --id MSG-SEVIRI --output ./data/
         ```
-  
+
   - type: textarea
     id: alternatives
     attributes:

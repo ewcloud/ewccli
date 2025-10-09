@@ -8,7 +8,6 @@
 
 """CLI EWC Hub: EWC Hub interaction items specific methods."""
 
-import os
 import shutil
 import sys
 import json
@@ -37,10 +36,7 @@ HUB_ENV_VARIABLES_MAP = {
         Federee.ECMWF.value: ["192.168.1.0/24"],
         Federee.EUMETSAT.value: ["10.0.0.0/24"],
     },
-    "os_network_name": {
-        Federee.ECMWF.value: None,
-        Federee.EUMETSAT.value: "private"
-    },
+    "os_network_name": {Federee.ECMWF.value: None, Federee.EUMETSAT.value: "private"},
     "os_subnet_name": {
         Federee.ECMWF.value: None,
         Federee.EUMETSAT.value: "private-subnet",
@@ -131,9 +127,7 @@ def check_github_repo_accessible(source: str) -> bool:
     source = source.rstrip("/")
 
     # Build API URL
-    api_url = source.replace(
-        "https://github.com/", "https://api.github.com/repos/"
-    )
+    api_url = source.replace("https://github.com/", "https://api.github.com/repos/")
 
     try:
         response = requests.get(api_url, timeout=5)
@@ -226,7 +220,9 @@ def run_ansible_item(
     if dry_run:
         return 0, "Dry run. No actions"
 
-    requirements_file_path = f"{cwd_command}/{repo_name}/{requirements_file_relative_path}"
+    requirements_file_path = (
+        f"{cwd_command}/{repo_name}/{requirements_file_relative_path}"
+    )
     # Install roles
     ansible_backend.install_ansible_roles(
         requirements_path=requirements_file_path, dry_run=dry_run
@@ -316,7 +312,9 @@ def run_ansible_item(
                 _LOGGER.info(f"Retrying in {delay_seconds} seconds...")
                 time.sleep(delay_seconds)
             else:
-                _LOGGER.error(f"All attempts failed. EWC CLI could not install {item} Ansible Playbook item.")
+                _LOGGER.error(
+                    f"All attempts failed. EWC CLI could not install {item} Ansible Playbook item."
+                )
                 return_code = 1
 
     return return_code

@@ -23,6 +23,7 @@ class GeoRedundancy:
         healthEndpoint (str): The health check endpoint path.
         ssl (bool): Whether to use HTTPS for health checks.
     """
+
     enabled: bool
     healthEndpoint: str
     ssl: bool
@@ -42,6 +43,7 @@ class RecordSpec:
         ttl (Optional[int]): Time to live for the DNS record in seconds.
         georedundancy (Optional[GeoRedundancy]): Optional georedundancy settings.
     """
+
     siteName: str
     domainName: str
     recordName: str
@@ -61,6 +63,7 @@ class Metadata:
         namespace (Optional[str]): Kubernetes namespace (optional).
         labels (Optional[dict]): Dictionary of key-value labels.
     """
+
     name: str
     namespace: Optional[str] = None
     labels: Optional[dict] = field(default_factory=dict)
@@ -77,6 +80,7 @@ class RecordConfig:
         metadata (Metadata): Resource metadata.
         spec (RecordSpec): Specification of the DNS record.
     """
+
     apiVersion: str
     kind: str
     metadata: Metadata
@@ -84,7 +88,5 @@ class RecordConfig:
 
 
 RecordGVR = GroupVersionResource(
-    group="dns.europeanweather.cloud",
-    version="v1alpha1",
-    resource="records"
+    group="dns.europeanweather.cloud", version="v1alpha1", resource="records"
 )

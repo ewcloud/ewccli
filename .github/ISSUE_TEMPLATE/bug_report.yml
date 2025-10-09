@@ -10,7 +10,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting an issue with **EWC CLI**!  
+        Thanks for reporting an issue with **EWC CLI**!
         Please fill out the details below so we can reproduce and fix it.
 
   - type: input

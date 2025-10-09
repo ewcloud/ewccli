@@ -8,7 +8,6 @@
 
 """Test download item methods."""
 
-
 import pytest
 import requests
 
@@ -42,8 +41,12 @@ def temp_config(monkeypatch, tmp_path):
         Path: temporary config directory.
     """
     monkeypatch.setattr(ewc_hub_config, "EWC_CLI_BASE_PATH", tmp_path)
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_HUB_ITEMS_PATH", tmp_path / "items.yaml")
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_HUB_ITEMS_URL", "https://fake-url/items.yaml")
+    monkeypatch.setattr(
+        ewc_hub_config, "EWC_CLI_HUB_ITEMS_PATH", tmp_path / "items.yaml"
+    )
+    monkeypatch.setattr(
+        ewc_hub_config, "EWC_CLI_HUB_ITEMS_URL", "https://fake-url/items.yaml"
+    )
     yield tmp_path
 
 
@@ -54,7 +57,9 @@ def test_download_skips_if_file_exists_and_force_false(temp_config, monkeypatch)
     item_file = ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH
     item_file.write_text("existing content")
 
-    monkeypatch.setattr("requests.get", lambda *a, **kw: pytest.fail("Should not be called"))
+    monkeypatch.setattr(
+        "requests.get", lambda *a, **kw: pytest.fail("Should not be called")
+    )
 
     download_items(force=False)
 
@@ -79,7 +84,9 @@ def test_download_creates_new_file(temp_config, monkeypatch):
     """
     Test that `download_items` downloads and creates the file when it does not exist.
     """
-    monkeypatch.setattr("requests.get", lambda *a, **kw: DummyResponse("downloaded data"))
+    monkeypatch.setattr(
+        "requests.get", lambda *a, **kw: DummyResponse("downloaded data")
+    )
 
     download_items(force=False)
 
@@ -90,6 +97,7 @@ def test_download_handles_timeout(temp_config, monkeypatch, caplog):
     """
     Test that `download_items` logs an error when a timeout occurs.
     """
+
     def fake_get(*a, **kw):
         raise requests.Timeout()
 
@@ -104,6 +112,7 @@ def test_download_handles_request_exception(temp_config, monkeypatch, caplog):
     """
     Test that `download_items` logs an error when a RequestException occurs.
     """
+
     def fake_get(*a, **kw):
         raise requests.RequestException("connection error")
 

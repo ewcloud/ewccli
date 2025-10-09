@@ -19,17 +19,20 @@ class Address(BaseModel):
         addr (str): The IP address.
         OS_EXT_IPS_type (Optional[str]): The type of IP, e.g., "fixed" or "floating".
     """
+
     addr: str
     OS_EXT_IPS_type: Optional[str] = Field(None, alias="OS-EXT-IPS:type")
 
 
 class SecurityGroup(BaseModel):
     """Represents a security group associated with a server."""
+
     name: str
 
 
 class ServerInfo(BaseModel):
     """Represents the server information required for deployed VM info extraction."""
+
     id: str
     name: str
     flavor: Dict[str, str]
@@ -37,4 +40,3 @@ class ServerInfo(BaseModel):
     status: str
     addresses: Optional[Dict[str, List[Address]]] = {}
     security_groups: List[SecurityGroup] = []
-

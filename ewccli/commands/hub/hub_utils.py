@@ -9,7 +9,6 @@
 """CLI EWC Hub: EWC Hub interaction utils methods."""
 
 from typing import Optional, List
-from urllib.parse import urlparse
 
 from rich.console import Console
 

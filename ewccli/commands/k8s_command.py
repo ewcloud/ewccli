@@ -27,7 +27,7 @@ _LOGGER = get_logger(__name__)
 cb_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 
 
-@click.group(name='k8s')
+@click.group(name="k8s")
 @cb_context
 @login_options
 def ewc_k8s_command(ctx, config_name):
@@ -39,8 +39,7 @@ def ewc_k8s_command(ctx, config_name):
     token = ctx.cli_config["token"]
     region = ctx.cli_config["region"]
     ctx.k8s_backend = KubernetesBackend(
-        token=token,
-        host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(region)
+        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(region)
     )
 
 
@@ -53,7 +52,10 @@ def get(ctx):
     plural = ClusterGVR.resource
 
     objects = ctx.k8s_backend.list_custom_resources(
-        group=ClusterGVR.group, version=ClusterGVR.version, namespace=namespace, plural=plural
+        group=ClusterGVR.group,
+        version=ClusterGVR.version,
+        namespace=namespace,
+        plural=plural,
     )
 
     if not objects:
@@ -61,7 +63,10 @@ def get(ctx):
         return
 
     show_objects(
-        title=f"{ClusterGVR.resource}", objects=objects, plural=plural, namespace=namespace
+        title=f"{ClusterGVR.resource}",
+        objects=objects,
+        plural=plural,
+        namespace=namespace,
     )
 
 
@@ -85,6 +90,7 @@ def delete(ctx, cluster_name: str):
         name=cluster_name,
     )
 
+
 @ewc_k8s_command.command()
 @cb_context
 def kubeconfig(ctx):
@@ -92,16 +98,25 @@ def kubeconfig(ctx):
     Get kubeconfig.
     """
     # Add your backend logic here
-    namespace = ctx.cli_config["tenant_name"]
+    # namespace = ctx.cli_config["tenant_name"]
 
 
 @ewc_k8s_command.command()
 @cb_context
-@click.option("--cluster-name", required=True, help="The name of the Kubernetes cluster.")
+@click.option(
+    "--cluster-name", required=True, help="The name of the Kubernetes cluster."
+)
 @click.option("--k8s-version", required=False, help="The Kubernetes version to deploy.")
-@click.option("--node-count", required=False, type=int, help="Number of worker nodes in the cluster.")
+@click.option(
+    "--node-count",
+    required=False,
+    type=int,
+    help="Number of worker nodes in the cluster.",
+)
 @click.option("--node-size", required=False, help="Size/flavor of the worker nodes.")
-@click.option("--region", required=False, help="The region where the cluster will be deployed.")
+@click.option(
+    "--region", required=False, help="The region where the cluster will be deployed."
+)
 @click.option("--dry-run", is_flag=True, help="Simulate creation without applying")
 def create(  # noqa: CFQ002
     ctx,
@@ -147,7 +162,7 @@ ewc k8s create \
 
     crd_config = {
         "apiVersion": f"{ClusterGVR.group}/{ClusterGVR.version}",
-        "kind": f"ewcCluster",
+        "kind": "ewcCluster",
         "metadata": {"name": cluster_name, "namespace": namespace},
         "spec": spec,
     }

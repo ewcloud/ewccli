@@ -39,7 +39,9 @@ def temp_config_dir(monkeypatch):
 
     # Ensure default region/tenant are predictable in tests
     monkeypatch.setattr(ewc_hub_config, "EWC_CLI_DEFAULT_REGION", "default-region")
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_DEFAULT_TENANCY_NAME", "default-tenant")
+    monkeypatch.setattr(
+        ewc_hub_config, "EWC_CLI_DEFAULT_TENANCY_NAME", "default-tenant"
+    )
 
     return tmpdir
 
@@ -149,5 +151,7 @@ def test_load_cli_config_raises_if_missing(temp_config_dir):
     """
     Test that `load_cli_config` raises a ClickException if the config file is missing.
     """
-    with pytest.raises(click.ClickException, match="No config found. Run `ewc login` first."):
+    with pytest.raises(
+        click.ClickException, match="No config found. Run `ewc login` first."
+    ):
         load_cli_config(region="nonexistent", tenant_name="ghost")

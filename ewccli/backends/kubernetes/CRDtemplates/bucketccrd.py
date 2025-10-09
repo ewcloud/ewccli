@@ -28,6 +28,7 @@ class BucketSpec:
         readAccessRefsIds (Optional[List[str]]): References to IDs with read access.
         georedundancy (Optional[dict]): Georedundancy configuration (enabled flag).
     """
+
     siteName: str
     bucketName: str
     owner: str
@@ -48,6 +49,7 @@ class Metadata:
         namespace (str): Kubernetes namespace.
         labels (Optional[Dict]): Optional labels for resource metadata.
     """
+
     name: str
     namespace: str
     labels: Optional[Dict[str, str]] = field(default_factory=dict)
@@ -64,6 +66,7 @@ class BucketConfig:
         metadata (Metadata): Resource metadata.
         spec (BucketSpec): Bucket specification.
     """
+
     apiVersion: str
     kind: str
     metadata: Metadata
@@ -71,7 +74,5 @@ class BucketConfig:
 
 
 BucketGVR = GroupVersionResource(
-    group="s3.europeanweather.cloud",
-    version="v1alpha1",
-    resource="buckets"
+    group="s3.europeanweather.cloud", version="v1alpha1", resource="buckets"
 )

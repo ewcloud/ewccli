@@ -16,7 +16,6 @@ from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from kubernetes.config.config_exception import ConfigException
 from ewccli.logger import get_logger
-from ewccli.backends.kubernetes.exceptions import ResourceAlreadyExistsError
 
 
 _LOGGER = get_logger(__name__)
@@ -25,12 +24,11 @@ _LOGGER = get_logger(__name__)
 class KubernetesBackend:
     """Kubernetes backend class."""
 
-
     def __init__(
         self,
         token: Optional[str] = None,
         host: Optional[str] = None,
-        verify_ssl: bool = True
+        verify_ssl: bool = True,
     ):
         """
         Initialize Kubernetes client using token or kubeconfig.
@@ -48,7 +46,9 @@ class KubernetesBackend:
                 client.Configuration.set_default(configuration)
                 _LOGGER.debug("Initialized Kubernetes client with token and host.")
             except Exception as e:
-                _LOGGER.error(f"❌ Failed to initialize Kubernetes client with token+host: {e}")
+                _LOGGER.error(
+                    f"❌ Failed to initialize Kubernetes client with token+host: {e}"
+                )
                 sys.exit(1)
         else:
             try:
@@ -69,14 +69,8 @@ class KubernetesBackend:
         self.apps_api = client.AppsV1Api()
         self.api = client.ApiextensionsV1Api()
 
-
     def delete_custom_resource(
-        self,
-        group: str,
-        version: str,
-        namespace: str,
-        plural: str,
-        name: str
+        self, group: str, version: str, namespace: str, plural: str, name: str
     ) -> dict:
         """
         Delete a custom resource by name.
@@ -94,7 +88,7 @@ class KubernetesBackend:
                 version=version,
                 namespace=namespace,
                 plural=plural,
-                name=name
+                name=name,
             )
         except ApiException as e:
             if e.status == 404:
@@ -122,14 +116,8 @@ class KubernetesBackend:
                     f"Kubernetes API error [{e.status}]: {e.reason}\nResponse: {e.body}"
                 )
 
-
     def describe_custom_resource(
-        self,
-        group: str,
-        version: str,
-        namespace: str,
-        plural: str,
-        name: str
+        self, group: str, version: str, namespace: str, plural: str, name: str
     ) -> dict:
         """
         Retrieve a specific custom resource by name.
@@ -147,7 +135,7 @@ class KubernetesBackend:
                 version=version,
                 namespace=namespace,
                 plural=plural,
-                name=name
+                name=name,
             )
         except ApiException as e:
             if e.status == 404:
@@ -175,21 +163,13 @@ class KubernetesBackend:
                     f"Kubernetes API error [{e.status}]: {e.reason}\nResponse: {e.body}"
                 )
 
-
     def list_custom_resources(
-        self,
-        group: str,
-        version: str,
-        namespace: str,
-        plural: str
+        self, group: str, version: str, namespace: str, plural: str
     ) -> list:
         """List all custom resources of a type."""
         try:
             return self.custom_api.list_namespaced_custom_object(
-                group=group,
-                version=version,
-                namespace=namespace,
-                plural=plural
+                group=group, version=version, namespace=namespace, plural=plural
             )["items"]
         except ApiException as e:
             if e.status == 404:
@@ -216,7 +196,6 @@ class KubernetesBackend:
                 raise Exception(
                     f"Kubernetes API error [{e.status}]: {e.reason}\nResponse: {e.body}"
                 )
-
 
     def create_custom_resource(
         self,
@@ -252,6 +231,7 @@ class KubernetesBackend:
                 _LOGGER.error(
                     f"⚠️ Resource '{resource_name}' already exists in namespace '{namespace}'. Skipping creation."
                 )
+                return {}
             elif err_body.get("code") == 422:
                 # Parse and format Kubernetes validation errors
                 try:
@@ -267,6 +247,7 @@ class KubernetesBackend:
                 except Exception:
                     _LOGGER.error("❌ Error parsing validation response.")
                     _LOGGER.error(e.body)
+                return {}
             elif e.status == 404:
                 _LOGGER.error(
                     f"[404] Resource not found: group={group}, version={version}, "
@@ -294,19 +275,17 @@ class KubernetesBackend:
                 )
                 raise Exception("Kubernetes API request failed")
 
-
     def list_pods(
         self,
         namespace: str,
     ) -> list:
         """List pods in namespace.
-        
-            pods = list_pods(namespace="default")
-            for pod in pods.items:
-                print(pod.metadata.name)
+
+        pods = list_pods(namespace="default")
+        for pod in pods.items:
+            print(pod.metadata.name)
         """
         return self.core_api.list_namespaced_pod(namespace=namespace)
-
 
     def list_custom_resource_definitions(
         self,
@@ -329,13 +308,13 @@ class KubernetesBackend:
             plural = crd.spec.names.plural
 
             # Get first served version (or fallback to first version)
-            version = next((v.name for v in crd.spec.versions if v.served), crd.spec.versions[0].name)
+            version = next(
+                (v.name for v in crd.spec.versions if v.served),
+                crd.spec.versions[0].name,
+            )
 
-            result.append({
-                "kind": kind,
-                "group": group,
-                "version": version,
-                "plural": plural
-            })
+            result.append(
+                {"kind": kind, "group": group, "version": version, "plural": plural}
+            )
 
         return result

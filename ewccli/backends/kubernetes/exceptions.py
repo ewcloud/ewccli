@@ -7,5 +7,6 @@
 
 """Exceptions class for Kubernetes backend."""
 
+
 class ResourceAlreadyExistsError(Exception):
     """Exception raised when the resource already exists in the cluster."""

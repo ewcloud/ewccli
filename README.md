@@ -2,16 +2,16 @@
 
 `ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). This tool is developed to support EWC users on the use of the EWC services.
 
-For more info about this SW, you may contact the [European Weather Cloud](http://support.europeanweather.cloud/) 
+For more info about this SW, you may contact the [European Weather Cloud](http://support.europeanweather.cloud/)
 <[support@europeanweather.cloud](mailto:support@europeanweather.cloud)>.
 
 ## Copyright and License
 Copyright © EUMETSAT, ECMWF 2025.
 
 The provided code and instructions are licensed under [GPLv3+](./LICENSE).
-They are intended to automate the setup of an environment that includes 
+They are intended to automate the setup of an environment that includes
 third-party software components.
-The usage and distribution terms of the resulting environment are 
+The usage and distribution terms of the resulting environment are
 subject to the individual licenses of those third-party libraries.
 
 Users are responsible for reviewing and complying with the licenses of
@@ -72,7 +72,7 @@ pip install --upgrade pip
 5. Install the package
 
 ```bash
-pip install --user -e .
+pip install -e .
 ```
 
 ## Getting started
@@ -131,13 +131,13 @@ Used by infra and hub subcommands.
 
 Used by hub subcommand.
 
-### Terraform 
+### Terraform
 
-Used by hub subcommand.
+Used by hub subcommand. (COMING SOON)
 
 ### Kubernetes
 
-Used by dns, s3, k8s subcommmands.
+Used by dns, s3, k8s subcommmands. (COMING SOON)
 
 ## SW Bill of Materials (SBoM)
 
@@ -176,7 +176,7 @@ The following dependencies are only required for building/editing/testing the so
 | pydantic | 2.11.7  | MIT License (MIT) | https://github.com/pydantic/pydantic  |
 
 ## Changelog
-All notable changes (i.e. fixes, features and breaking changes) are documented 
+All notable changes (i.e. fixes, features and breaking changes) are documented
 in the [CHANGELOG.md](./CHANGELOG.md).
 
 ## Contributing
@@ -226,7 +226,20 @@ pytest
 ```
 
 ## Test in a container
-Once you create the .dist/ repo you can create a container if you need to test anything before.
+
+After cloning the repository and cd into it.
+
+1. Create the .dist/ repo
+```bash
+pip install -q build
+```
+
+```bash
+python3 -m build
+```
+
+
+2. Create a container if you need to test anything before.
 
 ```bash
 podman build -t test-ewccli -f ./Containerfile .

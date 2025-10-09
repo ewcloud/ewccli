@@ -125,7 +125,7 @@ def create_cmd(
     security_groups: Optional[tuple] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
-    ):
+):
     """Show Server from Openstack."""
     if dry_run:
         _LOGGER.info("Dry run enabled...")
@@ -231,7 +231,7 @@ def show_cmd(
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
-    ):
+):
     """Show Server from Openstack."""
     federee = region or ctx.cli_config["region"]
 
@@ -262,7 +262,7 @@ def show_cmd(
     image_id = server_info.get("image", "").get("id")
     image_info = openstack_api.image.find_image(image_id)
 
-    image_name = image_info.get('name')
+    image_name = image_info.get("name")
 
     vm_info = get_deployed_server_info(
         federee=federee,
@@ -373,6 +373,7 @@ def delete_cmd(
             f"Could not delete server {server_name} from Openstack due to: {e}"
         )
 
+
 # def remove_server_external_ip(
 #     region: str,
 #     application_credential_id: str,
@@ -411,4 +412,3 @@ def delete_cmd(
 #     openstack_backend.remove_external_ip(
 #         conn=openstack_api, server=server_info, external_ip=external_ip_machine
 #     )
-
