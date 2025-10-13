@@ -8,7 +8,7 @@
 import os
 from pathlib import Path
 
-from ewccli.enums import Federee
+from ewccli.enums import Federee, FedereeDNSMapping
 
 
 class EWCCLIConfiguration:
@@ -121,6 +121,11 @@ class EWCCLIConfiguration:
     DEFAULT_EXTERNAL_NETWORK_MAP = {
         Federee.ECMWF.value: "external-internet",
         Federee.EUMETSAT.value: "external",
+    }
+
+    FEDEREE_DNS_MAPPING = {
+        Federee.ECMWF.value: FedereeDNSMapping.ECMWF.value,
+        Federee.EUMETSAT.value: FedereeDNSMapping.EUMETSAT.value,
     }
 
     DEFAULT_SECURITY_GROUP_MAP = {

@@ -47,3 +47,10 @@ class HubItemCLIKeys(Enum):
     ITEM_PATH_TO_MAIN_FILE = "pathToMainFile"
     ITEM_PATH_TO_REQUIREMENTS_FILE = "pathToRequirementsFile"
     EXTERNAL_IP = "externalIP"
+    CHECK_DNS = "checkDNS"
+
+class FedereeDNSMapping(Enum):
+    """EWC Hub Federee DNS Mapping."""
+
+    ECMWF = "f"
+    EUMETSAT = "s"
