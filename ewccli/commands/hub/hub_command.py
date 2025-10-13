@@ -32,6 +32,8 @@ from ewccli.commands.commons import show_item_table
 from ewccli.commands.commons import validate_config_name
 from ewccli.commands.commons import split_config_name
 from ewccli.commands.commons import default_username
+from ewccli.commands.commons import build_dns_record_name
+from ewccli.commands.commons import wait_for_dns_record
 from ewccli.commands.commons import HubContext
 from ewccli.commands.commons import CommonContext
 from ewccli.commands.commons_infra import deploy_server
@@ -320,6 +322,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     else:
         cli_config = load_cli_config()
 
+    tenancy_name = cli_config["tenant_name"]
     region: str = cli_config["region"]
     federee = region
     # Take item information
@@ -501,11 +504,41 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         if not outputs:
             raise ClickException(os_message)
 
+
+        internal_ip_machine = outputs["internal_ip_machine"]
+        external_ip_machine = outputs.get("external_ip_machine")
+
+        #### DNS CHECK
+
+        check_dns = item_info_ewccli.get(HubItemCLIKeys.CHECK_DNS.value)
+
+        if not external_ip_machine:
+            raise ClickException(
+                f"This item {item} requires DNS check but you didn't add an external IP to the server,"
+                " please re run the command with --external-ip."
+            )
+
+        if check_dns:
+            dns_record_name = build_dns_record_name(
+                server_name=server_name,
+                tenancy_name=tenancy_name,
+                hosting_location=ewc_hub_config.FEDEREE_DNS_MAPPING[federee]
+            )
+
+            dns_record_check = wait_for_dns_record(
+                dns_record_name=dns_record_name,
+                expected_ip=external_ip_machine,
+            )
+            if not dns_record_check:
+                raise ClickException(
+                    f"{dns_record_name} not found in DNS, item {item} requires DNS record."
+                )
+
+        #### ANSIBLE PLAYBOOK ITEM DEPLOYMENT
+
         username = outputs.get("username")
         # server_info = outputs.get("server_info")
         # external_network = outputs.get("external_network")
-        internal_ip_machine = outputs["internal_ip_machine"]
-        external_ip_machine = outputs.get("external_ip_machine")
 
         # Assign correct default values to default item_inputs
         for d_item in default_item_inputs:

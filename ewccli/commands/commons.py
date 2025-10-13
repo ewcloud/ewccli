@@ -11,6 +11,8 @@ import re
 import sys
 import os
 import getpass
+import socket
+import time
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
@@ -583,3 +585,55 @@ def describe_object(obj: dict) -> None:
         for key, value in _flatten(content):
             click.echo(f"  {key:25} {value}")
         click.echo()
+
+
+def build_dns_record_name(server_name: str, tenancy_name: str, hosting_location: str) -> str:
+    """
+    Build a DNS hostname using the ewcloud pattern:
+    <machine-name>.<tenancy-name>.<hosting-location>.ewcloud.host
+    Source: https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+DNS
+    """
+    if not all([server_name, tenancy_name, hosting_location]):
+        raise ValueError("All arguments (server_name, tenancy_name, hosting_location) are required.")
+    
+    dns_record_name = f"{server_name}.{tenancy_name}.{hosting_location}.ewcloud.host"
+    _LOGGER.debug("Built DNS Record Name: %s", dns_record_name)
+    return dns_record_name
+
+
+def wait_for_dns_record(
+    dns_record_name: str,
+    expected_ip: str,
+    interval: int = 10,
+    timeout_minutes: int = 5
+) -> bool:
+    """
+    Waits until the given dns_record_name resolves to the expected IP.
+    Uses only the Python standard library.
+    """
+    deadline = time.time() + timeout_minutes * 60
+    _LOGGER.info("Waiting for %s to resolve to %s...", dns_record_name, expected_ip)
+
+    while time.time() < deadline:
+        try:
+            resolved_ip = socket.gethostbyname(dns_record_name)
+
+            if resolved_ip == expected_ip:
+                _LOGGER.info("Success: %s resolved to %s", dns_record_name, resolved_ip)
+                return True
+            else:
+                _LOGGER.debug(
+                    "%s currently resolves to %s (expected %s)",
+                    dns_record_name, resolved_ip, expected_ip
+                )
+
+        except socket.gaierror:
+            _LOGGER.debug("%s not found in DNS yet.", dns_record_name)
+
+        time.sleep(interval)
+
+    _LOGGER.warning(
+        "Timeout: %s did not resolve to %s within %d minutes.",
+        dns_record_name, expected_ip, timeout_minutes
+    )
+    return False
