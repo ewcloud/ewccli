@@ -5,6 +5,7 @@
 .pytest_cache
 .ruff_cache
 .ewc-source*
+ewccli/tests/__pycache__
 dist/
 docs/dist/
 test_results/
