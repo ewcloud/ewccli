@@ -18,6 +18,7 @@ from typing import Tuple, Optional
 import requests
 from openstack import connection
 
+from ewccli.configuration import config as ewc_hub_config
 from ewccli.utils import run_command_from_host
 from ewccli.enums import Federee
 from ewccli.backends.ansible.backend_ansible import AnsibleBackend
@@ -36,7 +37,10 @@ HUB_ENV_VARIABLES_MAP = {
         Federee.ECMWF.value: ["192.168.1.0/24"],
         Federee.EUMETSAT.value: ["10.0.0.0/24"],
     },
-    "os_network_name": {Federee.ECMWF.value: None, Federee.EUMETSAT.value: "private"},
+    "os_network_name": {
+        Federee.ECMWF.value: None,
+        Federee.EUMETSAT.value: "private"
+    },
     "os_subnet_name": {
         Federee.ECMWF.value: None,
         Federee.EUMETSAT.value: "private-subnet",
@@ -45,12 +49,17 @@ HUB_ENV_VARIABLES_MAP = {
         Federee.ECMWF.value: "192.168.1.0/24",
         Federee.EUMETSAT.value: "10.0.0.0/24",
     },
+    "dns_domain" : {
+        Federee.ECMWF.value: None,
+        Federee.EUMETSAT.value: None,
+    }
 }
 
 
 def get_hub_item_env_variable_value(
     hub_item_env_variables_map: dict,
     federee: str,
+    tenancy_name: str,
     variable_name: str,
     openstack_api: Optional[connection.Connection] = None,
 ) -> str:
@@ -64,6 +73,7 @@ def get_hub_item_env_variable_value(
         hub_item_env_variables_map
         openstack_api: An authenticated OpenStack SDK client.
         federee (str): The federee key (e.g., Federee.ECMWF.value, Federee.EUMETSAT.value).
+        tenancy_name (str): tenancy_name from config file created with ewc login.
         variable_name (str): The variable name to retrieve from HUB_ENV_VARIABLES_MAP.
 
     Returns:
@@ -104,6 +114,12 @@ def get_hub_item_env_variable_value(
         Federee.ECMWF.value: os_subnetwork_name,
         Federee.EUMETSAT.value: "private-subnet",
     }
+
+    if variable_name == "dns_domain":
+        dns_domain = f"{tenancy_name}.{ewc_hub_config.FEDEREE_DNS_MAPPING[federee]}.ewcloud.host"
+        hub_item_env_variables_map["dns_domain"] = {
+            federee: dns_domain,
+        }
 
     # If not dynamic, return directly
     return hub_item_env_variables_map[variable_name][federee]
@@ -271,7 +287,7 @@ def run_ansible_item(
     ]
 
     _LOGGER.info(f"Deploying Ansible Playbook item {item}...")
-    _LOGGER.info("⏳ This could take a few minutes, grab another beverage meanwhile...")
+    _LOGGER.info("⏳ This could take a few minutes, grab a beverage meanwhile...")
     time.sleep(15)
     if item_inputs:
         extra_vars = json.dumps(item_inputs)

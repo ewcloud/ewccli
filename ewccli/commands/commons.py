@@ -604,7 +604,7 @@ def build_dns_record_name(server_name: str, tenancy_name: str, hosting_location:
 def wait_for_dns_record(
     dns_record_name: str,
     expected_ip: str,
-    interval: int = 10,
+    interval: int = 60,
     timeout_minutes: int = 5
 ) -> bool:
     """
@@ -613,6 +613,7 @@ def wait_for_dns_record(
     """
     deadline = time.time() + timeout_minutes * 60
     _LOGGER.info("Waiting for %s to resolve to %s...", dns_record_name, expected_ip)
+    _LOGGER.info("⏳ This could take a few minutes, grab some snack meanwhile...")
 
     while time.time() < deadline:
         try:
@@ -628,7 +629,7 @@ def wait_for_dns_record(
                 )
 
         except socket.gaierror:
-            _LOGGER.debug("%s not found in DNS yet.", dns_record_name)
+            _LOGGER.info(f"{dns_record_name} not found in DNS yet. Retrying in {interval} seconds...")
 
         time.sleep(interval)
 

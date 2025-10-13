@@ -476,6 +476,15 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                 f"Could not connect to Openstack due to the following error: {op_error}"
             )
 
+        security_groups_inputs = ()
+
+        if security_groups:
+            security_groups_inputs += security_groups
+
+        item_default_security_groups = item_info_ewccli.get(HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value)
+        if item_default_security_groups:
+             security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
+
         server_inputs = {
             "server_name": server_name,
             "is_gpu": is_gpu,
@@ -483,9 +492,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             or image_name,
             "keypair_name": keypair_name,
             "flavour_name": flavour_name,
-            "external_ip": external_ip,
+            "external_ip": external_ip or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
             "networks": networks,
-            "security_groups": security_groups,
+            "security_groups": security_groups_inputs,
         }
 
         os_status_code, os_message, outputs = deploy_server(
@@ -531,7 +540,10 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             )
             if not dns_record_check:
                 raise ClickException(
-                    f"{dns_record_name} not found in DNS, item {item} requires DNS record."
+                    f"{dns_record_name} not found in DNS records of the hosted zone used in EWC,"
+                    f" item {item} requires DNS record."
+                    f" You can try to run: dig {dns_record_name} and once the public IP {external_ip_machine} is available,"
+                    " you can retry the item deployment with EWC CLI."
                 )
 
         #### ANSIBLE PLAYBOOK ITEM DEPLOYMENT
@@ -545,11 +557,14 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             default_item_input_name = d_item.get("name")
 
             if default_item_input_name not in item_inputs:
+
+                # Assign EWC values to variables automatically. Even if the item has a mandatory input.
                 if default_item_input_name in HUB_ENV_VARIABLES_MAP:
                     item_inputs[default_item_input_name] = (
                         get_hub_item_env_variable_value(
                             hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
                             federee=region,
+                            tenancy_name=tenancy_name,
                             variable_name=default_item_input_name,
                             openstack_api=openstack_api,
                         )
