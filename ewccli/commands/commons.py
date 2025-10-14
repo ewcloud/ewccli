@@ -605,15 +605,14 @@ def wait_for_dns_record(
     dns_record_name: str,
     expected_ip: str,
     interval: int = 60,
-    timeout_minutes: int = 5
+    timeout_minutes: int = 15
 ) -> bool:
     """
     Waits until the given dns_record_name resolves to the expected IP.
-    Uses only the Python standard library.
     """
     deadline = time.time() + timeout_minutes * 60
     _LOGGER.info("Waiting for %s to resolve to %s...", dns_record_name, expected_ip)
-    _LOGGER.info("⏳ This could take a few minutes, grab some snack meanwhile...")
+    _LOGGER.info("⏳ This could take several minutes, grab some snack meanwhile...")
 
     while time.time() < deadline:
         try:
