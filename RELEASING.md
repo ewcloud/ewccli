@@ -1,9 +1,10 @@
 # Releasing ewccli
 
+0. Make sure the code references the correct new version you want in the pyproject.yaml and in the __init__.py
 1. checkout main branch: `git checkout main`
 2. pull from repo: `git pull`
 3. run the unittests with pytest.
-4. Update the `CHANGELOG.md` file using vim or similar.
+4. Update the `CHANGELOG.md` file using vim or similar. (You can use `git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s (%h)" > CHANGELOG_UNRELEASED.md` to generate the list of commits and PR used also)
 ```
 ### Bug Fixes
 * Force ansible roles download when new versions exist ([#22](https://github.com/ewcloud/ewccli/pull/22)) ([#3](https://github.com/ewcloud/ewccli/issues/3)) ([9263391](https://github.com/ewcloud/ewccli/commit/92633917a71d3cf5cf6aea23f4fef83e052f3f92))
@@ -12,13 +13,19 @@
 5. git add CHANGELOG.md
 6. git commit --cleanup=whitespace # commit title and body to be added. Example below:
 ```
-chore: 0.1.1 [skip ci]
+chore: 0.2.0 [skip ci]
 
-# [0.1.1](https://github.com/ewcloud/ewc-flavours/compare/0.1.0...0.1.1) (2025-10-08)
+# [0.2.0](https://github.com/ewcloud/ewc-flavours/compare/0.1.1...0.2.0) (2025-10-14)
+
+### Features
+
+- feat: Use defaultSecurityGroups and checkDNS from items index [b77b43b](https://github.com/ewcloud/ewccli/commit/b77b43b3916438e476606b58b965712bc08a407d)
+- feat: Introduce checkDNS for items ([#29](https://github.com/ewcloud/ewccli/pull/29)) [7f98a6a](https://github.com/ewcloud/ewccli/commit/7f98a6ab9dcb96825f259663aac8445daaee1b1d)
+- feat: bump versions ([#26](https://github.com/ewcloud/ewccli/pull/26)) [78adb02](https://github.com/ewcloud/ewccli/commit/78adb024771c7a3bc8da83c1325c51a171259557)
 
 ### Bug Fixes
-* Force ansible roles download when new versions exist ([#22](https://github.com/ewcloud/ewccli/pull/22)) ([#3](https://github.com/ewcloud/ewccli/issues/3)) ([9263391](https://github.com/ewcloud/ewccli/commit/92633917a71d3cf5cf6aea23f4fef83e052f3f92))
-* Remove dependency not used ([#19](https://github.com/ewcloud/ewccli/pull/19)) ([#6](https://github.com/ewcloud/ewccli/issues/6)) ([d44135b](https://github.com/ewcloud/ewccli/commit/d44135bbaf8864722dc324f201d0ad4f61c5a89d))
+- fix: Set DNS check to 15 minutes [9f24e2f](https://github.com/ewcloud/ewccli/commit/9f24e2f5a7584db980eb0863fc9ab57521536151)
+- fix: ewc hub list command item name should show all name always ([#25](https://github.com/ewcloud/ewccli/pull/25)) [e4869fc](https://github.com/ewcloud/ewccli/commit/e4869fcd4757910160ec68894417fae76ca622b5)
 ```
 7. Create a tag with the new version number, eg:
 
