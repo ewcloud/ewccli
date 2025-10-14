@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+# 0.2.0
+
+### Features
+
+- feat: Use defaultSecurityGroups and checkDNS from items index [b77b43b](https://github.com/ewcloud/ewccli/commit/b77b43b3916438e476606b58b965712bc08a407d)
+- feat: Introduce checkDNS for items ([#29](https://github.com/ewcloud/ewccli/pull/29)) [7f98a6a](https://github.com/ewcloud/ewccli/commit/7f98a6ab9dcb96825f259663aac8445daaee1b1d)
+- feat: bump versions ([#26](https://github.com/ewcloud/ewccli/pull/26)) [78adb02](https://github.com/ewcloud/ewccli/commit/78adb024771c7a3bc8da83c1325c51a171259557)
+
+### Bug Fixes
+- fix: Set DNS check to 15 minutes [9f24e2f](https://github.com/ewcloud/ewccli/commit/9f24e2f5a7584db980eb0863fc9ab57521536151)
+- fix: ewc hub list command item name should show all name always ([#25](https://github.com/ewcloud/ewccli/pull/25)) [e4869fc](https://github.com/ewcloud/ewccli/commit/e4869fcd4757910160ec68894417fae76ca622b5)
+
+
 # 0.1.1 (2025-10-08)
 
 ### Bug Fixes
