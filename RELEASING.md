@@ -1,37 +1,53 @@
 # Releasing ewccli
 
-1. checkout main branch
-2. pull from repo
-3. run the unittests
-4. Update the `CHANGELOG.md` file.
-5. Create a tag with the new version number, starting with a 'v', eg:
+1. checkout main branch: `git checkout main`
+2. pull from repo: `git pull`
+3. run the unittests with pytest.
+4. Update the `CHANGELOG.md` file using vim or similar.
+```
+### Bug Fixes
+* Force ansible roles download when new versions exist ([#22](https://github.com/ewcloud/ewccli/pull/22)) ([#3](https://github.com/ewcloud/ewccli/issues/3)) ([9263391](https://github.com/ewcloud/ewccli/commit/92633917a71d3cf5cf6aea23f4fef83e052f3f92))
+* Remove dependency not used ([#19](https://github.com/ewcloud/ewccli/pull/19)) ([#6](https://github.com/ewcloud/ewccli/issues/6)) ([d44135b](https://github.com/ewcloud/ewccli/commit/d44135bbaf8864722dc324f201d0ad4f61c5a89d))
+```
+5. git add CHANGELOG.md
+6. git commit --cleanup=whitespace # commit title and body to be added. Example below:
+```
+chore: 0.1.1 [skip ci]
+
+# [0.1.1](https://github.com/ewcloud/ewc-flavours/compare/0.1.0...0.1.1) (2025-10-08)
+
+### Bug Fixes
+* Force ansible roles download when new versions exist ([#22](https://github.com/ewcloud/ewccli/pull/22)) ([#3](https://github.com/ewcloud/ewccli/issues/3)) ([9263391](https://github.com/ewcloud/ewccli/commit/92633917a71d3cf5cf6aea23f4fef83e052f3f92))
+* Remove dependency not used ([#19](https://github.com/ewcloud/ewccli/pull/19)) ([#6](https://github.com/ewcloud/ewccli/issues/6)) ([d44135b](https://github.com/ewcloud/ewccli/commit/d44135bbaf8864722dc324f201d0ad4f61c5a89d))
+```
+7. Create a tag with the new version number, eg:
 
    ```
-   git tag -a v<new version> -m "Version <new version>"
+   git tag -a <new version> -m "Version <new version>"
    ```
 
-   For example if the previous tag was `v0.9.0` and the new release is a
+   For example if the previous tag was `0.1.1` and the new release is a
    patch release, do:
 
    ```
-   git tag -a v0.9.1 -m "Version 0.9.1"
+   git tag -a 0.1.1 -m "Version 0.1.1"
    ```
 
    See [semver.org](http://semver.org/) on how to write a version number.
 
-
-6. push changes to github `git push --follow-tags`
-7. Verify github action unittests passed.
-8. Create a "Release" on GitHub by going to
+8. Push commits `git push`
+9. Push tags to github `git push --follow-tags`
+10. Verify github action unittests passed.
+11. Create a "Release" on GitHub by going to
    https://github.com/eumetsat/MetopDatasets.jl/releases and clicking "Draft a new release".
    On the next page enter the newly created tag in the "Tag version" field,
    "Version X.Y.Z" in the "Release title" field, and paste the markdown from
    the changelog (the portion under the version section header) in the
    "Describe this release" box. Finally click "Publish release".
 
-9. Now you can start the process to release on PyPI (only admins)
+12. Now you can start the process to release on PyPI (only admins)
 
-9.1 Build package
+12.1 Build package
 
 Now generate the distribution. To build the package, use PyPA build.
 
