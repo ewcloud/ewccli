@@ -123,6 +123,7 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: "external",
     }
 
+    DNS_CHECK_TIMEOUT_MINUTES = 20
     FEDEREE_DNS_MAPPING = {
         Federee.ECMWF.value: FedereeDNSMapping.ECMWF.value,
         Federee.EUMETSAT.value: FedereeDNSMapping.EUMETSAT.value,
