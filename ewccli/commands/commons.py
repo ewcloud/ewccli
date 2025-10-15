@@ -605,7 +605,7 @@ def wait_for_dns_record(
     dns_record_name: str,
     expected_ip: str,
     interval: int = 60,
-    timeout_minutes: int = 15
+    timeout_minutes: int = 5
 ) -> bool:
     """
     Waits until the given dns_record_name resolves to the expected IP.

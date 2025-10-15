@@ -537,13 +537,15 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             dns_record_check = wait_for_dns_record(
                 dns_record_name=dns_record_name,
                 expected_ip=external_ip_machine,
+                timeout_minutes=ewc_hub_config.DNS_CHECK_TIMEOUT_MINUTES
             )
             if not dns_record_check:
                 raise ClickException(
-                    f"{dns_record_name} not found in DNS records of the hosted zone used in EWC,"
-                    f" item {item} requires DNS record."
-                    f" You can try to run: dig {dns_record_name} and once the public IP {external_ip_machine} is available,"
-                    " you can retry the item deployment with EWC CLI."
+                    f"EWC CLI failed to deploy {item} due to {dns_record_name} not found in DNS records of the hosted zone used in EWC."
+                    f" This item {item} requires DNS record."
+                    f" What can you do? You can try to run: dig {dns_record_name} in your terminal and once the public IP {external_ip_machine} is available,"
+                    " you can rerun the item deployment with EWC CLI using the same command you just used. Alternatively, you can rerun the command"
+                    " directly and the ewc cli will continue checking for the DNS record to be ready and continue from where it left."
                 )
 
         #### ANSIBLE PLAYBOOK ITEM DEPLOYMENT

@@ -148,10 +148,10 @@ The following dependencies are not included in the package but they are required
 |------|---------|---------|--------------|
 | requests | 2.32.5 | Apache Software License (Apache-2.0) | https://requests.readthedocs.io/en/latest |
 | click | 8.1.8 | BSD-3-Clause | https://github.com/pallets/click |
-| rich | 14.1.0 | MIT License (MIT) | https://github.com/Textualize/rich |
-| rich-click | 1.8.9 | MIT License (MIT License) | https://pypi.org/project/rich-click |
+| rich | 14.1.0 | MIT License | https://github.com/Textualize/rich |
+| rich-click | 1.8.9 | MIT License | https://pypi.org/project/rich-click |
 | prompt_toolkit | 3.0.51 | BSD-3-Clause License | https://python-prompt-toolkit.readthedocs.io/en/stable |
-| pyyaml | 6.0.2 | MIT License (MIT) | https://pyyaml.org |
+| pyyaml | 6.0.2 | MIT License | https://pyyaml.org |
 | cryptography | 45.0.6 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
 | python-openstackclient | 8.2.0 | Apache Software License (Apache-2.0) | https://docs.openstack.org/python-openstackclient/latest |
 | ansible | 11.10.0 | GNU General Public License v3 or later (GPLv3+) (GPL-3.0-or-later) | https://www.redhat.com/en/ansible-collaborative |
