@@ -521,13 +521,14 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
         check_dns = item_info_ewccli.get(HubItemCLIKeys.CHECK_DNS.value)
 
-        if not external_ip_machine:
-            raise ClickException(
-                f"This item {item} requires DNS check but you didn't add an external IP to the server,"
-                " please re run the command with --external-ip."
-            )
-
         if check_dns:
+
+            if not external_ip_machine:
+                raise ClickException(
+                    f"This item {item} requires DNS check but you didn't add an external IP to the server,"
+                    " please re run the command with --external-ip."
+                )
+
             dns_record_name = build_dns_record_name(
                 server_name=server_name,
                 tenancy_name=tenancy_name,
