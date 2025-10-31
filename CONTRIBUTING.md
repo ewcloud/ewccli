@@ -53,8 +53,5 @@ specific keyword (i.e. `docs`, `style`, `feat`, `fix`, `refactor`, `ci`,
 
 ## Reporting Security Vulnerabilities
 
-Due to their public nature, GitHub and RocketChat are not appropriate places
-for reporting vulnerabilities. If you suspect you have found a security
-vulnerability, please do not file a GitHub issue, but instead email
-[support@europeanweather.cloud](mailto:support@europeanweather.cloud) with the
-full details, including steps to reproduce the issue.
+If you suspect you have found a security vulnerability, please do file a GitHub issue or
+[support@europeanweather.cloud](mailto:support@europeanweather.cloud) with the full details, including steps to reproduce the issue.

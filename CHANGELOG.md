@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+# 0.2.1
+
+### Bug Fixes
+
+- Fix error on the check on external IP ([#34]https://github.com/ewcloud/ewccli/pull/34) [0d4ac0e](https://github.com/ewcloud/ewccli/commit/0d4ac0ed176abe0d03c808d3caf9e2f1cab14240)
+- DNS check error message and time ([#32]https://github.com/ewcloud/ewccli/pull/32) [43735ef](https://github.com/ewcloud/ewccli/commit/43735ef2d36697d5a26462a6911a3fe0c853a511)
+
 # 0.2.0
 
 ### Features

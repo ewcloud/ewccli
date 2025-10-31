@@ -13,3 +13,4 @@ TESTLOGS*
 coverage.xml
 report.xml
 **/.local
+CHANGELOG_UNRELEASED.md

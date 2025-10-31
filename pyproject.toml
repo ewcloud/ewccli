@@ -5,7 +5,7 @@
 
 [project]
 name = "ewccli"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python package to handle EWC resources."
 authors = [
     { name = "EWC", email = "support@europeanweather.cloud" }
