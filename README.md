@@ -194,7 +194,7 @@ or submit changes.
 
 1. Fork this repository and move into it
 ```bash
-git clone https://repository.europeanweather.cloud/ewc-automation/ewccli.git && cd ewccli
+git clone https://github.com/ewcloud/ewccli.git && cd ewccli
 ```
 
 2. Install the package for testing
