@@ -666,9 +666,22 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
 
 @ewc_hub_command.command("list")
+@click.option(
+    "--force",
+    envvar="EWC_CLI_FORCE",
+    is_flag=True,
+    default=False,
+    help="Force item file re-download.",
+)
 @hub_context
-def list_cmd(ctx):
+def list_cmd(
+    ctx,
+    force: bool
+    ):
     """List EWC Hub items."""
+    if force:
+        download_items(force=force)
+
     list_items_table(hub_items=ctx.items)
 
 
