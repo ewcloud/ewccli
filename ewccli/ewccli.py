@@ -8,8 +8,10 @@
 
 """European Weather Cloud (EWC) CLI."""
 
+from importlib.metadata import version, PackageNotFoundError
 import rich_click as click
 
+from ewccli import __title__
 from ewccli.commands.login_command import init_command, init_options
 
 # Multiple backends
@@ -56,6 +58,39 @@ def init(
         region=region,
         # token=token,
     )
+
+def get_version():
+    """
+    Return the version of the installed package.
+
+    This function first attempts to retrieve the version number using
+    `importlib.metadata.version()`, which works when the package is installed
+    normally (e.g., via pip). If the package is not installed and a
+    `PackageNotFoundError` is raised, the version is retrieved directly from
+    the package's `__version__` attribute, which supports local development
+    without installation.
+
+    Returns:
+        str: The version string of the package.
+    """
+    try:
+        return version(__title__)   # the name in pyproject.toml / setup.py
+    except PackageNotFoundError:
+        # fallback to direct import if running in source mode
+        from ewccli import __version__
+        return __version__
+
+
+@cli.command(name="version", help="Show EWC CLI version.")
+def version_cmd():
+    """
+    Display the version of the EWC CLI.
+
+    This command reads the installed package version using `get_version()`
+    and prints it to the terminal. It is useful for debugging, user support,
+    and verifying correct installation of the CLI.
+    """
+    click.echo(get_version())
 
 
 # Register subcommands
