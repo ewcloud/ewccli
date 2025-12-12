@@ -40,10 +40,10 @@ class EWCCLIConfiguration:
     # TODO: it needs to match EWC virtual image column
     # from https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available
     EWC_CLI_IMAGES = {
-        "ubuntu-22.04": "ubuntu-22.04-20250604054912",
-        "ubuntu-24.04": "ubuntu-24.04-20250604102601",
-        "rocky-8": "Rocky-8.10-20250604144456",
-        "rocky-9": "Rocky-9.5-20250604142417",
+        "ubuntu-22.04": "Ubuntu-22.04-20251007115800",
+        "ubuntu-24.04": "Ubuntu-24.04-20251007115108",
+        "rocky-8": "Rocky-8.10-20251107135124",
+        "rocky-9": "Rocky-9.6-20251107141503",
     }
 
     EWC_CLI_DEFAULT_IMAGE = EWC_CLI_IMAGES["rocky-9"]
@@ -73,7 +73,7 @@ class EWCCLIConfiguration:
     # TODO: it needs to match EWC virtual image column
     # from https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available
     DEFAULT_IMAGES_GPU_MAP = {
-        Federee.ECMWF.value: "Rocky-9.6-GPU-20250625141454",
+        Federee.ECMWF.value: "Rocky-9.6-GPU-20251107150148",
         Federee.EUMETSAT.value: "Ubuntu 22.04 NVIDIA_AI",
     }
 
