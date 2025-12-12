@@ -15,7 +15,7 @@
 ```
 chore: 0.2.0 [skip ci]
 
-# [0.2.0](https://github.com/ewcloud/ewc-flavours/compare/0.1.1...0.2.0) (2025-10-14)
+# [0.2.0](https://github.com/ewcloud/ewccli/compare/0.1.1...0.2.0) (2025-10-14)
 
 ### Features
 
