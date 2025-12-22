@@ -33,13 +33,13 @@ cb_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 def ewc_k8s_command(ctx, config_name):
     """EWC Kubernetes commands group."""
     if config_name:
-        region, tenant_name = split_config_name(config_name=config_name)
-        ctx.cli_config = load_cli_config(tenant_name=tenant_name, region=region)
+        federee, tenant_name = split_config_name(config_name=config_name)
+        ctx.cli_config = load_cli_config(tenant_name=tenant_name, federee=federee)
 
     token = ctx.cli_config["token"]
-    region = ctx.cli_config["region"]
+    federee = ctx.cli_config["federee"]
     ctx.k8s_backend = KubernetesBackend(
-        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(region)
+        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(federee)
     )
 
 
@@ -115,7 +115,7 @@ def kubeconfig(ctx):
 )
 @click.option("--node-size", required=False, help="Size/flavor of the worker nodes.")
 @click.option(
-    "--region", required=False, help="The region where the cluster will be deployed."
+    "--federee", required=False, help="The federee where the cluster will be deployed."
 )
 @click.option("--dry-run", is_flag=True, help="Simulate creation without applying")
 def create(  # noqa: CFQ002
@@ -124,7 +124,7 @@ def create(  # noqa: CFQ002
     k8s_version: str,
     node_count: int,
     node_size: str,
-    region: str,
+    federee: str,
     dry_run: bool,
 ):
     """Create a K8s cluster.
@@ -140,7 +140,7 @@ ewc k8s create \
         click.echo("⚠️ Dry run mode enabled. Nothing will be applied.")
 
     namespace = ctx.cli_config["tenant_name"]
-    site_name = ctx.cli_config["region"]
+    site_name = ctx.cli_config["federee"]
 
     # Mandatory
     spec = {
@@ -157,8 +157,8 @@ ewc k8s create \
     if node_size:
         spec["nodeSize"] = node_size
 
-    if region:
-        spec["region"] = region
+    if federee:
+        spec["federee"] = federee
 
     crd_config = {
         "apiVersion": f"{ClusterGVR.group}/{ClusterGVR.version}",

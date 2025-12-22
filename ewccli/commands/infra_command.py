@@ -45,16 +45,16 @@ infra_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 def ewc_infra_command(ctx, config_name):
     """EWC Infrastructure commands group."""
     if config_name:
-        region, tenant_name = split_config_name(config_name=config_name)
-        ctx.cli_config = load_cli_config(tenant_name=tenant_name, region=region)
+        federee, tenant_name = split_config_name(config_name=config_name)
+        ctx.cli_config = load_cli_config(tenant_name=tenant_name, federee=federee)
 
-    region = ctx.cli_config.get("region")
+    federee = ctx.cli_config.get("federee")
     application_credential_id = ctx.cli_config.get("application_credential_id")
     application_credential_secret = ctx.cli_config.get("application_credential_secret")
     ctx.openstack_backend = OpenstackBackend(
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
-        auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(region),
+        auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(federee),
     )
 
 
@@ -114,7 +114,7 @@ def create_cmd(
     ssh_private_key_path: str,
     keypair_name: str,
     config_name: Optional[str] = None,
-    region: Optional[str] = None,
+    federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
@@ -131,12 +131,12 @@ def create_cmd(
         _LOGGER.info("Dry run enabled...")
 
     if config_name:
-        retrieve_region, tenant_name = split_config_name(config_name=config_name)
-        cli_config = load_cli_config(tenant_name=tenant_name, region=retrieve_region)
+        retrieved_federee, tenant_name = split_config_name(config_name=config_name)
+        cli_config = load_cli_config(tenant_name=tenant_name, federee=retrieved_federee)
     else:
         cli_config = load_cli_config()
 
-    federee = region or cli_config["region"]
+    federee = federee or cli_config["federee"]
 
     _LOGGER.info(f"The server will be deployed on {federee} side of the EWC.")
 
@@ -227,13 +227,13 @@ def create_cmd(
 def show_cmd(
     ctx,
     server_name,
-    region: Optional[str] = None,
+    federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
 ):
     """Show Server from Openstack."""
-    federee = region or ctx.cli_config["region"]
+    federee = federee or ctx.cli_config["federee"]
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
@@ -286,14 +286,14 @@ def show_cmd(
 )
 def list_cmd(
     ctx,
-    region: Optional[str] = None,
+    federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
     show_all: bool = False,
 ):
     """List Servers from Openstack."""
-    federee = region or ctx.cli_config["region"]
+    federee = federee or ctx.cli_config["federee"]
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
@@ -375,7 +375,7 @@ def delete_cmd(
 
 
 # def remove_server_external_ip(
-#     region: str,
+#     federee: str,
 #     application_credential_id: str,
 #     application_credential_secret: str,
 #     server_info: dict,
@@ -387,7 +387,7 @@ def delete_cmd(
 #         openstack_backend = OpenstackBackend(
 #             application_credential_id=application_credential_id,
 #             application_credential_secret=application_credential_secret,
-#             auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(region),
+#             auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(federee),
 #         )
 #     except Exception as op_error:
 #         return (

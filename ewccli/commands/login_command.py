@@ -117,13 +117,13 @@ def init_options(func):
         ),
     )(func)
     func = click.option(
-        "--region",
+        "--federee",
         type=click.Choice(
             [Federee.ECMWF.value, Federee.EUMETSAT.value], case_sensitive=True
         ),
         envvar="EWC_CLI_LOGIN_REGION",
         help=(
-            "Cloud region where the resources will be deployed. "
+            "Cloud federee where the resources will be deployed. "
             "You can also set this using the EWC_CLI_LOGIN_REGION environment variable. "
             "If not provided, you'll be prompted to choose."
         ),
@@ -208,7 +208,7 @@ def select_provider():
     def _(event):
         event.app.exit(None)
 
-    root_container = Box(Frame(radio_list, title="Select Region"), padding=1)
+    root_container = Box(Frame(radio_list, title="Select Federee"), padding=1)
     layout = Layout(root_container)
 
     app = Application(
@@ -254,18 +254,18 @@ def init_command(
     ssh_public_key_path: str,
     ssh_private_key_path: str,
     tenant_name: str,
-    region: str,
+    federee: str,
     # token: str,
 ):
     """EWC CLI Login."""
-    if not region:
-        # If --region is not passed, ask interactively
-        region = select_provider()
-        if not region:
+    if not federee:
+        # If --federee is not passed, ask interactively
+        federee = select_provider()
+        if not federee:
             console.print("No selection made. Exiting.")
             return
 
-    console.print(f"Considering region: {region}")
+    console.print(f"Considering federee: {federee}")
 
     check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
@@ -317,7 +317,7 @@ def init_command(
 
     # Save config
     save_cli_config(
-        region=region,
+        federee=federee,
         tenant_name=tenant_name,
         # token=token,
         application_credential_id=application_credential_id,
