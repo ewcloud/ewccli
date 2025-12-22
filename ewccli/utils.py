@@ -61,14 +61,14 @@ def save_cli_config(
 
     with open(
         config_dir
-        / f"{ewc_hub_config.EWC_CLI_DEFAULT_REGION}-{ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME}.yaml",
+        / f"{ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE}-{ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME}.yaml",
         "w",
     ) as f:
         yaml.safe_dump(config_data, f)
 
 
 def get_cli_config_path(
-    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
     tenant_name: str = ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
 ) -> Path:
     """Get CLI config path."""
@@ -76,7 +76,7 @@ def get_cli_config_path(
 
 
 def load_cli_config(
-    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
     tenant_name: str = ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
 ) -> dict:
     """Load config."""

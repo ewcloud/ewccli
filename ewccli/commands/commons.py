@@ -43,7 +43,7 @@ class CommonBackendContext:
 
     def __init__(self):
         self.cli_config = load_cli_config(
-            federee=ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+            federee=ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
             tenant_name=ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
         )
 
@@ -61,7 +61,7 @@ class CommonContext:
 
     def __init__(self):
         self.cli_config = load_cli_config(
-            federee=ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+            federee=ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
             tenant_name=ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
         )
         self.items = load_hub_items()
