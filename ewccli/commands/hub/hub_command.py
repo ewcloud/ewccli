@@ -272,7 +272,7 @@ def _validate_item_input_types(  # noqa: CCR001, C901
     envvar="EWC_CLI_LOGIN_CONFIG_NAME",
     required=False,
     callback=validate_config_name,
-    help="EWC CLI config name, format: {tenant_name}-{region} (all alphanumeric)",
+    help="EWC CLI config name, format: {tenant_name}-{federee} (all alphanumeric)",
 )
 @click.option(
     "--force",
@@ -317,14 +317,14 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         _LOGGER.info("Dry run enabled...")
 
     if config_name:
-        retrieve_region, tenant_name = split_config_name(config_name=config_name)
-        cli_config = load_cli_config(tenant_name=tenant_name, region=retrieve_region)
+        retrieve_federee, tenant_name = split_config_name(config_name=config_name)
+        cli_config = load_cli_config(tenant_name=tenant_name, federee=retrieve_federee)
     else:
         cli_config = load_cli_config()
 
     tenancy_name = cli_config["tenant_name"]
-    region: str = cli_config["region"]
-    federee = region
+    federee: str = cli_config["federee"]
+    federee = federee
     # Take item information
     _LOGGER.info(f"The item will be deployed on {federee} side of the EWC.")
 
@@ -566,7 +566,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                     item_inputs[default_item_input_name] = (
                         get_hub_item_env_variable_value(
                             hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
-                            federee=region,
+                            federee=federee,
                             tenancy_name=tenancy_name,
                             variable_name=default_item_input_name,
                             openstack_api=openstack_api,

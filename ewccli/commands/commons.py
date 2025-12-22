@@ -43,7 +43,7 @@ class CommonBackendContext:
 
     def __init__(self):
         self.cli_config = load_cli_config(
-            region=ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+            federee=ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
             tenant_name=ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
         )
 
@@ -61,7 +61,7 @@ class CommonContext:
 
     def __init__(self):
         self.cli_config = load_cli_config(
-            region=ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+            federee=ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
             tenant_name=ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
         )
         self.items = load_hub_items()
@@ -75,7 +75,7 @@ def validate_config_name(ctx, param, value):
     pattern = r"^[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+$"
     if not re.match(pattern, value):
         raise click.BadParameter(
-            "Config name must be exactly 4 alphanumeric parts separated by dashes (e.g. tenant-region-east-zone)."
+            "Config name must be exactly 4 alphanumeric parts separated by dashes (e.g. tenant-federee-east-zone)."
         )
     return value
 
@@ -87,7 +87,7 @@ def login_options(func):
         envvar="EWC_CLI_LOGIN_CONFIG_NAME",
         required=False,
         callback=validate_config_name,
-        help="EWC CLI config name, format: {region}-{tenant_name} (all alphanumeric)",
+        help="EWC CLI config name, format: {federee}-{tenant_name} (all alphanumeric)",
     )(func)
     return func
 
@@ -137,20 +137,20 @@ def load_hub_items() -> dict:
 
 def split_config_name(config_name: str) -> tuple[str, str]:
     """
-    Splits config_name into region and tenant_name.
+    Splits config_name into federee and tenant_name.
 
-    Assumes the format: <region>-<tenant-part1>-<tenant-part2>-<tenant-part3>
+    Assumes the format: <federee>-<tenant-part1>-<tenant-part2>-<tenant-part3>
 
     :param config_name: The combined config name string.
-    :return: A tuple (region, tenant_name).
+    :return: A tuple (federee, tenant_name).
     :raises ValueError: if config_name format is invalid.
     """
     parts = config_name.split("-")
     if len(parts) != 4:
         raise ValueError("config_name must have exactly 4 parts separated by '-'")
-    region = parts[0]
+    federee = parts[0]
     tenant_name = "-".join(parts[1:])
-    return region, tenant_name
+    return federee, tenant_name
 
 
 def openstack_options(func):

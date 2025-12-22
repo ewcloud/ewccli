@@ -29,9 +29,9 @@ cb_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 def ewc_s3_command(ctx):
     """EWC S3 commands group."""
     token = ctx.cli_config["token"]
-    region = ctx.cli_config["region"]
+    federee = ctx.cli_config["federee"]
     ctx.k8s_backend = KubernetesBackend(
-        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(region)
+        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(federee)
     )
 
 
@@ -143,7 +143,7 @@ ewc s3 bucket create \
         click.echo("⚠️ Dry run mode enabled. Nothing will be applied.")
 
     namespace = ctx.cli_config["tenant_name"]
-    site_name = ctx.cli_config["region"]
+    site_name = ctx.cli_config["federee"]
 
     # Mandatory
     spec = {"siteName": site_name, "bucketName": bucket_name, "owner": access_id}

@@ -45,7 +45,7 @@ def init(
     ssh_public_key_path: str,
     ssh_private_key_path: str,
     tenant_name: str,
-    region: str,
+    federee: str,
     # token: str,
 ):
     """Login command."""
@@ -55,7 +55,7 @@ def init(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         tenant_name=tenant_name,
-        region=region,
+        federee=federee,
         # token=token,
     )
 

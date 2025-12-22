@@ -29,9 +29,9 @@ cb_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 def ewc_dns_command(ctx):
     """EWC DNS commands group."""
     token = ctx.cli_config["token"]
-    region = ctx.cli_config["region"]
+    federee = ctx.cli_config["federee"]
     ctx.k8s_backend = KubernetesBackend(
-        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(region)
+        token=token, host=ewc_hub_config.DEFAULT_KUBERNETES_SERVER.get(federee)
     )
 
 
@@ -178,14 +178,14 @@ ewc dns create \
         click.echo("⚠️ Dry run mode enabled. Nothing will be applied.")
 
     namespace = ctx.cli_config["tenant_name"]
-    region = ctx.cli_config["region"]
+    federee = ctx.cli_config["federee"]
 
     dns_record_config = {
         "apiVersion": f"{RecordGVR.group}/{RecordGVR.version}",
         "kind": "Record",
         "metadata": {"name": record_name, "namespace": namespace},
         "spec": {
-            "siteName": region,
+            "siteName": federee,
             "domainName": domain_name,
             "recordName": record_name,
             "recordType": record_type,

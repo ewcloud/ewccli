@@ -33,7 +33,7 @@ _LOGGER = get_logger(__name__)
 
 
 def save_cli_config(
-    region: str,
+    federee: str,
     tenant_name: str,
     token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
@@ -45,7 +45,7 @@ def save_cli_config(
     config_dir.mkdir(parents=True, exist_ok=True)
 
     config_data = {
-        "region": region,
+        "federee": federee,
         "tenant_name": tenant_name,
         "token": token,
     }
@@ -56,31 +56,31 @@ def save_cli_config(
     if application_credential_secret:
         config_data["application_credential_secret"] = application_credential_secret
 
-    with open(config_dir / f"{region.lower()}-{tenant_name}.yaml", "w") as f:
+    with open(config_dir / f"{federee.lower()}-{tenant_name}.yaml", "w") as f:
         yaml.safe_dump(config_data, f)
 
     with open(
         config_dir
-        / f"{ewc_hub_config.EWC_CLI_DEFAULT_REGION}-{ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME}.yaml",
+        / f"{ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE}-{ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME}.yaml",
         "w",
     ) as f:
         yaml.safe_dump(config_data, f)
 
 
 def get_cli_config_path(
-    region: str = ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
     tenant_name: str = ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
 ) -> Path:
     """Get CLI config path."""
-    return ewc_hub_config.EWC_CLI_BASE_PATH / f"{region.lower()}-{tenant_name}.yaml"
+    return ewc_hub_config.EWC_CLI_BASE_PATH / f"{federee.lower()}-{tenant_name}.yaml"
 
 
 def load_cli_config(
-    region: str = ewc_hub_config.EWC_CLI_DEFAULT_REGION,
+    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
     tenant_name: str = ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
 ) -> dict:
     """Load config."""
-    path = get_cli_config_path(region, tenant_name)
+    path = get_cli_config_path(federee, tenant_name)
 
     if not path.exists():
         raise ClickException("No config found. Run `ewc login` first.")

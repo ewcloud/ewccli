@@ -26,7 +26,7 @@ class EWCCLIConfiguration:
     EWC_CLI_BASE_PATH = home_dir / ".ewccli"
 
     EWC_CLI_DEFAULT_TENANCY_NAME = "default-tenancy-name"
-    EWC_CLI_DEFAULT_REGION = "default"
+    EWC_CLI_DEFAULT_FEDEREE = "default"
     EWC_CLI_DEFAULT_KEYPAIR_NAME = "ewc-hub-key"
 
     # EWC_CLI_HUB_ITEMS_PATH = files("ewccli.data").joinpath("items.yaml")
