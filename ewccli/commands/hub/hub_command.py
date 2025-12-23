@@ -29,8 +29,6 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import list_items_table
 from ewccli.commands.commons import show_item_table
-from ewccli.commands.commons import validate_config_name
-from ewccli.commands.commons import split_config_name
 from ewccli.commands.commons import default_username
 from ewccli.commands.commons import build_dns_record_name
 from ewccli.commands.commons import wait_for_dns_record
@@ -320,11 +318,11 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         cli_profile = load_cli_profile(profile=profile)
     else:
         # Use default profile if exists
-        cli_profile = load_cli_profile(profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME)
+        cli_profile = load_cli_profile(
+            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
+        )
 
-    _LOGGER.info(
-        f"Using `{cli_profile.get('profile')}` profile."
-    )
+    _LOGGER.info(f"Using `{cli_profile.get('profile')}` profile.")
 
     tenancy_name = cli_profile["tenant_name"]
     federee: str = cli_profile["federee"]
@@ -484,9 +482,11 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         if security_groups:
             security_groups_inputs += security_groups
 
-        item_default_security_groups = item_info_ewccli.get(HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value)
+        item_default_security_groups = item_info_ewccli.get(
+            HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
+        )
         if item_default_security_groups:
-             security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
+            security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
 
         server_inputs = {
             "server_name": server_name,
@@ -495,7 +495,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             or image_name,
             "keypair_name": keypair_name,
             "flavour_name": flavour_name,
-            "external_ip": external_ip or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
+            "external_ip": external_ip
+            or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
             "networks": networks,
             "security_groups": security_groups_inputs,
         }
@@ -516,7 +517,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         if not outputs:
             raise ClickException(os_message)
 
-
         internal_ip_machine = outputs["internal_ip_machine"]
         external_ip_machine = outputs.get("external_ip_machine")
 
@@ -525,7 +525,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         check_dns = item_info_ewccli.get(HubItemCLIKeys.CHECK_DNS.value)
 
         if check_dns:
-
             if not external_ip_machine:
                 raise ClickException(
                     f"This item {item} requires DNS check but you didn't add an external IP to the server,"
@@ -535,13 +534,13 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             dns_record_name = build_dns_record_name(
                 server_name=server_name,
                 tenancy_name=tenancy_name,
-                hosting_location=ewc_hub_config.FEDEREE_DNS_MAPPING[federee]
+                hosting_location=ewc_hub_config.FEDEREE_DNS_MAPPING[federee],
             )
 
             dns_record_check = wait_for_dns_record(
                 dns_record_name=dns_record_name,
                 expected_ip=external_ip_machine,
-                timeout_minutes=ewc_hub_config.DNS_CHECK_TIMEOUT_MINUTES
+                timeout_minutes=ewc_hub_config.DNS_CHECK_TIMEOUT_MINUTES,
             )
             if not dns_record_check:
                 raise ClickException(
@@ -563,7 +562,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             default_item_input_name = d_item.get("name")
 
             if default_item_input_name not in item_inputs:
-
                 # Assign EWC values to variables automatically. Even if the item has a mandatory input.
                 if default_item_input_name in HUB_ENV_VARIABLES_MAP:
                     item_inputs[default_item_input_name] = (
@@ -677,10 +675,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     help="Force item file re-download.",
 )
 @hub_context
-def list_cmd(
-    ctx,
-    force: bool
-    ):
+def list_cmd(ctx, force: bool):
     """List EWC Hub items."""
     if force:
         download_items(force=force)

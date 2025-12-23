@@ -262,7 +262,7 @@ def init_command(
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
-    profile: str = None
+    profile: str = None,
     # token: str,
 ):
     """EWC CLI Login."""
@@ -323,7 +323,7 @@ def init_command(
     #     if token == "":
     #         token = None
 
-    # 
+    #
     save_default_login_profile(
         federee=federee,
         tenant_name=tenant_name,

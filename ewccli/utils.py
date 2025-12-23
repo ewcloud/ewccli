@@ -18,7 +18,6 @@ import string
 from datetime import datetime, timezone
 from typing import Optional, Tuple, IO, List, Dict
 
-import yaml
 import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -41,17 +40,16 @@ def _resolve_profile(
     tenant_name: Optional[str] = None,
 ) -> str:
     """Return explicit profile or auto-generate one using federee-tenant."""
-    if profile:
+    if profile is not None:
         return profile
 
-    if profile is None:
-        if not federee or not tenant_name:
-            click.secho(
-                "❌ Either 'profile' must be provided or both 'federee' and 'tenant_name'.",
-                fg="red",
-                bold=True,
-            )
-            raise click.Abort()
+    if not federee or not tenant_name:
+        click.secho(
+            "❌ Either 'profile' must be provided or both 'federee' and 'tenant_name'.",
+            fg="red",
+            bold=True,
+        )
+        raise click.Abort()
 
     return f"{federee.lower()}-{tenant_name.lower()}"
 
@@ -63,7 +61,7 @@ def save_default_login_profile(
     application_credential_secret: Optional[str] = None,
     region: Optional[str] = None,
     token: Optional[str] = None,
-    profiles_file_path: str = ewc_hub_config.EWC_CLI_PROFILES_PATH
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
     """
     Save the default login profile to EWC_CLI_PROFILES_PATH only if it does not exist.
@@ -103,7 +101,7 @@ def save_cli_profile(
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
     region: Optional[str] = None,
-    profiles_file_path: str = ewc_hub_config.EWC_CLI_PROFILES_PATH
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
     """
     Save all profile data (config + credentials) into a single profiles file.
@@ -136,7 +134,10 @@ def save_cli_profile(
             fg="red",
             bold=True,
         )
-        click.secho("Use a different profile name or delete the existing profile first.", fg="yellow")
+        click.secho(
+            "Use a different profile name or delete the existing profile first.",
+            fg="yellow",
+        )
         raise click.Abort()
 
     # --- Save profile data
@@ -157,7 +158,9 @@ def save_cli_profile(
         cfg[resolved_profile]["application_credential_id"] = application_credential_id
 
     if application_credential_secret:
-        cfg[resolved_profile]["application_credential_secret"] = application_credential_secret
+        cfg[resolved_profile][
+            "application_credential_secret"
+        ] = application_credential_secret
 
     os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
     with open(profiles_file_path, "w") as f:
@@ -168,7 +171,7 @@ def load_cli_profile(
     profile: Optional[str] = None,
     federee: Optional[str] = None,
     tenant_name: Optional[str] = None,
-    profiles_file_path: str = ewc_hub_config.EWC_CLI_PROFILES_PATH
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> Dict[str, Optional[str]]:
     """
     Load all profile data (config + credentials) from the single profiles file.
@@ -263,11 +266,7 @@ def load_cli_profile(
                 )
 
         # Case 3: default profile missing but others exist
-        if (
-            profile == default_profile
-            and default_profile not in cfg
-            and cfg.sections()
-        ):
+        if profile == default_profile and default_profile not in cfg and cfg.sections():
             click.secho(
                 "ℹ️ The default profile does not exist, but other profiles are available:",
                 fg="yellow",

@@ -25,7 +25,6 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
-from ewccli.commands.commons import split_config_name
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
 from ewccli.commands.commons_infra import deploy_server
 from ewccli.utils import load_cli_profile
@@ -45,17 +44,13 @@ infra_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 def ewc_infra_command(ctx, profile):
     """EWC Infrastructure commands group."""
     if profile:
-        ctx.cli_profile = load_cli_profile(
-            profile=profile
-        )
+        ctx.cli_profile = load_cli_profile(profile=profile)
+        _LOGGER.info(f"Using `{profile}` profile.")
     else:
         ctx.cli_profile = load_cli_profile(
             profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
         )
-
-    _LOGGER.info(
-        f"Using `{profile}` profile."
-    )
+        _LOGGER.info(f"Using `{ctx.cli_profile.get('profile')}` profile.")
 
     federee = ctx.cli_profile.get("federee")
     application_credential_id = ctx.cli_profile.get("application_credential_id")

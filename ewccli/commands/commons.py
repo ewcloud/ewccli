@@ -28,7 +28,7 @@ from rich.align import Align
 from ewccli.backends.kubernetes.utils import get_reason_from_conditions
 from ewccli.enums import HubItemOherAnnotation, HubItemCLIKeys
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import load_cli_profile, download_items
+from ewccli.utils import download_items
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -580,25 +580,26 @@ def describe_object(obj: dict) -> None:
         click.echo()
 
 
-def build_dns_record_name(server_name: str, tenancy_name: str, hosting_location: str) -> str:
+def build_dns_record_name(
+    server_name: str, tenancy_name: str, hosting_location: str
+) -> str:
     """
     Build a DNS hostname using the ewcloud pattern:
     <machine-name>.<tenancy-name>.<hosting-location>.ewcloud.host
     Source: https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+DNS
     """
     if not all([server_name, tenancy_name, hosting_location]):
-        raise ValueError("All arguments (server_name, tenancy_name, hosting_location) are required.")
-    
+        raise ValueError(
+            "All arguments (server_name, tenancy_name, hosting_location) are required."
+        )
+
     dns_record_name = f"{server_name}.{tenancy_name}.{hosting_location}.ewcloud.host"
     _LOGGER.debug("Built DNS Record Name: %s", dns_record_name)
     return dns_record_name
 
 
 def wait_for_dns_record(
-    dns_record_name: str,
-    expected_ip: str,
-    interval: int = 60,
-    timeout_minutes: int = 5
+    dns_record_name: str, expected_ip: str, interval: int = 60, timeout_minutes: int = 5
 ) -> bool:
     """
     Waits until the given dns_record_name resolves to the expected IP.
@@ -617,16 +618,22 @@ def wait_for_dns_record(
             else:
                 _LOGGER.debug(
                     "%s currently resolves to %s (expected %s)",
-                    dns_record_name, resolved_ip, expected_ip
+                    dns_record_name,
+                    resolved_ip,
+                    expected_ip,
                 )
 
         except socket.gaierror:
-            _LOGGER.info(f"{dns_record_name} not found in DNS yet. Retrying in {interval} seconds...")
+            _LOGGER.info(
+                f"{dns_record_name} not found in DNS yet. Retrying in {interval} seconds..."
+            )
 
         time.sleep(interval)
 
     _LOGGER.warning(
         "Timeout: %s did not resolve to %s within %d minutes.",
-        dns_record_name, expected_ip, timeout_minutes
+        dns_record_name,
+        expected_ip,
+        timeout_minutes,
     )
     return False

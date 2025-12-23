@@ -49,6 +49,7 @@ class HubItemCLIKeys(Enum):
     EXTERNAL_IP = "externalIP"
     CHECK_DNS = "checkDNS"
 
+
 class FedereeDNSMapping(Enum):
     """EWC Hub Federee DNS Mapping."""
 

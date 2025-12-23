@@ -8,21 +8,16 @@
 
 """Test config methods."""
 
-import tempfile
-from pathlib import Path
-
 import click
-import yaml
 import pytest
 
-from configparser import ConfigParser
 # Import your new unified API
 from ewccli.utils import (
     save_cli_profile,
-    save_default_login_profile,
     load_cli_profile,
     _resolve_profile,
 )
+
 
 @pytest.fixture
 def profile_file_path(tmp_path):
@@ -52,7 +47,9 @@ def test_save_and_load_profile(profile_file_path):
     profile_name = _resolve_profile(None, federee, tenant_name)
 
     # Load by profile
-    data = load_cli_profile(profile=profile_name, profiles_file_path=str(profile_file_path))
+    data = load_cli_profile(
+        profile=profile_name, profiles_file_path=str(profile_file_path)
+    )
     assert data["profile"] == profile_name
     assert data["federee"] == federee
     assert data["tenant_name"] == tenant_name
@@ -70,13 +67,17 @@ def test_save_existing_profile_fails(profile_file_path):
 
     # Attempt to save again should raise click.Abort
     with pytest.raises(click.Abort):
-        save_cli_profile(federee, tenant_name, profiles_file_path=str(profile_file_path))
+        save_cli_profile(
+            federee, tenant_name, profiles_file_path=str(profile_file_path)
+        )
 
 
 def test_load_missing_profile_raises(profile_file_path):
     # Attempt to load a non-existent profile
     with pytest.raises(click.Abort):
-        load_cli_profile(profile="nonexistent", profiles_file_path=str(profile_file_path))
+        load_cli_profile(
+            profile="nonexistent", profiles_file_path=str(profile_file_path)
+        )
 
     # Attempt to auto-resolve without federee/tenant_name → should raise
     with pytest.raises(click.Abort):
@@ -91,4 +92,6 @@ def test_overwrite_profile_not_allowed(profile_file_path):
 
     # Attempting to save again should fail
     with pytest.raises(click.Abort):
-        save_cli_profile(federee, tenant_name, profiles_file_path=str(profile_file_path))
+        save_cli_profile(
+            federee, tenant_name, profiles_file_path=str(profile_file_path)
+        )
