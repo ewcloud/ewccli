@@ -28,7 +28,7 @@ from rich.align import Align
 from ewccli.backends.kubernetes.utils import get_reason_from_conditions
 from ewccli.enums import HubItemOherAnnotation, HubItemCLIKeys
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import load_cli_config, download_items
+from ewccli.utils import load_cli_profile, download_items
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -42,10 +42,7 @@ class CommonBackendContext:
     """CommonBackendContext."""
 
     def __init__(self):
-        self.cli_config = load_cli_config(
-            federee=ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
-            tenant_name=ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
-        )
+        self.cli_profile = None
 
 
 # Global state container
@@ -60,10 +57,7 @@ class CommonContext:
     """CommonContext."""
 
     def __init__(self):
-        self.cli_config = load_cli_config(
-            federee=ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
-            tenant_name=ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
-        )
+        self.cli_profile = None
         self.items = load_hub_items()
 
 
@@ -83,11 +77,10 @@ def validate_config_name(ctx, param, value):
 def login_options(func):
     """Login option for the CLI commands."""
     func = click.option(
-        "--config-name",
-        envvar="EWC_CLI_LOGIN_CONFIG_NAME",
+        "--profile",
+        envvar="EWC_CLI_LOGIN_PROFILE",
         required=False,
-        callback=validate_config_name,
-        help="EWC CLI config name, format: {federee}-{tenant_name} (all alphanumeric)",
+        help="EWC CLI profile name",
     )(func)
     return func
 

@@ -15,143 +15,80 @@ import click
 import yaml
 import pytest
 
-from ewccli.configuration import config as ewc_hub_config
+from configparser import ConfigParser
+# Import your new unified API
 from ewccli.utils import (
-    save_cli_config,
-    get_cli_config_path,
-    load_cli_config,
+    save_cli_profile,
+    save_default_login_profile,
+    load_cli_profile,
+    _resolve_profile,
 )
 
-
 @pytest.fixture
-def temp_config_dir(monkeypatch):
-    """
-    Fixture that provides a temporary directory for CLI config files.
+def profile_file_path(tmp_path):
+    """Return a temporary path for profiles file."""
+    return tmp_path / "profiles"
 
-    It monkeypatches `ewc_hub_config.EWC_CLI_BASE_PATH` to point to a temp directory
-    so that tests do not interfere with the real filesystem.
 
-    Returns:
-        Path: Path to the temporary directory.
-    """
-    tmpdir = Path(tempfile.mkdtemp())
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_BASE_PATH", tmpdir)
+def test_save_and_load_profile(profile_file_path):
+    federee = "EUMETSAT"
+    tenant_name = "TeamA"
+    token = "tok1"
+    app_id = "ID1"
+    app_secret = "SECRET1"
+    region = "us-east-1"
 
-    # Ensure default federee/tenant are predictable in tests
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_DEFAULT_FEDEREE", "default-federee")
-    monkeypatch.setattr(
-        ewc_hub_config, "EWC_CLI_DEFAULT_TENANCY_NAME", "default-tenant"
+    # Save profile
+    save_cli_profile(
+        federee=federee,
+        tenant_name=tenant_name,
+        token=token,
+        application_credential_id=app_id,
+        application_credential_secret=app_secret,
+        region=region,
+        profiles_file_path=str(profile_file_path),
     )
 
-    return tmpdir
+    profile_name = _resolve_profile(None, federee, tenant_name)
 
-
-def test_save_cli_config_creates_files(temp_config_dir):
-    """
-    Test that `save_cli_config` creates both the federee/tenant-specific config
-    file and the default config file.
-
-    Verifies:
-        - Files exist in the expected directory.
-        - YAML content includes federee, tenant, and token values.
-    """
-    federee = "TestRegion"
-    tenant = "TestTenant"
-    token = "secret-token"
-
-    save_cli_config(federee=federee, tenant_name=tenant, token=token)
-
-    # Expected output files
-    specific_file = temp_config_dir / f"{federee.lower()}-{tenant}.yaml"
-    default_file = temp_config_dir / "default-federee-default-tenant.yaml"
-
-    assert specific_file.exists()
-    assert default_file.exists()
-
-    # Validate YAML content
-    data = yaml.safe_load(specific_file.read_text())
+    # Load by profile
+    data = load_cli_profile(profile=profile_name, profiles_file_path=str(profile_file_path))
+    assert data["profile"] == profile_name
     assert data["federee"] == federee
-    assert data["tenant_name"] == tenant
+    assert data["tenant_name"] == tenant_name
     assert data["token"] == token
+    assert data["application_credential_id"] == app_id
+    assert data["application_credential_secret"] == app_secret
+    assert data["region"] == region
 
 
-def test_save_cli_config_with_app_creds(temp_config_dir):
-    """
-    Test that `save_cli_config` includes application credential fields
-    when they are provided as arguments.
+def test_save_existing_profile_fails(profile_file_path):
+    federee = "EWC2"
+    tenant_name = "TeamB"
 
-    Verifies:
-        - `application_credential_id` and `application_credential_secret` keys
-          are present in the YAML file with the expected values.
-    """
-    save_cli_config(
-        federee="R1",
-        tenant_name="T1",
-        application_credential_id="id123",
-        application_credential_secret="secret456",
-    )
+    save_cli_profile(federee, tenant_name, profiles_file_path=str(profile_file_path))
 
-    config_file = temp_config_dir / "r1-T1.yaml"
-    data = yaml.safe_load(config_file.read_text())
-
-    assert data["application_credential_id"] == "id123"
-    assert data["application_credential_secret"] == "secret456"
+    # Attempt to save again should raise click.Abort
+    with pytest.raises(click.Abort):
+        save_cli_profile(federee, tenant_name, profiles_file_path=str(profile_file_path))
 
 
-def test_save_cli_config_optional_fields_not_set(temp_config_dir):
-    """
-    Test that `save_cli_config` does not include optional credential fields
-    when they are not provided.
+def test_load_missing_profile_raises(profile_file_path):
+    # Attempt to load a non-existent profile
+    with pytest.raises(click.Abort):
+        load_cli_profile(profile="nonexistent", profiles_file_path=str(profile_file_path))
 
-    Verifies:
-        - `application_credential_id` and `application_credential_secret` keys
-          are absent from the YAML file.
-    """
-    save_cli_config(federee="R2", tenant_name="T2")
-
-    config_file = temp_config_dir / "r2-T2.yaml"
-    data = yaml.safe_load(config_file.read_text())
-
-    assert "application_credential_id" not in data
-    assert "application_credential_secret" not in data
+    # Attempt to auto-resolve without federee/tenant_name → should raise
+    with pytest.raises(click.Abort):
+        load_cli_profile(profiles_file_path=str(profile_file_path))
 
 
-def test_get_cli_config_path_returns_correct_path(temp_config_dir):
-    """
-    Test that `get_cli_config_path` constructs the expected YAML file path
-    based on federee and tenant values.
-    """
-    federee = "EU"
-    tenant = "TenantX"
+def test_overwrite_profile_not_allowed(profile_file_path):
+    federee = "EWC5"
+    tenant_name = "TeamE"
 
-    path = get_cli_config_path(federee, tenant)
-    expected = temp_config_dir / "eu-TenantX.yaml"
+    save_cli_profile(federee, tenant_name, profiles_file_path=str(profile_file_path))
 
-    assert path == expected
-
-
-def test_load_cli_config_reads_yaml_file(temp_config_dir):
-    """
-    Test that `load_cli_config` reads and returns YAML config correctly.
-    """
-    federee = "NA"
-    tenant = "TenantY"
-    path = get_cli_config_path(federee, tenant)
-
-    # Write a sample config
-    config_data = {"federee": federee, "tenant_name": tenant, "token": "tok123"}
-    path.write_text(yaml.safe_dump(config_data))
-
-    loaded = load_cli_config(federee=federee, tenant_name=tenant)
-
-    assert loaded == config_data
-
-
-def test_load_cli_config_raises_if_missing(temp_config_dir):
-    """
-    Test that `load_cli_config` raises a ClickException if the config file is missing.
-    """
-    with pytest.raises(
-        click.ClickException, match="No config found. Run `ewc login` first."
-    ):
-        load_cli_config(federee="nonexistent", tenant_name="ghost")
+    # Attempting to save again should fail
+    with pytest.raises(click.Abort):
+        save_cli_profile(federee, tenant_name, profiles_file_path=str(profile_file_path))

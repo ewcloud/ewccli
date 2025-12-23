@@ -46,7 +46,7 @@ from ewccli.enums import HubItemTechnologyAnnotation
 from ewccli.enums import HubItemCategoryAnnotation
 from ewccli.enums import HubItemCLIKeys
 from ewccli.logger import get_logger
-from ewccli.utils import load_cli_config
+from ewccli.utils import load_cli_profile
 
 _LOGGER = get_logger(__name__)
 
@@ -268,11 +268,11 @@ def _validate_item_input_types(  # noqa: CCR001, C901
     help="Simulate deployment without running.",
 )
 @click.option(
-    "--config-name",
-    envvar="EWC_CLI_LOGIN_CONFIG_NAME",
+    "--profile",
+    envvar="EWC_CLI_LOGIN_PROFILE",
     required=False,
-    callback=validate_config_name,
-    help="EWC CLI config name, format: {tenant_name}-{federee} (all alphanumeric)",
+    default=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
+    help="EWC CLI profile name",
 )
 @click.option(
     "--force",
@@ -296,7 +296,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     ssh_private_key_path: str,
     keypair_name: str,
     server_name: Optional[str] = None,
-    config_name: Optional[str] = None,
+    profile: Optional[str] = None,
     item_inputs: Optional[dict] = None,
     auth_url: Optional[str] = None,
     image_name: Optional[str] = None,
@@ -316,15 +316,18 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     if dry_run:
         _LOGGER.info("Dry run enabled...")
 
-    if config_name:
-        retrieve_federee, tenant_name = split_config_name(config_name=config_name)
-        cli_config = load_cli_config(tenant_name=tenant_name, federee=retrieve_federee)
+    if profile:
+        cli_profile = load_cli_profile(profile=profile)
     else:
-        cli_config = load_cli_config()
+        # Use default profile if exists
+        cli_profile = load_cli_profile(profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME)
 
-    tenancy_name = cli_config["tenant_name"]
-    federee: str = cli_config["federee"]
-    federee = federee
+    _LOGGER.info(
+        f"Using `{cli_profile.get('profile')}` profile."
+    )
+
+    tenancy_name = cli_profile["tenant_name"]
+    federee: str = cli_profile["federee"]
     # Take item information
     _LOGGER.info(f"The item will be deployed on {federee} side of the EWC.")
 
@@ -440,10 +443,10 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         )
 
         application_credential_id = (
-            cli_config.get("application_credential_id") or application_credential_id
+            cli_profile.get("application_credential_id") or application_credential_id
         )
         application_credential_secret = (
-            cli_config.get("application_credential_secret")
+            cli_profile.get("application_credential_secret")
             or application_credential_secret
         )
         if not auth_url:

@@ -9,6 +9,7 @@
 """European Weather Cloud (EWC) CLI."""
 
 from importlib.metadata import version, PackageNotFoundError
+from typing import Optional
 import rich_click as click
 
 from ewccli import __title__
@@ -46,6 +47,7 @@ def init(
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
+    profile: Optional[str] = None
     # token: str,
 ):
     """Login command."""
@@ -56,6 +58,7 @@ def init(
         ssh_private_key_path=ssh_private_key_path,
         tenant_name=tenant_name,
         federee=federee,
+        profile=profile
         # token=token,
     )
 
