@@ -37,10 +37,7 @@ HUB_ENV_VARIABLES_MAP = {
         Federee.ECMWF.value: ["192.168.1.0/24"],
         Federee.EUMETSAT.value: ["10.0.0.0/24"],
     },
-    "os_network_name": {
-        Federee.ECMWF.value: None,
-        Federee.EUMETSAT.value: "private"
-    },
+    "os_network_name": {Federee.ECMWF.value: None, Federee.EUMETSAT.value: "private"},
     "os_subnet_name": {
         Federee.ECMWF.value: None,
         Federee.EUMETSAT.value: "private-subnet",
@@ -49,10 +46,10 @@ HUB_ENV_VARIABLES_MAP = {
         Federee.ECMWF.value: "192.168.1.0/24",
         Federee.EUMETSAT.value: "10.0.0.0/24",
     },
-    "dns_domain" : {
+    "dns_domain": {
         Federee.ECMWF.value: None,
         Federee.EUMETSAT.value: None,
-    }
+    },
 }
 
 
@@ -116,7 +113,9 @@ def get_hub_item_env_variable_value(
     }
 
     if variable_name == "dns_domain":
-        dns_domain = f"{tenancy_name}.{ewc_hub_config.FEDEREE_DNS_MAPPING[federee]}.ewcloud.host"
+        dns_domain = (
+            f"{tenancy_name}.{ewc_hub_config.FEDEREE_DNS_MAPPING[federee]}.ewcloud.host"
+        )
         hub_item_env_variables_map["dns_domain"] = {
             federee: dns_domain,
         }

@@ -100,6 +100,8 @@ IMPORTANT:
     - cli config
     - any other config (e.g. Openstack cloud.yaml or Kubernetes `kubeconfig` file)
 
+All your profiles are saved under `~/.ewccli/profiles`
+
 ## List items
 
 The following command shows the current available items. Official items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).

@@ -25,7 +25,9 @@ class EWCCLIConfiguration:
 
     EWC_CLI_BASE_PATH = home_dir / ".ewccli"
 
-    EWC_CLI_DEFAULT_TENANCY_NAME = "default-tenancy-name"
+    EWC_CLI_PROFILES_PATH = EWC_CLI_BASE_PATH / "profiles"
+
+    EWC_CLI_DEFAULT_PROFILE_NAME = "default"
     EWC_CLI_DEFAULT_FEDEREE = "default"
     EWC_CLI_DEFAULT_KEYPAIR_NAME = "ewc-hub-key"
 
@@ -34,8 +36,8 @@ class EWCCLIConfiguration:
     EWC_CLI_PRIVATE_SSH_KEY_PATH = home_dir / ".ssh/id_rsa"
     EWC_CLI_PUBLIC_SSH_KEY_PATH = home_dir / ".ssh/id_rsa.pub"
 
-    EWC_CLI_DEFAULT_PATH_INPUTS = home_dir / ".ewccli/inputs"
-    EWC_CLI_DEFAULT_PATH_OUTPUTS = home_dir / ".ewccli/outputs"
+    EWC_CLI_DEFAULT_PATH_INPUTS = EWC_CLI_BASE_PATH / "inputs"
+    EWC_CLI_DEFAULT_PATH_OUTPUTS = EWC_CLI_BASE_PATH / "outputs"
 
     # TODO: it needs to match EWC virtual image column
     # from https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available

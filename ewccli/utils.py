@@ -16,14 +16,16 @@ from pathlib import Path
 import secrets
 import string
 from datetime import datetime, timezone
-from typing import Optional, Tuple, IO, List
+from typing import Optional, Tuple, IO, List, Dict
 
-import yaml
 import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 
+from configparser import ConfigParser
+
+import rich_click as click
 from click import ClickException
 
 from ewccli.configuration import config as ewc_hub_config
@@ -32,60 +34,280 @@ from ewccli.logger import get_logger
 _LOGGER = get_logger(__name__)
 
 
-def save_cli_config(
+def _resolve_profile(
+    profile: Optional[str] = None,
+    federee: Optional[str] = None,
+    tenant_name: Optional[str] = None,
+) -> str:
+    """Return explicit profile or auto-generate one using federee-tenant."""
+    if profile is not None:
+        return profile
+
+    if not federee or not tenant_name:
+        click.secho(
+            "❌ Either 'profile' must be provided or both 'federee' and 'tenant_name'.",
+            fg="red",
+            bold=True,
+        )
+        raise click.Abort()
+
+    return f"{federee.lower()}-{tenant_name.lower()}"
+
+
+def save_default_login_profile(
     federee: str,
     tenant_name: str,
+    application_credential_id: Optional[str] = None,
+    application_credential_secret: Optional[str] = None,
+    region: Optional[str] = None,
+    token: Optional[str] = None,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> None:
+    """
+    Save the default login profile to EWC_CLI_PROFILES_PATH only if it does not exist.
+    If it already exists, do nothing (skip).
+
+    Uses ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME as the profile name.
+    """
+    resolved_profile = _resolve_profile(
+        profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
+    )
+
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+
+    # Skip saving if the default profile already exists
+    if resolved_profile in cfg:
+        return
+
+    # Save profile (reusing the unified save_cli_profile logic)
+
+    save_cli_profile(
+        federee=federee,
+        tenant_name=tenant_name,
+        profile=resolved_profile,
+        token=token,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret,
+        region=region,
+    )
+
+
+def save_cli_profile(
+    federee: str,
+    tenant_name: str,
+    profile: Optional[str] = None,
     token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
-):
-    """Save CLI configuration to YAML config file."""
+    region: Optional[str] = None,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> None:
+    """
+    Save all profile data (config + credentials) into a single profiles file.
 
-    config_dir = ewc_hub_config.EWC_CLI_BASE_PATH
-    config_dir.mkdir(parents=True, exist_ok=True)
+    Parameters
+    ----------
+    federee : str
+        Federee name.
+    tenant_name : str
+        Tenant name.
+    profile : str, optional
+        Explicit profile name. If None, auto-generated using federee-tenant.
+    token : str, optional
+        Authentication token.
+    application_credential_id : str, optional
+        Application credential ID.
+    application_credential_secret : str, optional
+        Application credential secret.
+    region : str, optional
+        Region for the profile.
+    """
+    resolved_profile = _resolve_profile(profile, federee, tenant_name)
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
 
-    config_data = {
-        "federee": federee,
-        "tenant_name": tenant_name,
-        "token": token,
-    }
+    # Fail if profile exists
+    if resolved_profile in cfg:
+        click.secho(
+            f"❌ Profile '{resolved_profile}' already exists in {profiles_file_path}",
+            fg="red",
+            bold=True,
+        )
+        click.secho(
+            "Use a different profile name or delete the existing profile first.",
+            fg="yellow",
+        )
+        raise click.Abort()
+
+    # --- Save profile data
+    cfg[resolved_profile] = {}
+
+    # Non-sensitive
+    cfg[resolved_profile]["federee"] = federee
+    cfg[resolved_profile]["tenant_name"] = tenant_name
+
+    if region:
+        cfg[resolved_profile]["region"] = region
+
+    # Sensitive
+    if token:
+        cfg[resolved_profile]["token"] = token
 
     if application_credential_id:
-        config_data["application_credential_id"] = application_credential_id
+        cfg[resolved_profile]["application_credential_id"] = application_credential_id
 
     if application_credential_secret:
-        config_data["application_credential_secret"] = application_credential_secret
+        cfg[resolved_profile][
+            "application_credential_secret"
+        ] = application_credential_secret
 
-    with open(config_dir / f"{federee.lower()}-{tenant_name}.yaml", "w") as f:
-        yaml.safe_dump(config_data, f)
-
-    with open(
-        config_dir
-        / f"{ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE}-{ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME}.yaml",
-        "w",
-    ) as f:
-        yaml.safe_dump(config_data, f)
+    os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
+    with open(profiles_file_path, "w") as f:
+        cfg.write(f)
 
 
-def get_cli_config_path(
-    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
-    tenant_name: str = ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
-) -> Path:
-    """Get CLI config path."""
-    return ewc_hub_config.EWC_CLI_BASE_PATH / f"{federee.lower()}-{tenant_name}.yaml"
+def load_cli_profile(
+    profile: Optional[str] = None,
+    federee: Optional[str] = None,
+    tenant_name: Optional[str] = None,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> Dict[str, Optional[str]]:
+    """
+    Load all profile data (config + credentials) from the single profiles file.
 
+    Parameters
+    ----------
+    profile : str, optional
+        Explicit profile name to load. If None, auto-resolved from federee and tenant_name.
+    federee : str, optional
+        Federee name, used for auto-resolution if profile is None.
+    tenant_name : str, optional
+        Tenant name, used for auto-resolution if profile is None.
 
-def load_cli_config(
-    federee: str = ewc_hub_config.EWC_CLI_DEFAULT_FEDEREE,
-    tenant_name: str = ewc_hub_config.EWC_CLI_DEFAULT_TENANCY_NAME,
-) -> dict:
-    """Load config."""
-    path = get_cli_config_path(federee, tenant_name)
+    Returns
+    -------
+    dict
+        Combined profile data.
 
-    if not path.exists():
-        raise ClickException("No config found. Run `ewc login` first.")
-    with open(path) as f:
-        return yaml.safe_load(f)
+    Raises
+    ------
+    click.Abort
+        If the profile cannot be found or cannot be resolved.
+    """
+    if profile is None:
+        if not federee or not tenant_name:
+            click.secho(
+                "❌ Either 'profile' must be provided or both 'federee' and 'tenant_name'.",
+                fg="red",
+                bold=True,
+            )
+            raise click.Abort()
+        profile = _resolve_profile(profile, federee, tenant_name)
+
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+
+    # Case 1: file missing or empty
+    if not os.path.exists(profiles_file_path) or not cfg.sections():
+        click.secho(
+            "❌ No profiles found.",
+            fg="red",
+            bold=True,
+        )
+        click.secho(
+            f"Searched in: {profiles_file_path}",
+            fg="cyan",
+        )
+        click.secho(
+            "Please run 'ewc login' first to create a profile.",
+            fg="yellow",
+        )
+        raise click.Abort()
+
+    default_profile = ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
+    # Case 2: requested profile missing
+    if profile and profile not in cfg:
+        if profile != default_profile:
+            print("here")
+            click.secho(
+                f"❌ Profile '{profile}' not found.",
+                fg="red",
+                bold=True,
+            )
+            click.secho(
+                f"Searched in: {profiles_file_path}",
+                fg="cyan",
+            )
+            if cfg.sections():
+                click.secho(
+                    f"ℹ️ The {profile} profile does not exist, but other profiles are available:",
+                    fg="yellow",
+                )
+                for name in cfg.sections():
+                    click.secho(f"  • {name}", fg="green")
+
+                click.secho(
+                    "You can either:",
+                    fg="yellow",
+                )
+                if default_profile in cfg:
+                    click.secho(
+                        "  • Use the default without --profile",
+                        fg="cyan",
+                    )
+                click.secho(
+                    "  • Use one of the existing profiles with --profile <profile_name>",
+                    fg="cyan",
+                )
+                click.secho(
+                    "  • Or run 'ewc login' to create a new profile",
+                    fg="cyan",
+                )
+
+        # Case 3: default profile missing but others exist
+        if profile == default_profile and default_profile not in cfg and cfg.sections():
+            click.secho(
+                "ℹ️ The default profile does not exist, but other profiles are available:",
+                fg="yellow",
+            )
+            for name in cfg.sections():
+                click.secho(f"  • {name}", fg="green")
+
+            click.secho(
+                "You can either:",
+                fg="yellow",
+            )
+            click.secho(
+                "  • Use one of the existing profiles with --profile <profile_name>",
+                fg="cyan",
+            )
+            click.secho(
+                "  • Or run 'ewc login' to create the default profile automatically",
+                fg="cyan",
+            )
+
+        raise click.Abort()
+
+    section = cfg[profile]
+
+    federee = section.get("federee")
+
+    allowed_federees = [f for f in ewc_hub_config.EWC_CLI_SITE_MAP]
+    if federee not in allowed_federees:
+        raise ClickException(
+            f"`{federee}` federee not supported. Check your profiles in ~/.ewccli/profiles. Please use one from the following: {allowed_federees}"
+        )
+
+    return {
+        "profile": profile,
+        "federee": federee,
+        "tenant_name": section.get("tenant_name"),
+        "region": section.get("region"),
+        "token": section.get("token"),
+        "application_credential_id": section.get("application_credential_id"),
+        "application_credential_secret": section.get("application_credential_secret"),
+    }
 
 
 def generate_random_id(length: int = 10):

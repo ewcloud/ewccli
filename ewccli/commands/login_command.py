@@ -30,7 +30,9 @@ from openstack.exceptions import (  # noqa: N813
 )
 
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import save_cli_config, generate_ssh_keypair
+from ewccli.utils import save_cli_profile, _resolve_profile
+from ewccli.utils import generate_ssh_keypair
+from ewccli.utils import save_default_login_profile
 from ewccli.enums import Federee
 from ewccli.logger import get_logger
 
@@ -178,7 +180,12 @@ def init_options(func):
         default=ewc_hub_config.EWC_CLI_PRIVATE_SSH_KEY_PATH,
         help="Path to SSH private key.",
     )(func)
-
+    func = click.option(
+        "--profile",
+        envvar="EWC_CLI_LOGIN_PROFILE",
+        required=False,
+        help="EWC CLI profile name",
+    )(func)
     return func
 
 
@@ -255,6 +262,7 @@ def init_command(
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
+    profile: str = None,
     # token: str,
 ):
     """EWC CLI Login."""
@@ -315,15 +323,28 @@ def init_command(
     #     if token == "":
     #         token = None
 
-    # Save config
-    save_cli_config(
+    #
+    save_default_login_profile(
         federee=federee,
         tenant_name=tenant_name,
         # token=token,
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
     )
+
+    # Save config
+    save_cli_profile(
+        federee=federee,
+        tenant_name=tenant_name,
+        profile=profile,
+        # token=token,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret,
+    )
+
+    resolved_profile = _resolve_profile(profile, federee, tenant_name)
+
     console.print(
-        f"✅ Configuration saved for tenant '[bold cyan]{tenant_name}[/bold cyan]' "
-        f"in the following directory {ewc_hub_config.EWC_CLI_BASE_PATH}"
+        f"✅ Profile '[bold cyan]{resolved_profile}[/bold cyan]' saved "
+        f"in the following file {ewc_hub_config.EWC_CLI_PROFILES_PATH}"
     )

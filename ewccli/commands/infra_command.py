@@ -25,10 +25,9 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
-from ewccli.commands.commons import split_config_name
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
 from ewccli.commands.commons_infra import deploy_server
-from ewccli.utils import load_cli_config
+from ewccli.utils import load_cli_profile
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -42,15 +41,20 @@ infra_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 @click.group(name="infra")
 @infra_context
 @login_options
-def ewc_infra_command(ctx, config_name):
+def ewc_infra_command(ctx, profile):
     """EWC Infrastructure commands group."""
-    if config_name:
-        federee, tenant_name = split_config_name(config_name=config_name)
-        ctx.cli_config = load_cli_config(tenant_name=tenant_name, federee=federee)
+    if profile:
+        ctx.cli_profile = load_cli_profile(profile=profile)
+        _LOGGER.info(f"Using `{profile}` profile.")
+    else:
+        ctx.cli_profile = load_cli_profile(
+            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
+        )
+        _LOGGER.info(f"Using `{ctx.cli_profile.get('profile')}` profile.")
 
-    federee = ctx.cli_config.get("federee")
-    application_credential_id = ctx.cli_config.get("application_credential_id")
-    application_credential_secret = ctx.cli_config.get("application_credential_secret")
+    federee = ctx.cli_profile.get("federee")
+    application_credential_id = ctx.cli_profile.get("application_credential_id")
+    application_credential_secret = ctx.cli_profile.get("application_credential_secret")
     ctx.openstack_backend = OpenstackBackend(
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
@@ -113,7 +117,6 @@ def create_cmd(
     ssh_public_key_path: str,
     ssh_private_key_path: str,
     keypair_name: str,
-    config_name: Optional[str] = None,
     federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
@@ -130,13 +133,8 @@ def create_cmd(
     if dry_run:
         _LOGGER.info("Dry run enabled...")
 
-    if config_name:
-        retrieved_federee, tenant_name = split_config_name(config_name=config_name)
-        cli_config = load_cli_config(tenant_name=tenant_name, federee=retrieved_federee)
-    else:
-        cli_config = load_cli_config()
-
-    federee = federee or cli_config["federee"]
+    cli_profile = ctx.cli_profile
+    federee = federee or cli_profile["federee"]
 
     _LOGGER.info(f"The server will be deployed on {federee} side of the EWC.")
 
@@ -233,7 +231,7 @@ def show_cmd(
     application_credential_secret: Optional[str] = None,
 ):
     """Show Server from Openstack."""
-    federee = federee or ctx.cli_config["federee"]
+    federee = federee or ctx.cli_profile["federee"]
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
@@ -293,7 +291,7 @@ def list_cmd(
     show_all: bool = False,
 ):
     """List Servers from Openstack."""
-    federee = federee or ctx.cli_config["federee"]
+    federee = federee or ctx.cli_profile["federee"]
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
