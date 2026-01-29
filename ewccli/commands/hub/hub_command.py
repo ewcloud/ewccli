@@ -491,8 +491,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         server_inputs = {
             "server_name": server_name,
             "is_gpu": is_gpu,
-            "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value)
-            or image_name,
+            "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value) if not image_name else image_name,
             "keypair_name": keypair_name,
             "flavour_name": flavour_name,
             "external_ip": external_ip
