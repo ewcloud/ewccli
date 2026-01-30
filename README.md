@@ -121,6 +121,17 @@ ewc hub deploy ITEM
 ```
 where ITEM is taken from `ewc hub list` command under Item column.
 
+## Deploy a custom item
+
+If you want to test the deployment of a new item, not yet published to EWC Community Hub, you can use the `--path-to-catalog` flag available. Remember the repository needs to be public to be used by the EWCCLI at the moment.
+
+```bash
+ewc hub --path-to-catalog PATH-TO-CATALOGUE list|show|deploy
+```
+where PATH-TO-CATALOGUE is by default the official published catalogue available [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
+
+list|show|deploy commands work the same, but they will rely on a custom catalogue file.
+
 ## Backends
 
 This section described the backends used and which commands are backed by those backends.

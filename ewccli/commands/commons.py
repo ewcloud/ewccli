@@ -44,15 +44,6 @@ class CommonBackendContext:
     def __init__(self):
         self.cli_profile = None
 
-
-# Global state container
-class HubContext:
-    """HubContext."""
-
-    def __init__(self):
-        self.items = load_hub_items()
-
-
 class CommonContext:
     """CommonContext."""
 
@@ -103,10 +94,10 @@ def default_username():
     return f"{username}"
 
 
-def load_hub_items() -> dict:
+def load_hub_items(path_to_catalog: str = ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH) -> dict:
     """Load EWC Hub Items from file."""
     download_items()
-    with open(ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH, "r") as file:
+    with open(path_to_catalog, "r") as file:
         items_file = yaml.safe_load(file)
 
         if not items_file:

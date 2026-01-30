@@ -11,6 +11,7 @@
 import os
 import ast
 import re
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import rich_click as click
@@ -32,8 +33,7 @@ from ewccli.commands.commons import show_item_table
 from ewccli.commands.commons import default_username
 from ewccli.commands.commons import build_dns_record_name
 from ewccli.commands.commons import wait_for_dns_record
-from ewccli.commands.commons import HubContext
-from ewccli.commands.commons import CommonContext
+from ewccli.commands.commons import load_hub_items
 from ewccli.commands.commons_infra import deploy_server
 from ewccli.commands.hub.hub_backends import git_clone_item
 from ewccli.commands.hub.hub_backends import run_ansible_playbook_item
@@ -50,24 +50,53 @@ _LOGGER = get_logger(__name__)
 
 console = Console()
 
-hub_context = click.make_pass_decorator(HubContext, ensure=True)
-common_context = click.make_pass_decorator(CommonContext, ensure=True)
-
 
 @click.group(name="hub")
-def ewc_hub_command():
+@click.option(
+    "--path-to-catalog",
+    is_flag=False,
+    required=False,
+    type=click.Path(path_type=Path),
+    default=ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH,
+    envvar="EWC_CLI_PATH_TO_CATALOGUE",
+    show_default=True,
+    help="EWC CLI path to catalogue.",
+)
+@click.pass_context
+def ewc_hub_command(ctx, path_to_catalog):
     """EWC Community Hub commands group."""
     download_items(force=ewc_hub_config.EWC_CLI_HUB_DOWNLOAD_ITEMS)
 
+    # Create the dict if not existing
+    ctx.ensure_object(dict)
+
+    if path_to_catalog:
+        if not path_to_catalog.exists():
+            raise click.ClickException(f"Catalog file doesn't exist at this path: {path_to_catalog}")
+
+        # Check directory:
+        if path_to_catalog.is_dir():
+            raise click.ClickException(f"Catalog path must be a file not a directory: {path_to_catalog}")
+
+        items = load_hub_items(path_to_catalog=path_to_catalog)
+
+    else:
+        items = load_hub_items()
+
+    # Store the option to make it available to all subcommands
+    ctx.obj['items'] = items
+
+    ctx.obj['cli_profile'] = None
+
 
 def _extract_item_inputs_class(ctx, item):  # noqa CCR001
-    if item not in [i for i, v in ctx.items.items()]:
-        list_items_table(hub_items=ctx.items)
+    if item not in [i for i, v in ctx.obj['items'].items()]:
+        list_items_table(hub_items=ctx.obj['items'])
         raise ClickException(
             f"{item} is not available in the EWC Hub. Please check the list above."
         )
 
-    item_info = ctx.items[item]
+    item_info = ctx.obj['items'][item]
 
     is_item_deployable = verify_item_is_deployable(item_info)
     if not is_item_deployable:
@@ -230,7 +259,6 @@ def _validate_item_input_types(  # noqa: CCR001, C901
 
 
 @ewc_hub_command.command("deploy")
-@common_context
 @ssh_options
 @ssh_options_encoded
 @openstack_options
@@ -283,6 +311,7 @@ def _validate_item_input_types(  # noqa: CCR001, C901
     "item",
     type=str,
 )
+@click.pass_context
 def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     ctx,
     item: str,
@@ -673,21 +702,21 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     default=False,
     help="Force item file re-download.",
 )
-@hub_context
+@click.pass_context
 def list_cmd(ctx, force: bool):
     """List EWC Hub items."""
     if force:
         download_items(force=force)
 
-    list_items_table(hub_items=ctx.items)
+    list_items_table(hub_items=ctx.obj['items'])
 
 
 @ewc_hub_command.command("show")
-@hub_context
 @click.argument(
     "item",
     type=str,
 )
+@click.pass_context
 def show_cmd(ctx, item):
     """Show information on a specific EWC Hub item.
 
@@ -695,9 +724,9 @@ def show_cmd(ctx, item):
 
     where <item> is taken from ewc hub list command.
     """
-    if item not in [i for i, _ in ctx.items.items()]:
+    if item not in [i for i, _ in ctx.obj['items'].items()]:
         list_items_table(
-            hub_items=ctx.items,
+            hub_items=ctx.obj['items'],
         )
         raise ClickException(
             f"{item} is not available in the EWC Hub. Please check the list above."
@@ -705,6 +734,6 @@ def show_cmd(ctx, item):
 
     else:
         show_item_table(
-            hub_item=ctx.items.get(item),
+            hub_item=ctx.obj['items'].get(item),
             default_admin_variables_map=HUB_ENV_VARIABLES_MAP,
         )
