@@ -63,6 +63,13 @@ class AnsibleBackend:
                 _LOGGER.error(msg)
 
         run_args = dict(
+            # Note:
+            # The 'private_data_dir' parameter in ansible_runner becomes the base directory
+            # for execution. Any relative paths in the cmdline (e.g., playbooks, inventories)
+            # are resolved relative to this directory, not the current working directory
+            # of the Python script. To avoid file-not-found errors, either:
+            #   1) Pass absolute paths in the cmdline, or
+            #   2) Make private_data_dir the root containing your playbook/inventory.
             private_data_dir=working_directory_path,
             envvars=env,
             cmdline=cmdline,
