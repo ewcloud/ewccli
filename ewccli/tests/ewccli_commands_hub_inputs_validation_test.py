@@ -145,3 +145,40 @@ def test_prepare_missing_inputs_error_message():
     message = prepare_missing_inputs_error_message(missing_keys)
     expected = "Missing 2 required item input(s):\n- ipa_domain\n- ipa_admin_password"
     assert message == expected
+
+
+# -----------------------------
+# NEW TESTS for empty values in the input variables
+# -----------------------------
+
+def test_empty_string_value_is_accepted(item_schema, valid_inputs):
+    """Ensure key="" is treated as valid (empty string), not an error."""
+    modified = valid_inputs.copy()
+    modified["ipa_domain"] = ""   # empty string allowed
+
+    result = _validate_item_input_types(modified, item_schema)
+    assert result == ""
+
+
+def test_empty_string_value_does_not_count_as_missing_required_input():
+    """Empty value should count as provided, because key exists."""
+    parsed_inputs = {
+        "ipa_client_hostname": "",
+        "ipa_domain": "",
+        "ipa_admin_password": "",
+    }
+    missing = _validate_required_inputs(parsed_inputs, REQUIRED_INPUTS)
+
+    assert missing == []
+
+
+def test_value_equals_empty_string_literal_eval(item_schema):
+    """Ensure value='' is parsed as empty string, not raising errors."""
+    parsed_inputs = {
+        "ipa_domain": "",
+        "ipa_client_hostname": "test",
+        "ipa_admin_password": "pw"
+    }
+    result = _validate_item_input_types(parsed_inputs, item_schema)
+
+    assert result == ""  # means no type errors occurred

@@ -152,7 +152,7 @@ spec:
       icon: https://raw.githubusercontent.com/ewcloud/ewc-community-hub/refs/heads/main/logos/EWCLogo.png
       annotations:
         technology: "Ansible Playbook"
-        category: "Machine Learning & AI, GPU-accelerated"
+        category: "Test Item"
         supportLevel: "Community"
         licenseType: "Apache License 2.0"
         others: "Deployable,EWCCLI-compatible"
