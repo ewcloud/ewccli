@@ -138,18 +138,18 @@ def _validate_item_inputs_format(ctx, param, values):
 
     result = {}
     key_value_pattern = re.compile(
-        r"^[^=]+=[^=]+$"
-    )  # Only <key>=<value> format allowed
+        r"^[^=]+=.*$"
+    )  # Only <key>=<value> format allowed and Allow empty value
 
-    for item in values:
-        item = item.strip()
-
-        if not key_value_pattern.match(item):
+    for item_input in values:
+        item_input = item_input.strip()
+        
+        if not key_value_pattern.match(item_input):
             raise click.BadParameter(
-                f"Invalid format '{item}'. Expected format: <key>=<value>"
+                f"Invalid format '{item_input}'. Expected format: <key>=<value>"
             )
 
-        key, val = item.split("=", 1)
+        key, val = item_input.split("=", 1)
         key = key.strip()
         val = val.strip()
 
@@ -325,7 +325,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     keypair_name: str,
     server_name: Optional[str] = None,
     profile: Optional[str] = None,
-    item_inputs: Optional[dict] = None,
+    item_inputs: Optional[Any] = None,
     auth_url: Optional[str] = None,
     image_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
