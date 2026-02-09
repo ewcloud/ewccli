@@ -125,7 +125,9 @@ where ITEM is taken from `ewc hub list` command under Item column.
 
 If you want to test the deployment of a new item, not yet published to EWC Community Hub, you can use the `--path-to-catalog` flag available. 
 
-For example you can create the following file `custom_item.yaml` with the following Ansible Playbook item:
+For example you can create the following custom catalogue `custom_catalogue.yaml` with the following Ansible Playbook item (you can have more in case):
+
+NOTE: Please verify the latest metadata needed for an item directly from the official EWC Hub Catalogue page available [here](https://github.com/ewcloud/ewc-community-hub?tab=readme-ov-file#items-metadata).
 
 ```yaml
 apiVersion: communityhub.europeanweather.cloud/v1alpha1
@@ -157,13 +159,17 @@ spec:
       displayName: My First EWC Community hub item
       summary: My test item
       license: https://github.com/your-repo/blob/main/LICENSE
-      published: true
+      published: false
 ```
 
-where `sources` can be (only the first element in the list is considered):
+where
+
+- `sources` can be (only the first element in the list is considered):
 
     - Public repo URL (e.g. https://github.com/your-repo.git) if your repository is public already
     - Absolute path to a directory with the item (e.g. /home/murdaca/custom-items/new-item). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
+
+- `pathToMainFile`: relative path respect to your repository or local directory
 
 Once ready you can try the following commands:
 
