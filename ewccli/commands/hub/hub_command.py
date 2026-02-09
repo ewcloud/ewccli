@@ -531,11 +531,12 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         if security_groups:
             security_groups_inputs += security_groups
 
-        item_default_security_groups = item_info_ewccli.get(
-            HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
-        )
-        if item_default_security_groups:
-            security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
+        else:
+            item_default_security_groups = item_info_ewccli.get(
+                HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
+            )
+            if item_default_security_groups:
+                security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
 
         server_inputs = {
             "server_name": server_name,
