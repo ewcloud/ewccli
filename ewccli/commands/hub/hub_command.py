@@ -24,6 +24,7 @@ from ewccli.utils import download_items
 from ewccli.commands.hub.hub_utils import verify_item_is_deployable
 from ewccli.commands.hub.hub_utils import extract_annotations
 from ewccli.commands.hub.hub_utils import prepare_missing_inputs_error_message
+from ewccli.commands.hub.hub_utils import classify_source
 from ewccli.commands.commons import openstack_options
 from ewccli.commands.commons import ssh_options
 from ewccli.commands.commons import ssh_options_encoded
@@ -406,10 +407,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     if not sources:
         raise ClickException(f"{item} item doesn't contain any sources.")
 
-    source = sources[0]
-    version = item_info.get("version")
+    # Consider annotations
     annotations = item_info.get("annotations")
-
     annotations_category, annotations_technology = extract_annotations(
         annotations=annotations
     )
@@ -419,37 +418,58 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     if not server_name:
         server_name = item
 
-    # Define path for ~/.ewccli where everything is stored
-    # random_id = generate_random_id()
-    # cwd_command = f"{ewc_hub_config.EWC_CLI_DEFAULT_PATH_OUTPUTS}/{item}-{random_id}"
-    command_path = f"{ewc_hub_config.EWC_CLI_DEFAULT_PATH_OUTPUTS}/{item}-{version}"
-    repo_name = os.path.splitext(source.split("/")[-1])[0]
+    # Consider first element in the list!
+    source = sources[0]
+    version = item_info.get("version")
 
-    ########################################################################
-    # Git clone item to be deployed
-    ########################################################################
-    git_clone_return_code, git_clone_message = git_clone_item(
-        source=source,
-        repo_name=repo_name,
-        command_path=command_path,
-        dry_run=dry_run,
-        force=force,
-    )
+    is_source = classify_source(source=source)
 
-    if git_clone_return_code == 0:
-        _LOGGER.debug("✅ Command executed successfully.")
+    _LOGGER.info(f"📦 Classified source '{source}' as: [blue]{is_source}[/blue]")
 
-        if git_clone_message:
-            _LOGGER.info(git_clone_message)
+    working_directory_path = None
 
-    else:
-        error_message = (
-            f"❌ Command failed with return code {git_clone_return_code}.\n"
-            f"📥 STDERR:\n{git_clone_message if git_clone_message else 'No error output provided.'}\n\n"
-            "💡 Hint: Ensure the repository URL is correct and accessible, "
-            "and that your network and credentials are properly configured."
+    if is_source == "directory":
+        #################################################################################
+        # Use local item (code is still local not available in any public git repository)
+        #################################################################################
+        working_directory_path = source
+
+    if is_source == "github":
+        #############################################################################
+        # Git clone item to be deployed (public repository available in the internet)
+        #############################################################################
+        # Define path for ~/.ewccli where everything is stored
+        # random_id = generate_random_id()
+        # cwd_command = f"{ewc_hub_config.EWC_CLI_DEFAULT_PATH_OUTPUTS}/{item}-{random_id}"
+        command_path = f"{ewc_hub_config.EWC_CLI_DEFAULT_PATH_OUTPUTS}/{item}-{version}"
+        repo_name = os.path.splitext(source.split("/")[-1])[0]
+        working_directory_path = f"{command_path}/{repo_name}"
+
+        git_clone_return_code, git_clone_message = git_clone_item(
+            source=source,
+            repo_name=repo_name,
+            command_path=command_path,
+            dry_run=dry_run,
+            force=force,
         )
-        raise ClickException(error_message)
+
+        if git_clone_return_code == 0:
+            _LOGGER.debug("✅ Command executed successfully.")
+
+            if git_clone_message:
+                _LOGGER.info(git_clone_message)
+
+        else:
+            error_message = (
+                f"❌ Command failed with return code {git_clone_return_code}.\n"
+                f"📥 STDERR:\n{git_clone_message if git_clone_message else 'No error output provided.'}\n\n"
+                "💡 Hint: Ensure the repository URL is correct and accessible, "
+                "and that your network and credentials are properly configured."
+            )
+            raise ClickException(error_message)
+
+    if not working_directory_path:
+        raise ClickException(f"Working directory path is empty, please verify sources metadata in your hub catalogue for {item} item")
 
     ########################################################################
     # Run logic based on the technology annotation of the item
@@ -619,17 +639,19 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                 f"{HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value} key for {item} is not set. The Ansible playbook item cannot be installed."
             )
 
-        main_file_path = f"{command_path}/{repo_name}/{main_file_relative_path}"
+        main_file_path = f"{working_directory_path}/{main_file_relative_path}"
+        requirements_file_path = (
+            f"{working_directory_path}/{requirements_file_relative_path}"
+        )
 
         ansible_status_code, ansible_message = run_ansible_playbook_item(
             item=item,
             item_inputs=item_inputs,
             server_name=server_name,
             username=username,
-            repo_name=repo_name,
             main_file_path=main_file_path,
-            requirements_file_relative_path=requirements_file_relative_path,
-            command_path=command_path,
+            requirements_file_path=requirements_file_path,
+            working_directory_path=working_directory_path,
             ip_machine=(
                 external_ip_machine if external_ip_machine else internal_ip_machine
             ),

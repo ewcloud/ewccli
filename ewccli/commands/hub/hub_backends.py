@@ -176,7 +176,7 @@ def git_clone_item(
     ########################################################################
     # Prepare input for items
     ########################################################################
-    _LOGGER.info("Preparing item...")
+    _LOGGER.info("Git clone item...")
     ########################################################################
     # Git clone item to the correct path
     ########################################################################
@@ -219,6 +219,7 @@ def git_clone_item(
         cwd=command_path,
         dry_run=dry_run,
     )
+
     return return_code, message
 
 
@@ -228,10 +229,9 @@ def run_ansible_item(
     server_name: str,
     ip_machine: str,
     username: str,
-    repo_name: str,
     main_file_path: str,
-    requirements_file_relative_path: str,
-    cwd_command: str,
+    requirements_file_path: str,
+    working_directory_path: str,
     ssh_private_key_path: str,
     dry_run: bool = False,
 ):
@@ -239,9 +239,6 @@ def run_ansible_item(
     if dry_run:
         return 0, "Dry run. No actions"
 
-    requirements_file_path = (
-        f"{cwd_command}/{repo_name}/{requirements_file_relative_path}"
-    )
     # Install roles
     ansible_backend.install_ansible_roles(
         requirements_path=requirements_file_path, dry_run=dry_run
@@ -254,7 +251,7 @@ def run_ansible_item(
         machine_ips = [ip_machine]
 
     hosts_file_name = f"hosts-{item}.ini"
-    hosts_file_path = f"{cwd_command}/{repo_name}/{hosts_file_name}"
+    hosts_file_path = f"{working_directory_path}/{hosts_file_name}"
     _LOGGER.debug(f"Saving {hosts_file_name} file to {hosts_file_path}")
 
     inventory_content = f"[{server_name}]\n"
@@ -272,7 +269,7 @@ def run_ansible_item(
     # return_code = ansible_backend.run_ansible(
     #     description="run ansible",
     #     command=ansible_command,
-    #     cwd=f"{cwd_command}/{repo_name}",
+    #     cwd=f"{working_directory_path}",
     #     dry_run=dry_run
     # )
 
@@ -291,7 +288,10 @@ def run_ansible_item(
 
     _LOGGER.info(f"Deploying Ansible Playbook item {item}...")
     _LOGGER.info("⏳ This could take a few minutes, grab a beverage meanwhile...")
+
+    # Sleep some time to wait to start.
     time.sleep(15)
+
     if item_inputs:
         extra_vars = json.dumps(item_inputs)
     else:
@@ -304,7 +304,7 @@ def run_ansible_item(
         _LOGGER.info(f"Running attempt {attempt}/{max_attempts}...")
 
         return_code = ansible_backend.run_ansible_live(
-            working_directory_path=f"{cwd_command}/{repo_name}",
+            working_directory_path=f"{working_directory_path}",
             description=ansible_command[0],
             host=server_name,
             cmdline=[
@@ -363,10 +363,9 @@ def run_ansible_playbook_item(
     item: str,
     server_name: str,
     username: str,
-    repo_name: str,
     main_file_path: str,
-    requirements_file_relative_path: str,
-    command_path: str,
+    requirements_file_path: str,
+    working_directory_path: str,
     ip_machine: str,
     ssh_private_key_path: str,
     item_inputs: Optional[dict],
@@ -379,10 +378,9 @@ def run_ansible_playbook_item(
         server_name=server_name,
         ip_machine=ip_machine,
         username=username,
-        repo_name=repo_name,
         main_file_path=main_file_path,
-        requirements_file_relative_path=requirements_file_relative_path,
-        cwd_command=command_path,
+        requirements_file_path=requirements_file_path,
+        working_directory_path=working_directory_path,
         ssh_private_key_path=ssh_private_key_path,
         dry_run=dry_run,
     )

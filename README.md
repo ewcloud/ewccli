@@ -123,12 +123,56 @@ where ITEM is taken from `ewc hub list` command under Item column.
 
 ## Deploy a custom item
 
-If you want to test the deployment of a new item, not yet published to EWC Community Hub, you can use the `--path-to-catalog` flag available. Remember the repository needs to be public to be used by the EWCCLI at the moment.
+If you want to test the deployment of a new item, not yet published to EWC Community Hub, you can use the `--path-to-catalog` flag available. 
+
+For example you can create the following custom catalogue `custom_catalogue.yaml` with the following Ansible Playbook item (you can have more in case):
+
+NOTE: Please verify the latest metadata needed for an item directly from the official EWC Hub Catalogue page available [here](https://github.com/ewcloud/ewc-community-hub?tab=readme-ov-file#items-metadata).
+
+```yaml
+apiVersion: communityhub.europeanweather.cloud/v1alpha1
+kind: CommunityHubCatalog
+spec:
+  items:
+    my-test-item:
+      name: "my-test-item"
+      version: "0.0.1"
+      description: |
+        My first item in EWC Community Hub
+
+      ewccli:
+        pathToMainFile: path_to_your_main_ansible_playbook_file
+      home: https://github.com/your-repo
+      sources:
+        - https://github.com/your-repo.git OR /home/murdaca/custom-items/new-item
+      maintainers:
+        - name: your name or your org
+          email: youremail
+          url: https://github.com/your-repo/issues
+      icon: https://raw.githubusercontent.com/ewcloud/ewc-community-hub/refs/heads/main/logos/EWCLogo.png
+      annotations:
+        technology: "Ansible Playbook"
+        category: "Machine Learning & AI, GPU-accelerated"
+        supportLevel: "Community"
+        licenseType: "Apache License 2.0"
+        others: "Deployable,EWCCLI-compatible"
+      displayName: My First EWC Community hub item
+      summary: My test item
+      license: https://github.com/your-repo/blob/main/LICENSE
+      published: true
+```
+
+where `sources` can be (only the first element in the list is considered):
+
+    - Public repo URL (e.g. https://github.com/your-repo.git) if your repository is public already
+    - Absolute path to a directory with the item (e.g. /home/murdaca/custom-items/new-item). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
+
+Once ready you can try the following commands:
 
 ```bash
-ewc hub --path-to-catalog PATH-TO-CATALOGUE list|show|deploy
+ewc hub --path-to-catalog PATH-TO-CATALOG list|show|deploy
 ```
-where PATH-TO-CATALOGUE is by default the official published catalogue available [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
+where PATH-TO-CATALOG is by default the official published catalog available [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
 
 list|show|deploy commands work the same, but they will rely on a custom catalogue file.
 

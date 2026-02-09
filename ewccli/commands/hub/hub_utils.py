@@ -9,7 +9,10 @@
 """CLI EWC Hub: EWC Hub interaction utils methods."""
 
 from typing import Optional, List
+from pathlib import Path
+from urllib.parse import urlparse
 
+import rich_click as click
 from rich.console import Console
 
 from ewccli.enums import HubItemTechnologyAnnotation
@@ -68,3 +71,52 @@ def extract_annotations(annotations: Optional[dict] = None):
     ]
 
     return annotations_category, annotations_technology
+
+
+def classify_source(source: str) -> str:
+    """
+    Classify a source string as:
+      - 'github'     → GitHub HTTPS repo URL compatible with check_github_repo_accessible()
+      - 'directory'  → local directory
+      - 'unknown'    → neither
+  
+    Notes:
+    - GitHub URLs must be HTTPS and like:
+        https://github.com/user/repo
+        https://github.com/user/repo.git
+    """
+    path = Path(source)
+
+    # 1. GitHub URL (only the HTTPS format supported by your check method)
+    if is_github_https_url(source):
+        return "github"
+
+    # 2. Local directory
+    if path.exists() and path.is_dir() and any(path.iterdir()) and path.is_absolute():
+        return "directory"
+
+    # 3. Unknown
+    raise click.BadParameter(f"Source provided: {source} is not a valid GitHub repo URL or an absolute path to a local directory with content.")
+
+
+def is_github_https_url(source: str) -> bool:
+    """
+    Detect ONLY HTTPS GitHub URLs that your check_github_repo_accessible()
+    implementation can handle.
+    """
+    # Strip .git if present
+    if source.endswith(".git"):
+        source = source[:-4]
+
+    # Normalize slashes
+    source = source.rstrip("/")
+
+    parsed = urlparse(source)
+
+    if parsed.scheme != "https":
+        return False
+    if parsed.netloc != "github.com":
+        return False
+
+    parts = parsed.path.strip("/").split("/")
+    return len(parts) == 2  # must be exactly owner/repo
