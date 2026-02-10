@@ -11,11 +11,13 @@
 import os
 import ast
 import re
+import sys
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import rich_click as click
 from rich.console import Console
+from rich.panel import Panel
 from click import ClickException
 from click import get_current_context
 
@@ -563,7 +565,10 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         )
 
         if not outputs:
-            raise ClickException(os_message)
+            console.print(Panel(os_message, title="Error", style="red"))
+            # Exit with a non-zero status
+            sys.exit(1)
+
 
         internal_ip_machine = outputs["internal_ip_machine"]
         external_ip_machine = outputs.get("external_ip_machine")
