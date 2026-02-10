@@ -18,6 +18,7 @@ import rich_click as click
 from rich.console import Console
 from click import ClickException
 from click import get_current_context
+from pydantic import BaseModel, ValidationError, create_model
 
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.utils import download_items
@@ -190,73 +191,54 @@ def _validate_required_inputs(
     return missing_keys
 
 
-def _validate_item_input_types(  # noqa: CCR001, C901
-    parsed_inputs: Optional[dict], schema: Optional[list]
-) -> str:
+def _validate_item_input_types(parsed_inputs: Optional[dict], schema: Optional[list]) -> str:
+    """
+    Validate parsed_inputs against a schema using Pydantic.
+
+    schema example:
+    [
+        {"name": "foo", "type": "str"},
+        {"name": "bar", "type": "List[int]"},
+        {"name": "baz", "type": "Optional[str]"},
+    ]
+    """
+
     if not schema or not parsed_inputs:
         return ""
 
-    type_errors = []
-    expected_types = {entry.get("name"): entry.get("type") for entry in schema}
+    # Build a dict of pydantic fields: { field_name: (python_type, required) }
+    fields = {}
 
-    for key, value in parsed_inputs.items():
-        expected = expected_types.get(key)
+    for entry in schema:
+        name = entry["name"]
+        type_expr = entry["type"]
 
-        if not expected:
-            continue  # skip unknown keys
+        try:
+            # Translate the type string ("List[str]") into an actual Python type
+            py_type = eval(type_expr, vars(__import__("typing")))
+        except Exception:
+            # Fallback: if unknown type is given, treat as Any
+            py_type = Any
 
-        if expected == "str":
-            if not isinstance(value, str):
-                type_errors.append(f"'{key}' must be a string.")
+        fields[name] = (py_type, ...)  # ... = required field
 
-        elif expected == "int":
-            if not isinstance(value, int):
-                type_errors.append(f"'{key}' must be an integer.")
+    # Create a dynamic Pydantic model
+    DynamicInputs = create_model("DynamicInputs", **fields)
 
-        elif expected == "bool":
-            if not isinstance(value, bool):
-                type_errors.append(f"'{key}' must be a boolean (true/false).")
+    try:
+        DynamicInputs(**parsed_inputs)
+        return ""
 
-        elif expected == "dict":
-            if not isinstance(value, dict):
-                type_errors.append(f"'{key}' must be a dictionary.")
+    except ValidationError as e:
+        # Format pydantic's errors into a simpler multiline string
+        error_lines = []
 
-        elif expected == "List[str]":
-            if not isinstance(value, list) or not all(
-                isinstance(i, str) for i in value
-            ):
-                type_errors.append(
-                    f"'{key}' must be a list of strings."
-                    " To pass a list (e.g. List[str]), enclose the value in quotes and brackets:\n"
-                    "--item-inputs \"key=['value1','value2']\""
-                )
+        for err in e.errors():
+            loc = ".".join(str(x) for x in err["loc"])
+            msg = err["msg"]
+            error_lines.append(f"{loc}: {msg}")
 
-        elif expected == "List[int]":
-            if not isinstance(value, list) or not all(
-                isinstance(i, int) for i in value
-            ):
-                type_errors.append(
-                    f"'{key}' must be a list of integers."
-                    " To pass a list (e.g. List[int]), enclose the value in quotes and brackets:\n"
-                    "--item-inputs \"key=['value1','value2']\""
-                )
-
-        elif expected == "List[dict]":
-            if not isinstance(value, list) or not all(
-                isinstance(i, dict) for i in value
-            ):
-                type_errors.append(
-                    f"'{key}' must be a list of dictionaries."
-                    " To pass a list (e.g. List[int]), enclose the value in quotes and brackets:\n"
-                    "--item-inputs \"key=['value1','value2']\""
-                )
-        else:
-            type_errors.append(f"Unknown expected type for '{key}': {expected}")
-
-    if type_errors:
-        return "Invalid input types:\n  " + "\n  ".join(type_errors)
-
-    return ""
+        return "Invalid input types:\n  " + "\n  ".join(error_lines)
 
 
 @ewc_hub_command.command("deploy")

@@ -91,8 +91,7 @@ def test_none_schema_returns_empty_string(valid_inputs):
 
 def test_none_parsed_inputs_returns_empty_string(item_schema):
     """Test that passing None as parsed_inputs returns an empty string."""
-    result = _validate_item_input_types(None, item_schema)
-    assert result == ""
+    assert _validate_item_input_types(None, item_schema) == ""
 
 
 # Sample required inputs definition
@@ -105,8 +104,7 @@ REQUIRED_INPUTS = [
 
 def test_no_required_inputs():
     """If no required inputs are defined, should return an empty list."""
-    result = _validate_required_inputs(parsed_inputs={}, required_item_inputs=[])
-    assert result == []
+    assert _validate_required_inputs(parsed_inputs={}, required_item_inputs=[]) == []
 
 
 def test_all_required_inputs_provided():

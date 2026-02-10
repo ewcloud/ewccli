@@ -28,6 +28,7 @@ dependencies = [
     "ansible==11.8.0",
     "ansible-runner==2.4.0",
     "kubernetes==34.1.0"
+    "pydantic==2.12.5"
 ]
 
 classifiers = [
