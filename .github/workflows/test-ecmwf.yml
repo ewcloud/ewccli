@@ -1,0 +1,61 @@
+name: Deployment Test on ECMWF
+
+on:
+  workflow_dispatch:
+    inputs:
+      itemName:
+        description: Name of the Community Hub item to test
+        required: true
+        type: string
+
+      catalogRef:
+        description: Branch, tag, or commit SHA of the target Community Hub catalog version.
+        required: false
+        default: "main"
+        type: string
+
+      inputSpecJson:
+        description: JSON object with input values for the selected item. If set, overrides defaults defined in the catalog.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  EWC_CLI_LOGIN_REGION: '${{ secrets.ECMWF_EWC_CLI_LOGIN_REGION }}'
+  EWC_CLI_LOGIN_TENANT_NAME: '${{ secrets.ECMWF_EWC_CLI_LOGIN_TENANT_NAME }}'
+  OS_APPLICATION_CREDENTIAL_ID: '${{ secrets.ECMWF_OS_APPLICATION_CREDENTIAL_ID }}'
+  OS_APPLICATION_CREDENTIAL_SECRET: '${{ secrets.ECMWF_OS_APPLICATION_CREDENTIAL_SECRET }}'
+  ANSIBLE_SSH_PRIVATE_KEY: '${{ secrets.ECMWF_ANSIBLE_SSH_PRIVATE_KEY }}'
+  ANSIBLE_SSH_PUBLIC_KEY: '${{ secrets.ECMWF_ANSIBLE_SSH_PUBLIC_KEY }}'
+  ITEM_NAME: ${{ inputs.itemName }}
+  CATALOG_REF: ${{ inputs.catalogRef }}
+  INPUT_SPEC_JSON: '${{ inputs.inputSpecJson }}'  
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install EWCCLI and its dependencies
+        run: pip install .
+
+      - name: Test deployment
+        run: .github/scripts/test-deploy-item.sh
+
+      - name: Upload test deployment result
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts_${{ github.run_id }}
+          path: ./artifacts
