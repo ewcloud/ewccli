@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from ewccli.commands.hub.hub_utils import prepare_missing_inputs_error_message
 from ewccli.commands.hub.hub_command import _validate_item_input_types
 from ewccli.commands.hub.hub_command import _validate_required_inputs
+from ewccli.commands.hub.hub_command import _validate_item_inputs_format
 
 
 # ---------------------
@@ -65,12 +66,13 @@ def item_schema() -> list:
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("password_allowed_ip_ranges", [123]),  # should be List[str]
-        ("ipa_client_hostname", 456),  # should be str
-        ("ipa_domain", 789),  # should be str
-        ("ipa_admin_password", True),  # should be str
-        ("ipa_admin_username", []),  # should be str
-        ("ipa_server_hostname", {}),  # should be str
+        ("password_allowed_ip_ranges", [123]),         # List[str] expected
+        ("password_allowed_ip_ranges", [None]),        # None not allowed inside list
+        ("password_allowed_ip_ranges", "not-a-list"),  # wrong type
+        ("ipa_client_hostname", 456),                  # should be str
+        ("ipa_domain", True),                          # should be str
+        ("ipa_admin_password", {}),                    # should be str
+        ("ipa_admin_username", []),                    # should be str
     ],
 )
 def test_invalid_inputs_return_error(item_schema, valid_inputs, field, value):
@@ -82,6 +84,34 @@ def test_invalid_inputs_return_error(item_schema, valid_inputs, field, value):
     # The function should return a non-empty string containing the field name
     assert result != ""
     assert field in result
+    assert "expected type" in result
+
+# ------------------------------------------------------------
+# Valid list and Optional inputs
+# ------------------------------------------------------------
+
+def test_list_of_strings_valid(item_schema, valid_inputs):
+    modified = valid_inputs.copy()
+    modified["password_allowed_ip_ranges"] = ["a", "b"]
+
+    result = _validate_item_input_types(modified, item_schema)
+    assert result == ""
+
+
+def test_list_empty_valid(item_schema, valid_inputs):
+    modified = valid_inputs.copy()
+    modified["password_allowed_ip_ranges"] = []
+
+    result = _validate_item_input_types(modified, item_schema)
+    assert result == ""
+
+
+def test_optional_list_none_valid():
+    schema = [{"name": "foo", "type": "Optional[List[str]]"}]
+    parsed = {"foo": None}
+
+    result = _validate_item_input_types(parsed, schema)
+    assert result == ""
 
 
 def test_none_schema_returns_empty_string(valid_inputs):
@@ -93,6 +123,58 @@ def test_none_parsed_inputs_returns_empty_string(item_schema):
     """Test that passing None as parsed_inputs returns an empty string."""
     assert _validate_item_input_types(None, item_schema) == ""
 
+# ------------------------------------------------------------
+# Literal parsing cases
+# ------------------------------------------------------------
+
+def test_unquoted_list_string_is_invalid():
+    """
+    Your implementation treats a quoted list string (\"['a','b']\") as invalid for List[str].
+    """
+    parsed_inputs = {"list_key": "['a','b']"}
+    schema = [{"name": "list_key", "type": "List[str]"}]
+
+    result = _validate_item_input_types(parsed_inputs, schema)
+
+    assert result != ""
+    assert "list_key" in result
+    assert "expected type: List[str]" in result
+
+
+def test_real_unquoted_list_failure():
+    """
+    Simulate user passing:
+        --item-input list_key=[a,b]
+    which cannot be literal_eval'ed and becomes a raw string "[a,b]".
+    """
+
+    parsed_inputs = {"list_key": "[a,b]"}  # cannot literal_eval correctly
+    schema = [{"name": "list_key", "type": "List[str]"}]
+
+    result = _validate_item_input_types(parsed_inputs, schema)
+
+    assert result != ""
+    assert "expected type: List[str]" in result
+
+
+def test_parsing_of_literal_eval_strings_fails_for_list():
+    """
+    literal_eval is not used in your real implementation for list parsing.
+    The string \"['a','b']\" is invalid.
+    """
+    ctx_values = [("names", "['a','b']")]
+
+    parsed = dict(ctx_values)
+
+    schema = [{"name": "names", "type": "List[str]"}]
+    result = _validate_item_input_types(parsed, schema)
+
+    assert result != ""
+
+
+# ------------------------------------------------------------
+# Required inputs tests
+# ------------------------------------------------------------
 
 # Sample required inputs definition
 REQUIRED_INPUTS = [
@@ -145,9 +227,9 @@ def test_prepare_missing_inputs_error_message():
     assert message == expected
 
 
-# -----------------------------
+# -------------------------------------------------
 # NEW TESTS for empty values in the input variables
-# -----------------------------
+# -------------------------------------------------
 
 def test_empty_string_value_is_accepted(item_schema, valid_inputs):
     """Ensure key="" is treated as valid (empty string), not an error."""
@@ -158,25 +240,29 @@ def test_empty_string_value_is_accepted(item_schema, valid_inputs):
     assert result == ""
 
 
-def test_empty_string_value_does_not_count_as_missing_required_input():
-    """Empty value should count as provided, because key exists."""
-    parsed_inputs = {
+def test_empty_string_does_not_count_as_missing():
+    parsed = {
         "ipa_client_hostname": "",
         "ipa_domain": "",
         "ipa_admin_password": "",
     }
-    missing = _validate_required_inputs(parsed_inputs, REQUIRED_INPUTS)
+    missing = _validate_required_inputs(parsed, REQUIRED_INPUTS)
 
     assert missing == []
 
 
-def test_value_equals_empty_string_literal_eval(item_schema):
-    """Ensure value='' is parsed as empty string, not raising errors."""
-    parsed_inputs = {
-        "ipa_domain": "",
-        "ipa_client_hostname": "test",
-        "ipa_admin_password": "pw"
-    }
-    result = _validate_item_input_types(parsed_inputs, item_schema)
+def test_empty_string_after_literal_eval(item_schema, valid_inputs):
+    parsed = valid_inputs.copy()
+    parsed["ipa_domain"] = ""  # Only change domain to empty string
 
-    assert result == ""  # means no type errors occurred
+    result = _validate_item_input_types(parsed, item_schema)
+
+    assert result == ""
+# ------------------------------------------------------------
+# Missing message formatting
+# ------------------------------------------------------------
+
+def test_prepare_missing_inputs_error_message():
+    missing = ["ipa_domain", "ipa_admin_password"]
+    msg = prepare_missing_inputs_error_message(missing)
+    assert msg == "Missing 2 required item input(s):\n- ipa_domain\n- ipa_admin_password"
