@@ -7,6 +7,7 @@
 
 """Common methods for commands using infrastructure."""
 
+import re
 import sys
 import time
 from pathlib import Path
@@ -195,6 +196,68 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
         sys.exit(1)
 
 
+def normalize_os_image(value: str) -> tuple[str | None, bool]:
+    """
+    Normalize OS image names provided.
+
+    Supports:
+    - Rocky-X.Y-BUILD → Rocky-X
+    - Ubuntu-22.04-BUILD → Ubuntu-22.04
+    - GPU images:
+        * Ubuntu-22.04-NVIDIA_AI (exact match)
+        * Rocky-9.6-GPU-20251107150148 → Rocky-9.6-GPU
+
+    Returns:
+        (normalized_value, is_exact_match)
+
+        normalized_value: str | None
+        is_exact_match: bool
+    """
+    if not isinstance(value, str):
+        raise ValueError(f"OS image must be a string, got {type(value)}")
+
+    value_original = value.strip()
+    value = value_original  # keep stripped
+
+    # -------------------------------
+    # 1. EUMETSAT GPU SPECIAL CASE:
+    #    Ubuntu 22.04 NVIDIA_AI
+    # -------------------------------
+    if value == "Ubuntu 22.04 NVIDIA_AI":
+        return value, True   # exact input → exact match
+
+    # 2. ECMWF GPU CASE: Rocky-9.6-GPU-<timestamp> → Rocky-9-GPU
+    m = re.match(r"^Rocky-(\d+)(?:\.\d+)?-GPU(?:-.+)?$", value)
+    if m:
+        major = m.group(1)
+        normalized = f"Rocky-{major}.6-GPU"
+        return normalized, (normalized == value_original)
+
+    # ----------------------------------------
+    # 3. Rocky standard normalization
+    # Rocky-9.6-20251107141503 → Rocky-9
+    # ----------------------------------------
+    m = re.match(r"^(Rocky)-(\d+)(?:\.\d+)?(?:-.+)?$", value, re.IGNORECASE)
+    if m:
+        major = m.group(2)
+        normalized = f"Rocky-{major}"
+        return normalized, (normalized == value_original)
+
+    # ----------------------------------------
+    # 4. Ubuntu standard normalization
+    # Ubuntu-24.04-20251107 → Ubuntu-24.04
+    # ----------------------------------------
+    m = re.match(r"^(Ubuntu)-(\d+\.\d+)(?:-.+)?$", value, re.IGNORECASE)
+    if m:
+        prefix = m.group(1).capitalize()
+        version = m.group(2)
+        normalized = f"{prefix}-{version}"
+        return normalized, (normalized == value_original)
+
+    # Not an image
+    return None, False
+
+
 def resolve_image_and_flavor(
     federee: str,
     flavour_name: Optional[str] = None,
@@ -221,6 +284,7 @@ def resolve_image_and_flavor(
     try:
         if is_gpu:
             _LOGGER.info("The selected item requires a GPU flavor...")
+            # Remove this dependency
             image_name = ewc_hub_config.DEFAULT_IMAGES_GPU_MAP.get(federee)
 
             if not flavour_name:
@@ -242,20 +306,6 @@ def resolve_image_and_flavor(
             if not flavour_name:
                 flavour_name = ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee)
 
-        # Collect all valid images for this federee
-        ewc_images: list = list(ewc_hub_config.EWC_CLI_IMAGES.values()) + [
-            ewc_hub_config.DEFAULT_IMAGES_GPU_MAP.get(federee)
-        ]
-
-        if image_name not in ewc_images:
-            message = (
-                "❌ Unsupported image selected.\n"
-                "🖥️ EWC currently supports the following operating system images:\n"
-                f"👉 [bold green]{', '.join(ewc_images)}[/bold green]\n"
-                "➡️ Please choose one of the supported OS images."
-            )
-            return 1, message, result
-
         if not image_name or not flavour_name:
             return (
                 1,
@@ -263,20 +313,38 @@ def resolve_image_and_flavor(
                 result,
             )
 
-        username = (
-            ewc_hub_config.EWC_CLI_GPU_IMAGES_USER.get(federee)
-            if is_gpu
-            else ewc_hub_config.EWC_CLI_IMAGES_USER.get(image_name)
-        )
+        # Normalize the image name
+        normalized_image_name, is_exact_match = normalize_os_image(image_name)
 
+        if not normalized_image_name:
+            error_message = (
+                f"❌ Unsupported OS image for the EWC CLI: '{image_name}'\n\n"
+                f"🖥️ EWC Supported CPU images (short names): [bold green]{', '.join(ewc_hub_config.EWC_CLI_CPU_IMAGES)}[/bold green]\n"
+                "➡️ Please choose one of the supported OS images in short names or full name for similar OS.\n"
+                "Examples:\n"
+                "  CPU: Rocky-9, Rocky-9.6-20251107141503 (also accepted), Ubuntu-22.04\n"
+            )
+
+            return 1, f"Unexpected error: {error_message}", result
+    
+        # TODO: Username should get the information from the default map and only ubuntu|Ubuntu etc should be allowed
+        print(normalized_image_name)
+        username = (
+            ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
+        )
+        print(username)
         if not username:
             return 1, f"username {username} is missing or empty", result
 
         result = {
             "image_name": image_name,
+            "normalized_image_name": normalized_image_name,
+            "is_normalized_image_name_exact_match": is_exact_match,
             "flavour_name": flavour_name,
             "username": username,
         }
+        print(rr)
+        print(result)
         return 0, "Success", result
 
     except Exception as e:
@@ -476,11 +544,30 @@ def deploy_server(
         ssh_private_key_path=Path(ssh_private_key_path),
     )
 
+    ##################################################################################
+    # Flavour and Image
+    ##################################################################################
+    sc, resolve_message, resolved_info = resolve_image_and_flavor(
+        federee=federee, flavour_name=flavour_name, image_name=image_name, is_gpu=is_gpu
+    )
+    if sc != 0 or not resolved_info:
+        return 1, resolve_message, outputs
+
+    resolved_image_name: str = resolved_info["image_name"]
+    normalized_image_name: str = resolved_info["normalized_image_name"]
+    is_normalized_image_name_exact_match: bool = resolved_info["is_normalized_image_name_exact_match"]
+    resolved_flavour_name: str = resolved_info["flavour_name"]
+    username: str = resolved_info["username"]
+
     try:
         is_valid, message = openstack_backend.check_server_inputs(
             conn=openstack_api,
-            image_name=image_name,
-            flavour_name=flavour_name,
+            federee=federee,
+            is_gpu=is_gpu,
+            image_name=resolved_image_name,
+            normalized_image_name=normalized_image_name,
+            is_normalized_image_name_exact_match=is_normalized_image_name_exact_match,
+            flavour_name=resolved_flavour_name,
             networks=networks,
             security_groups=security_groups,
         )
@@ -542,19 +629,6 @@ def deploy_server(
                 show_server_inputs_difference_table(
                     server_name=server_name, diffs=diffs
                 )
-
-    ##################################################################################
-    # Flavour and Image
-    ##################################################################################
-    sc, resolve_message, resolved_info = resolve_image_and_flavor(
-        federee=federee, flavour_name=flavour_name, image_name=image_name, is_gpu=is_gpu
-    )
-    if sc != 0 or not resolved_info:
-        return 1, resolve_message, outputs
-
-    resolved_image_name: str = resolved_info["image_name"]
-    resolved_flavour_name: str = resolved_info["flavour_name"]
-    username: str = resolved_info["username"]
 
     ##################################################################################
     # Network (private) and security groups

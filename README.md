@@ -20,7 +20,7 @@ all third-party components included in the environment.
 Contact [EUMETSAT](http://www.eumetsat.int) for details on the usage and distribution terms.
 
 ## Authors
-* [**Francesco Murdaca**](mailto:francesco.murdaca@eumetsat.int) - *Initial work* - [EUMETSAT](http://www.eumetsat.int)
+* [**Francesco Murdaca**](mailto:francesco.murdaca@eumetsat.int) - *Initial work and maintainer* - [EUMETSAT](http://www.eumetsat.int)
 
 ## Prerequisites
 
@@ -102,6 +102,17 @@ IMPORTANT:
 
 All your profiles are saved under `~/.ewccli/profiles`
 
+You can manually add profiles in the same file and the ewccli can use them already.
+
+Info required for a profile:
+```
+[my-profile]
+federee = EUMETSAT or ECMWF
+tenant_name = eumetsat-ewc-communityhub
+application_credential_id = 
+application_credential_secret = 
+```
+
 ## List items
 
 The following command shows the current available items. Official items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
@@ -125,7 +136,7 @@ where ITEM is taken from `ewc hub list` command under Item column.
 
 If you want to test the deployment of a new item, not yet published to EWC Community Hub, you can use the `--path-to-catalog` flag available. 
 
-For example you can create the following custom catalogue `custom_catalogue.yaml` with the following Ansible Playbook item (you can have more in case):
+For example you can create the following custom catalogue `custom_catalog.yaml` with the following Ansible Playbook item (you can have more in case):
 
 NOTE: Please verify the latest metadata needed for an item directly from the official EWC Hub Catalogue page available [here](https://github.com/ewcloud/ewc-community-hub?tab=readme-ov-file#items-metadata).
 
@@ -141,7 +152,17 @@ spec:
         My first item in EWC Community Hub
 
       ewccli:
+        pathToRequirementsFile: path_to_your_requirements_file
         pathToMainFile: path_to_your_main_ansible_playbook_file
+        publicIP: true
+        inputs:
+          - name: myoptionalinput
+            description: "myoptionalinput"
+            type: str
+            default: Add default key if you want this input to be optional. If this key is not set, the ewccli will expect this value to be provided by the user (mandatory input)
+          - name: mymandatoryinput
+            description: "mymandatoryinput: cli will complain if this is not provided as --item-inputs"
+            type: str
       home: https://github.com/your-repo
       sources:
         - https://github.com/your-repo.git OR /home/murdaca/custom-items/new-item
@@ -162,10 +183,15 @@ spec:
       published: true
 ```
 
-where `sources` can be (only the first element in the list is considered):
+where 
 
+- `sources` can be (only the first element in the list is considered):
     - Public repo URL (e.g. https://github.com/your-repo.git) if your repository is public already
     - Absolute path to a directory with the item (e.g. /home/murdaca/custom-items/new-item). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
+- `pathToMainFile` is the relattive path to your directory or repository
+- `pathToRequirementsFile` is the relattive path to your directory or repository
+- `publicIP` is a flag used to enable deployment of 
+- `ewccli.inputs` is the list of inputs you want the user to be able to provide, they can be mandatory or optional, respecively with default key not set or set.
 
 Once ready you can try the following commands:
 

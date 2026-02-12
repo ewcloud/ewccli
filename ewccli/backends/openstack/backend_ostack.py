@@ -388,25 +388,58 @@ class OpenstackBackend:
                 new_server,
             )
 
+
+    def find_latest_image(
+        self,
+        conn: openstack.connection.Connection,
+        prefix: str
+    ):
+        """
+        Returns the most recently created image whose name starts with `prefix`.
+        """
+
+        # Get all images matching the prefix (case-insensitive)
+        matches = [
+            img for img in conn.compute.images()
+            if img.name and img.name.lower().startswith(prefix.lower())
+        ]
+
+        if not matches:
+            return None
+
+        # Sort by creation time (descending)
+        matches.sort(key=lambda img: img.created_at, reverse=True)
+
+        return matches[0]
+
+
     def check_server_inputs(
         self,
         conn: openstack.connection.Connection,
+        federee: str,
         image_name: Optional[str] = None,
+        is_gpu: bool = False,
+        normalized_image_name: Optional[str] = None,
+        is_normalized_image_name_exact_match: bool = False,
         flavour_name: Optional[str] = None,
         networks: Optional[tuple] = None,
         security_groups: Optional[tuple] = None,
     ) -> Tuple[bool, str]:
         """Check inputs before creating the server."""
-        if image_name:
+        # Retrieve the latest image from the normalized image name
+        latest_image = self.find_latest_image(conn, normalized_image_name)
+
+        if not is_normalized_image_name_exact_match:
+            if latest_image != image_name:
+                _LOGGER.info(
+                f"You are not using latest image for {image_name}."
+                f"\nPlease consider using {normalized_image_name} or {latest_image.name} as image name."
+            )
+            
             image = conn.compute.find_image(image_name)
 
-            if not image:
-                valid_images = ", ".join(ewc_hub_config.EWC_CLI_IMAGES.values())
-                message = (
-                    f"❌ Unknown image '{image_name}'. "
-                    f"Available options are: {valid_images}"
-                )
-                return False, message
+        else:
+            image = conn.compute.find_image(latest_image.name)
 
         if flavour_name:
             flavour = conn.compute.find_flavor(flavour_name)
