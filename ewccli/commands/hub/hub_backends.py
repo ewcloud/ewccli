@@ -29,18 +29,6 @@ _LOGGER = get_logger(__name__)
 ansible_backend = AnsibleBackend()
 
 HUB_ENV_VARIABLES_MAP = {
-    "password_allowed_ip_ranges": {
-        Federee.ECMWF.value: ["192.168.1.0/24"],
-        Federee.EUMETSAT.value: ["10.0.0.0/24"],
-    },
-    "fail2ban_whitelisted_ip_ranges": {
-        Federee.ECMWF.value: ["192.168.1.0/24"],
-        Federee.EUMETSAT.value: ["10.0.0.0/24"],
-    },
-    "whitelisted_ip_ranges": {
-        Federee.ECMWF.value: ["192.168.1.0/24"],
-        Federee.EUMETSAT.value: ["10.0.0.0/24"],
-    },
     "os_network_name": {Federee.ECMWF.value: None, Federee.EUMETSAT.value: "private"},
     "os_subnet_name": {
         Federee.ECMWF.value: None,

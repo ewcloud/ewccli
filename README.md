@@ -231,7 +231,6 @@ The following dependencies are only required for building/editing/testing the so
 | sphinx-click | 6.0.0  | MIT License (MIT) | https://github.com/click-contrib/sphinx-click |
 | sphinx-rtd-theme | 3.0.2  | MIT License (MIT) | https://sphinx-rtd-theme.readthedocs.io/en/stable |
 | pydeps | 3.0.1  | BSD-2-Clause License | https://github.com/thebjorn/pydeps  |
-| pydantic | 2.11.7  | MIT License (MIT) | https://github.com/pydantic/pydantic  |
 
 ## Changelog
 All notable changes (i.e. fixes, features and breaking changes) are documented

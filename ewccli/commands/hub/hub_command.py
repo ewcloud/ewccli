@@ -9,15 +9,19 @@
 """CLI EWC Hub: EWC Hub interaction."""
 
 import os
-import ast
-import re
+import sys
+import yaml
+import typing
+
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import rich_click as click
 from rich.console import Console
+from rich.panel import Panel
 from click import ClickException
 from click import get_current_context
+from pydantic import ValidationError, create_model
 
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.utils import download_items
@@ -90,37 +94,32 @@ def ewc_hub_command(ctx, path_to_catalog):
     ctx.obj['cli_profile'] = None
 
 
-def _extract_item_inputs_class(ctx, item):  # noqa CCR001
-    if item not in [i for i, v in ctx.obj['items'].items()]:
-        list_items_table(hub_items=ctx.obj['items'])
-        raise ClickException(
-            f"{item} is not available in the EWC Hub. Please check the list above."
-        )
-
-    item_info = ctx.obj['items'][item]
-
-    is_item_deployable = verify_item_is_deployable(item_info)
-    if not is_item_deployable:
-        raise ClickException("❌ Item is not deployable. Exiting.")
-
-    item_info_ewccli = item_info.get(HubItemCLIKeys.ROOT.value, {})
-    all_item_inputs = item_info_ewccli.get(HubItemCLIKeys.INPUTS.value, [])
+def categorize_item_inputs(
+    ctx,
+    item_info: dict,
+    item_info_inputs: list
+):  # noqa CCR001
+    """Categorize item inputs into default and mandatory."""
     default_inputs = []
     required_inputs = []
 
-    if not all_item_inputs:
-        return item_info, required_inputs, default_inputs
-
     # if no inputs exist for the item, no inputs are requested from the user
-    # and the parameter remains not required
-    for item_input in all_item_inputs:
-        if (
-            item_input.get("default")
-            or item_input.get("default") == False  # noqa E712
-            or item_input.get("name", "") in HUB_ENV_VARIABLES_MAP
-        ):
+    if not item_info_inputs:
+        return required_inputs, default_inputs
+
+    for item_input in item_info_inputs:
+        # If there is a default, the item is part of the default inputs -> not required by the user
+        if "default" in item_input:
+            # default value exists
+            default_inputs.append(item_input)
+
+        # If the item input has no default, it should be mandatory, but if the variable is known by the ewccli,
+        # because it's related to the infrastructure or it's very specific to EWC, then the default will be applied by the EWCCLI
+        # TODO: Change once we have the new variable specific to ewccli default parameters (e.g. tenancy_name, network_name)
+        elif item_input.get("name", "") in HUB_ENV_VARIABLES_MAP:
             default_inputs.append(item_input)
         else:
+            # In other case, the input is mandatory and it needs to be provided by the user.
             required_inputs.append(item_input)
 
     ctx = get_current_context()  # <-- Get Click Context
@@ -129,44 +128,10 @@ def _extract_item_inputs_class(ctx, item):  # noqa CCR001
     ctx.command.params[3].required = True
     ctx.command.params[3].nargs = len(required_inputs)
 
-    return item_info, required_inputs, default_inputs
+    return required_inputs, default_inputs
 
 
-def _validate_item_inputs_format(ctx, param, values):
-    if not values:
-        return {}
-
-    result = {}
-    key_value_pattern = re.compile(
-        r"^[^=]+=.*$"
-    )  # Only <key>=<value> format allowed and Allow empty value
-
-    for item_input in values:
-        item_input = item_input.strip()
-        
-        if not key_value_pattern.match(item_input):
-            raise click.BadParameter(
-                f"Invalid format '{item_input}'. Expected format: <key>=<value>"
-            )
-
-        key, val = item_input.split("=", 1)
-        key = key.strip()
-        val = val.strip()
-
-        # Fix: Always try to parse the value using literal_eval
-        try:
-            parsed_val = ast.literal_eval(val)
-        except (ValueError, SyntaxError):
-            parsed_val = (
-                val  # fallback to string if it's not parseable (like a bare string)
-            )
-
-        result[key] = parsed_val
-
-    return result
-
-
-def _validate_required_inputs(
+def check_missing_required_inputs(
     parsed_inputs: Optional[Dict[str, str]], required_item_inputs: List[dict]
 ) -> Optional[List[Any]]:
     """
@@ -190,73 +155,133 @@ def _validate_required_inputs(
     return missing_keys
 
 
-def _validate_item_input_types(  # noqa: CCR001, C901
-    parsed_inputs: Optional[dict], schema: Optional[list]
+def validate_item_input_types(
+    parsed_inputs: Optional[dict], item_info_inputs: Optional[list]
 ) -> str:
-    if not schema or not parsed_inputs:
+    """
+    Validate parsed_inputs against a schema using Pydantic.
+
+    schema example:
+    [
+        {"name": "foo", "type": "str"},
+        {"name": "bar", "type": "List[int]"},
+        {"name": "baz", "type": "Optional[str]"},
+        {"name": "qux", "type": "Union[str, int]"},
+    ]
+
+    Returns:
+        "" if all inputs are valid, otherwise a string describing invalid inputs.
+    """
+    if not item_info_inputs or not parsed_inputs:
         return ""
 
-    type_errors = []
-    expected_types = {entry.get("name"): entry.get("type") for entry in schema}
+    # # Prepare safe globals with all typing names
+    safe_globals = {k: getattr(typing, k) for k in dir(typing) if not k.startswith("_")}
+    safe_globals.update({"Any": Any})  # Add Any from builtins
 
-    for key, value in parsed_inputs.items():
-        expected = expected_types.get(key)
+    # Build a dict of pydantic fields: { field_name: (python_type, required) }
+    fields = {}
+    expected_types_map = {}  # Keep original type strings for error messages
 
-        if not expected:
-            continue  # skip unknown keys
+    for entry in item_info_inputs:
+        name = entry["name"]
+        type_expr = entry["type"]
+        expected_types_map[name] = type_expr  # Save for later display
 
-        if expected == "str":
-            if not isinstance(value, str):
-                type_errors.append(f"'{key}' must be a string.")
+        try:
+            py_type = eval(type_expr, safe_globals)
+        except Exception:
+            py_type = Any
 
-        elif expected == "int":
-            if not isinstance(value, int):
-                type_errors.append(f"'{key}' must be an integer.")
+        fields[name] = (py_type, ...)  # ... = required field
 
-        elif expected == "bool":
-            if not isinstance(value, bool):
-                type_errors.append(f"'{key}' must be a boolean (true/false).")
+    # Create a dynamic Pydantic model
+    DynamicInputs = create_model("DynamicInputs", **fields)
 
-        elif expected == "dict":
-            if not isinstance(value, dict):
-                type_errors.append(f"'{key}' must be a dictionary.")
+    try:
+        DynamicInputs(**parsed_inputs)
+        return ""
 
-        elif expected == "List[str]":
-            if not isinstance(value, list) or not all(
-                isinstance(i, str) for i in value
-            ):
-                type_errors.append(
-                    f"'{key}' must be a list of strings."
-                    " To pass a list (e.g. List[str]), enclose the value in quotes and brackets:\n"
-                    "--item-inputs \"key=['value1','value2']\""
-                )
+    except ValidationError as e:
+        # Build detailed error messages including expected type
+        error_lines = []
+        for err in e.errors():
+            loc = ".".join(str(x) for x in err["loc"])
+            msg = err["msg"]
+            expected_type = expected_types_map.get(err["loc"][0], "Unknown")
+            error_lines.append(f"{loc}: {msg} (expected type: {expected_type})")
 
-        elif expected == "List[int]":
-            if not isinstance(value, list) or not all(
-                isinstance(i, int) for i in value
-            ):
-                type_errors.append(
-                    f"'{key}' must be a list of integers."
-                    " To pass a list (e.g. List[int]), enclose the value in quotes and brackets:\n"
-                    "--item-inputs \"key=['value1','value2']\""
-                )
+        return "Invalid input types:\n  " + "\n  ".join(error_lines)
 
-        elif expected == "List[dict]":
-            if not isinstance(value, list) or not all(
-                isinstance(i, dict) for i in value
-            ):
-                type_errors.append(
-                    f"'{key}' must be a list of dictionaries."
-                    " To pass a list (e.g. List[int]), enclose the value in quotes and brackets:\n"
-                    "--item-inputs \"key=['value1','value2']\""
-                )
-        else:
-            type_errors.append(f"Unknown expected type for '{key}': {expected}")
 
-    if type_errors:
-        return "Invalid input types:\n  " + "\n  ".join(type_errors)
+class KeyValueType(click.ParamType):
+    """Class for key=value pairs."""
 
-    return ""
+    name = "key=value"
+
+    def convert(self, value, param, ctx):
+        """Conver key value pairs inputs to Python literals."""
+        if "=" not in value:
+            self.fail(f"'{value}' is not in key=value format", param, ctx)
+
+        key, raw_value = value.split("=", 1)
+        key = key.strip()
+        raw_value = raw_value.strip()
+        _LOGGER.debug(f"Input name: {key}")
+        _LOGGER.debug("Raw value datatype (taken from CLI)")
+        _LOGGER.debug(type(raw_value))
+        try:
+            # Parse value using YAML syntax
+            parsed_value = yaml.safe_load(raw_value)
+        except Exception:
+            parsed_value = raw_value  # fallback to string
+        _LOGGER.debug("Parsed value datatype (using yaml.safe_load in Python)")
+        _LOGGER.debug(type(parsed_value))
+        return key, parsed_value
+
+
+_ITEM_INPUT_MESSAGE = (
+    "Provide item input as key=value. "
+    "May be passed multiple times.\n\n"
+    "Examples:\n"
+    "  --item-inputs key1=value1\n"
+    "  --item-inputs retries=3\n"
+    "  --item-inputs names=\"['a', 'b']\"\n\n"
+    "Note:\n"
+    "  When passing lists or dictionaries, the syntax used to parse inputs is same as yaml.\n"
+)
+
+def _validate_item_inputs_format(ctx, param, values):
+    if not values:
+        return {}
+
+    parsed = {}
+
+    for key, val in values:
+        parsed[key] = val
+
+    return parsed
+
+
+def _validate_item(ctx, param, value):
+    """Validate that the provided item exists in the Hub and is deployable."""
+    hub_items = ctx.obj.get("items", {})
+
+    # Check If item does not exist at all
+    if value not in hub_items:
+        list_items_table(hub_items=hub_items)
+        raise ClickException(
+            f"'{value}' is not available in the EWC Hub. Please select an item from the list above."
+        )
+
+    item_info = hub_items[value]
+
+    # If item exists check if it is *not deployable*
+    is_item_deployable = verify_item_is_deployable(item_info)
+    if not is_item_deployable:
+        raise ClickException(f"❌ Item {value} is not deployable. Exiting.")
+
+    return value
 
 
 @ewc_hub_command.command("deploy")
@@ -277,14 +302,9 @@ def _validate_item_input_types(  # noqa: CCR001, C901
     "--item-inputs",
     "-iu",
     envvar="EWC_CLI_ITEM_INPUTS",
-    type=str,
+    type=KeyValueType(),
     multiple=True,
-    help=(
-        "Input key=value pairs to configure item inputs. "
-        "Supports comma-separated pairs in one argument or multiple uses of --item-inputs.\n\n"
-        "Examples:\n"
-        "--item-inputs key1=value1 --item-inputs key2=value2\n\n"
-    ),
+    help=f"{_ITEM_INPUT_MESSAGE}",
     callback=_validate_item_inputs_format,
 )
 @click.option(
@@ -311,6 +331,7 @@ def _validate_item_input_types(  # noqa: CCR001, C901
 @click.argument(
     "item",
     type=str,
+    callback=_validate_item,
 )
 @click.pass_context
 def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
@@ -365,39 +386,34 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     item = os.getenv("EWC_CLI_HUB_ITEM") or item
     console.print(f"You selected {item} item from the EWC Community Hub.")
 
-    item_info, required_item_inputs, default_item_inputs = _extract_item_inputs_class(
-        ctx, item
+    item_info = ctx.obj['items'][item]
+
+    # Retrieve item inputs of the selected item from the catalogue
+    item_info_ewccli = item_info.get(HubItemCLIKeys.ROOT.value, {})
+    item_info_inputs = item_info_ewccli.get(HubItemCLIKeys.INPUTS.value, [])
+
+    # Categorize items inputs from the item info in the catalog (Required and Default)
+    required_item_inputs, default_item_inputs = categorize_item_inputs(
+        ctx, item_info=item_info, item_info_inputs=item_info_inputs
     )
 
+    # If no item inputs provided by the user, make default as empty dictionary
     if item_inputs is None:
         item_inputs = {}
 
-    # Validate inputs
-    item_info_ewccli = item_info.get(HubItemCLIKeys.ROOT.value, {})
-    all_item_inputs = item_info_ewccli.get(HubItemCLIKeys.INPUTS.value, [])
-    validation_message = _validate_item_input_types(
-        parsed_inputs=item_inputs,
-        schema=all_item_inputs,
-    )
+    ###################################
+    # Check missing required parameters
+    ###################################
 
-    if validation_message:
-        raise click.UsageError(validation_message)
-
-    # Check for missing mandatory parameters
-    missing_keys = _validate_required_inputs(
+    missing_keys = check_missing_required_inputs(
         parsed_inputs=item_inputs, required_item_inputs=required_item_inputs
     )
 
     if missing_keys:
         message = prepare_missing_inputs_error_message(missing_keys)
         raise click.UsageError(
-            f"{message}\n"
-            "Provide key=value pairs for item inputs. "
-            "Use this option multiple times for multiple inputs.\n\n"
-            "For example:\n"
-            "--item-inputs key1=value1 --item-inputs key2=value2\n\n"
-            "To pass a list (e.g. List[str]), enclose the value in quotes and brackets:\n"
-            "--item-inputs \"key=['value1','value2']\""
+            f"{message}\n\n"
+            f"{_ITEM_INPUT_MESSAGE}"
         )
 
     #####################################################################################
@@ -526,6 +542,52 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                 f"Could not connect to Openstack due to the following error: {op_error}"
             )
 
+        ##########################################
+        # Validate inputs
+        ###########################################
+        # R = required
+        # D = default
+        # catalog -> D (yaml inputs)
+        # user -> R or D (overwrite) (bash inputs)
+        ###########################################
+
+        # Prepare default parameters
+        for d_item in default_item_inputs:
+            default_item_input_name = d_item.get("name")
+
+            # If default value is not provided by the user.
+            if default_item_input_name not in item_inputs:
+                # TODO: Improve this logic with new parameter in the catalog
+                # Take the default from the EWC values if they exist
+                if default_item_input_name in HUB_ENV_VARIABLES_MAP:
+                    item_inputs[default_item_input_name] = (
+                        get_hub_item_env_variable_value(
+                            hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
+                            federee=federee,
+                            tenancy_name=tenancy_name,
+                            variable_name=default_item_input_name,
+                            openstack_api=openstack_api,
+                        )
+                    )
+                else:
+                    # Take the default from the catalog
+                    item_inputs[default_item_input_name] = d_item.get("default")
+
+        # Validate all input parameters (R + D)
+        # (R) Validate required inputs
+        # (D) Validate default inputs provided by user (overwritten) or from default section of the catalog
+        validation_message = validate_item_input_types(
+            parsed_inputs=item_inputs,
+            item_info_inputs=item_info_inputs,
+        )
+
+        if validation_message:
+            raise click.UsageError(validation_message)
+
+        #####################################################################################
+        # Deploy Server
+        #####################################################################################
+
         security_groups_inputs = ()
 
         if security_groups:
@@ -563,7 +625,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         )
 
         if not outputs:
-            raise ClickException(os_message)
+            console.print(Panel(os_message, title="Error", style="red"))
+            # Exit with a non-zero status
+            sys.exit(1)
 
         internal_ip_machine = outputs["internal_ip_machine"]
         external_ip_machine = outputs.get("external_ip_machine")
@@ -604,25 +668,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         username = outputs.get("username")
         # server_info = outputs.get("server_info")
         # external_network = outputs.get("external_network")
-
-        # Assign correct default values to default item_inputs
-        for d_item in default_item_inputs:
-            default_item_input_name = d_item.get("name")
-
-            if default_item_input_name not in item_inputs:
-                # Assign EWC values to variables automatically. Even if the item has a mandatory input.
-                if default_item_input_name in HUB_ENV_VARIABLES_MAP:
-                    item_inputs[default_item_input_name] = (
-                        get_hub_item_env_variable_value(
-                            hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
-                            federee=federee,
-                            tenancy_name=tenancy_name,
-                            variable_name=default_item_input_name,
-                            openstack_api=openstack_api,
-                        )
-                    )
-                else:
-                    item_inputs[default_item_input_name] = d_item.get("default")
 
         # Install requirements for ansible playbook
         requirements_file_relative_path = item_info_ewccli.get(
