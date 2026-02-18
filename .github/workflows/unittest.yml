@@ -1,4 +1,4 @@
-name: Source Code Lint
+name: Linting and Unittesting
 
 on:
   push:
@@ -25,3 +25,24 @@ jobs:
         
       - name: Run pre-commit
         run: pre-commit run --all-files
+
+  unittest:
+    name: Unittest
+    runs-on: ubuntu-latest
+    needs: lint
+    if: ${{ always() }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        run: pip install -e .[test]
+        
+      - name: Run pytest
+        run: pytest
