@@ -295,7 +295,28 @@ pip install --user -e .[test]
 
 4. Push code to your fork and open a pull request.
 
-## Unittesting
+## Code Styling
+Execute all linting tests by running:
+
+```bash
+pre-commit run --all-files
+```
+This will provide you with hints about:
+* Basic format of the files (i.e. spacing, line breaking, etc.) using `black`
+* [PEP](https://peps.python.org/) standars infringement flagged by `flake8`
+* Static typing and type hinting recommendations given by `mypy`
+
+### Resolving Style Issues
+
+To enforce basic formating issues , run:
+```bash
+black ./
+```
+
+Currently, there is no automated way of addressing errors raised by `flake8` and `mypy`.
+To resolve those, check the logs from the `pre-commit` execution, understand the type of error and adjust the code accordingly.
+
+## Code Unittesting
 
 Execute all tests by running:
 
@@ -303,7 +324,7 @@ Execute all tests by running:
 pytest
 ```
 
-### Coverage
+### Coverage Reporting
 
 Generate unittest coverage reports in standard formats by executing:
 
@@ -311,7 +332,7 @@ Generate unittest coverage reports in standard formats by executing:
 coverage run --module pytest --no-header --verbose -ra --junitxml=coverage.xml --html=coverage.html
 ```
 
-## Documentation
+## Documentating
 Generate documentation from source code docstrings:
 
 ```bash
