@@ -44,24 +44,22 @@ EXTRA_VARS=""
 if [[ "${INPUT_SPEC_JSON}" != "{}" ]]; then
   # Any inputs, defined at runtime, are converted to match EWCCLI's fingerprint:
   #  ```txt
-  #  --item-input x=1 --item-input y=2 ...
+  #  --item-inputs x=1 --item-inputs y=["a","b"] --item-inputs z=null ...
   #  ```
-  #  NOTE: Special complexity is added due to single quotation required around values of type array and object.
-  #        We rely on the unicode of single quote characters to avoid jq compilation errors (i.e. "\u0027" -> "'")
-  EXTRA_VARS=$(printf "%s" "${INPUT_SPEC_JSON}" | jq -r '
-    to_entries[]
-    | "--item-input " + .key + "=" +
-      if .value == null then 
-        "None"
-      elif (.value | type) == "array" or (.value | type) == "object" then
-        "\u0027" + (.value | tojson) + "\u0027"
-      else
-        .value | tostring
-      end
-      + " \\"
+  mapfile -t EXTRA_VARS < <(
+    printf "%s" "${INPUT_SPEC_JSON}" | jq -r '
+      to_entries[]
+      | "--item-inputs"
+      , (.key + "=" +
+          if .value == null then 
+            (null | tojson)
+          elif (.value | type) == "array" or (.value | type) == "object" then
+            (.value | tojson)
+          else
+            (.value | tostring)
+          end)
     '
   )
-  EXTRA_VARS="${EXTRA_VARS:0:-1}" # Remove the last trailing slash of the concatenated vars ("\")
 fi
 
 # --- Step 4 ---
@@ -105,7 +103,7 @@ echo "Deploy (including VM provisioning)"
 if [ -z "${EXTRA_VARS}" ]; then 
   EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --external-ip)
 else
-  EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --external-ip "${EXTRA_VARS}")
+  EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --external-ip "${EXTRA_VARS[@]}")
 fi
 
 EWCCLI_DEPLOY_EXIT_CODE=0
