@@ -152,7 +152,7 @@ spec:
       icon: https://raw.githubusercontent.com/ewcloud/ewc-community-hub/refs/heads/main/logos/EWCLogo.png
       annotations:
         technology: "Ansible Playbook"
-        category: "Machine Learning & AI, GPU-accelerated"
+        category: "Test Item"
         supportLevel: "Community"
         licenseType: "Apache License 2.0"
         others: "Deployable,EWCCLI-compatible"
@@ -214,6 +214,7 @@ The following dependencies are not included in the package but they are required
 | ansible | 11.10.0 | GNU General Public License v3 or later (GPLv3+) (GPL-3.0-or-later) | https://www.redhat.com/en/ansible-collaborative |
 | ansible-runner | 2.4.1 | Apache Software License (Apache Software License, Version 2.0) | https://ansible.readthedocs.io/projects/runner/en/latest |
 | kubernetes | 33.1.0 | Apache Software License (Apache License Version 2.0) | https://github.com/kubernetes-client/python |
+| pydantic | 2.12.5 | MIT License | https://github.com/pydantic/pydantic |
 
 
 ### Build/Edit/Test Dependencies
@@ -230,7 +231,6 @@ The following dependencies are only required for building/editing/testing the so
 | sphinx-click | 6.0.0  | MIT License (MIT) | https://github.com/click-contrib/sphinx-click |
 | sphinx-rtd-theme | 3.0.2  | MIT License (MIT) | https://sphinx-rtd-theme.readthedocs.io/en/stable |
 | pydeps | 3.0.1  | BSD-2-Clause License | https://github.com/thebjorn/pydeps  |
-| pydantic | 2.11.7  | MIT License (MIT) | https://github.com/pydantic/pydantic  |
 
 ## Changelog
 All notable changes (i.e. fixes, features and breaking changes) are documented
