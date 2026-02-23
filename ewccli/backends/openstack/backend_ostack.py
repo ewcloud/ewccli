@@ -388,25 +388,101 @@ class OpenstackBackend:
                 new_server,
             )
 
+
+    def find_latest_image(
+        self,
+        conn: openstack.connection.Connection,
+        prefix: str
+    ):
+        """
+        Select the latest image for CPU or GPU families with special rules.
+        """
+        import re
+        TIMESTAMP_RE = r"\d{14}"
+
+        def is_cpu_image(prefix: str, name: str):
+            # Rocky-8 → Rocky-8.<minor>-<timestamp>
+            if prefix.lower().startswith("rocky-8"):
+                return re.match(rf"^Rocky-8\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+
+            # Rocky-9 → Rocky-9.<minor>-<timestamp>
+            if prefix.lower().startswith("rocky-9"):
+                return re.match(rf"^Rocky-9\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+
+            # Ubuntu-22.04 → Ubuntu-22.04-<timestamp>
+            if prefix.lower() == "ubuntu-22.04":
+                return re.match(rf"^Ubuntu-22\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+
+            # Ubuntu-24.04 → Ubuntu-24.04-<timestamp>
+            if prefix.lower() == "ubuntu-24.04":
+                return re.match(rf"^Ubuntu-24\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+
+        def is_gpu_rocky(name: str):
+            # Prefix: Rocky-9-GPU
+            # Match: Rocky-9.<minor>-GPU-<timestamp>
+            return bool(re.match(
+                rf"^Rocky-9\.\d+-GPU-{TIMESTAMP_RE}$",
+                name,
+                re.IGNORECASE,
+            ))
+
+        def is_gpu_ubuntu(name: str):
+            # Prefix: Ubuntu 22.04 NVIDIA_AI
+            # Match: Ubuntu 22.04 NVIDIA_AI
+            if name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]:
+                return True
+
+        def image_matches(name: str, prefix: str):
+            if not name:
+                return False
+
+            # Rocky-9-GPU
+            if prefix == "Rocky-9.6-GPU":
+                return is_gpu_rocky(name)
+
+            # Ubuntu 22.04 NVIDIA_AI (EUMETSAT)
+            if prefix == "Ubuntu 22.04 NVIDIA_AI":
+                return is_gpu_ubuntu(name)
+
+            # CPU images
+            if prefix in ewc_hub_config.EWC_CLI_CPU_IMAGES:
+                return is_cpu_image(prefix=prefix, name=name)
+
+            return False
+
+        # Filter matching images
+        matches = [img for img in conn.compute.images() if image_matches(name=img.name, prefix=prefix)]
+
+        if not matches:
+            return None
+
+        # Sort by created_at
+        matches.sort(key=lambda img: img.created_at, reverse=True)
+        return matches[0]
+
+
     def check_server_inputs(
         self,
         conn: openstack.connection.Connection,
+        federee: str,
         image_name: Optional[str] = None,
         flavour_name: Optional[str] = None,
         networks: Optional[tuple] = None,
         security_groups: Optional[tuple] = None,
     ) -> Tuple[bool, str]:
-        """Check inputs before creating the server."""
-        if image_name:
-            image = conn.compute.find_image(image_name)
+        """Check server inputs before creating the server."""
+        image = conn.compute.find_image(image_name)
 
-            if not image:
-                valid_images = ", ".join(ewc_hub_config.EWC_CLI_IMAGES.values())
-                message = (
-                    f"❌ Unknown image '{image_name}'. "
-                    f"Available options are: {valid_images}"
-                )
-                return False, message
+        if not image:
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]]
+            error_message = (
+                f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
+                f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
+                "➡️ Please choose one of the supported OS images in short names or full name for similar OS.\n"
+                "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]"
+            )
+
+            return False, error_message
 
         if flavour_name:
             flavour = conn.compute.find_flavor(flavour_name)
@@ -451,6 +527,7 @@ class OpenstackBackend:
                 return False, f"Unknown network ({network_selected})"
 
         return True, ""
+
 
     def list_servers(
         self,

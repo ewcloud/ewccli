@@ -8,13 +8,108 @@
 
 """Tests for EWC commands common methods."""
 
+from unittest.mock import MagicMock
+import pytest
+from pydantic import BaseModel
+from datetime import datetime
+
 from ewccli.tests.ewccli_base_test import SecurityGroup
 from ewccli.tests.ewccli_base_test import ServerInfo
 
 from ewccli.enums import Federee
+from ewccli.configuration import EWCCLIConfiguration as ewc_hub_config
+from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.commands.commons_infra import get_deployed_server_info
+from ewccli.commands.commons_infra import resolve_image_and_flavor
+from ewccli.commands.commons_infra import normalize_os_image
 
+# --- Fake OpenstackBackend for testing -------------------------------------
+class FakeImage:
+    def __init__(self, name: str):
+        self.name = name
+        self.created_at = datetime.utcnow()
 
+# --- Mock backend completely -------------------------------------------------
+class FakeOpenstackBackend:
+    def __init__(self, *args, **kwargs):
+        pass  # skip real OpenStack connection
+
+    def find_latest_image(self, conn, image_prefix: str):
+        # Return a fake "latest image" object
+        class FakeImage:
+            def __init__(self, name):
+                self.name = name
+
+        # simulate the "latest image" based on prefix
+        if image_prefix.startswith("Ubuntu-22.04"):
+            return FakeImage("Ubuntu-22.04-20250202020202")
+        elif image_prefix.startswith("Ubuntu-24.04"):
+            return FakeImage("Ubuntu-24.04-20250202020202")
+        elif image_prefix.startswith("Rocky-9"):
+            return FakeImage("Rocky-9-20250202020202")
+        elif image_prefix.startswith("Rocky-8"):
+            return FakeImage("Rocky-8-20250202020202")
+        elif image_prefix.startswith("Rocky-9-GPU"):
+            return FakeImage("Rocky-9.6-GPU-20250202020202")
+        elif image_prefix.startswith("Ubuntu 22.04 NVIDIA_AI"):
+            return FakeImage("Ubuntu 22.04 NVIDIA_AI")
+        else:
+            return None
+
+# --- Fixtures ---------------------------------------------------------------
+@pytest.fixture
+def backend():
+    return FakeOpenstackBackend()
+
+@pytest.fixture
+def conn():
+    return MagicMock()  # mock OpenStack connection
+
+# --- Tests -----------------------------------------------------------------
+def test_resolve_cpu_defaults(conn, backend):
+    code, msg, result = resolve_image_and_flavor(conn, backend, federee="EUMETSAT", is_gpu=False)
+    assert code == 0
+    assert result["normalized_image_name"] in ewc_hub_config.EWC_CLI_CPU_IMAGES
+    assert result["flavour_name"] == ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]
+
+def test_resolve_eumetsat_gpu_defaults(conn, backend):
+    code, msg, result = resolve_image_and_flavor(conn, backend, federee="EUMETSAT", is_gpu=True)
+    assert code == 0
+    assert result["normalized_image_name"] == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]
+    assert result["flavour_name"] == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]
+
+def test_resolve_ecmwf_gpu_defaults(conn, backend):
+    code, msg, result = resolve_image_and_flavor(conn, backend, federee="ECMWF", is_gpu=True)
+    assert code == 0
+    assert result["normalized_image_name"] == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]
+    assert result["flavour_name"] == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]
+
+def test_resolve_specific_image(conn, backend):
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="EUMETSAT",
+        image_name="Ubuntu-22.04-20250202020202",
+        flavour_name="vm.a6000.1"
+    )
+    assert code == 0
+
+    # normalized image name is short version
+    normalized, _ = normalize_os_image("Ubuntu-22.04-20250202020202", "EUMETSAT")
+    assert result["normalized_image_name"] == normalized
+    assert result["flavour_name"] == "vm.a6000.1"
+
+def test_resolve_unknown_image(conn, backend):
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="EUMETSAT",
+        image_name="Unknown-OS-1234"
+    )
+    assert code == 1
+    assert "Unsupported OS image" in msg
+
+#################################################################################################
 # --- Tests ---
 def test_get_deployed_server_info_eumetsat_private_and_manila():
     """Test EUMETSAT federee with private and manila-network addresses."""

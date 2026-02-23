@@ -39,26 +39,24 @@ class EWCCLIConfiguration:
     EWC_CLI_DEFAULT_PATH_INPUTS = EWC_CLI_BASE_PATH / "inputs"
     EWC_CLI_DEFAULT_PATH_OUTPUTS = EWC_CLI_BASE_PATH / "outputs"
 
-    # TODO: it needs to match EWC virtual image column
-    # from https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available
-    EWC_CLI_IMAGES = {
-        "ubuntu-22.04": "Ubuntu-22.04-20251007115800",
-        "ubuntu-24.04": "Ubuntu-24.04-20251007115108",
-        "rocky-8": "Rocky-8.10-20251107135124",
-        "rocky-9": "Rocky-9.6-20251107141503",
-    }
+    # CPU images
+    EWC_CLI_CPU_IMAGES = [
+        "Rocky-8",
+        "Rocky-9",
+        "Ubuntu-22.04",
+        "Ubuntu-24.04",
+    ]
 
-    EWC_CLI_DEFAULT_IMAGE = EWC_CLI_IMAGES["rocky-9"]
+    EWC_CLI_DEFAULT_IMAGE = "Rocky-9"
 
     EWC_CLI_IMAGES_USER = {
-        "ubuntu-22.04": "ubuntu",
-        "ubuntu-24.04": "ubuntu",
-        "rocky-8": "cloud-user",
-        "rocky-9": "cloud-user",
-        EWC_CLI_IMAGES["ubuntu-22.04"]: "ubuntu",
-        EWC_CLI_IMAGES["ubuntu-24.04"]: "ubuntu",
-        EWC_CLI_IMAGES["rocky-8"]: "cloud-user",
-        EWC_CLI_IMAGES["rocky-9"]: "cloud-user",
+        "Ubuntu-22.04": "ubuntu",
+        "Ubuntu-24.04": "ubuntu",
+        "Rocky-8": "cloud-user",
+        "Rocky-9": "cloud-user",
+        "Rocky-9-GPU": "cloud-user",
+        "Ubuntu 22.04 NVIDIA_AI": "eouser",
+
     }
 
     EWC_CLI_AUTH_URL_MAP = {
@@ -71,17 +69,20 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: "https://keystone.cloudferro.com:5000",
     }
 
-    # GPU
-    # TODO: it needs to match EWC virtual image column
-    # from https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available
-    DEFAULT_IMAGES_GPU_MAP = {
-        Federee.ECMWF.value: "Rocky-9.6-GPU-20251107150148",
-        Federee.EUMETSAT.value: "Ubuntu 22.04 NVIDIA_AI",
+    # GPU images short custom names
+    EWC_CLI_GPU_IMAGES_SITE_MAP = {
+        Federee.ECMWF.value: "Rocky-9-GPU",
+        Federee.EUMETSAT.value: "Ubuntu-22.04-GPU",
     }
 
-    EWC_CLI_GPU_IMAGES_USER = {
-        Federee.ECMWF.value: "cloud-user",
-        Federee.EUMETSAT.value: "eouser",
+    # GPU images
+    EWC_CLI_GPU_IMAGES = [v for _,v in EWC_CLI_GPU_IMAGES_SITE_MAP.items()]
+
+
+    # Openstack value of the GPU images
+    EWC_CLI_OS_GPU_IMAGES_SITE_MAP = {
+        Federee.ECMWF.value: "Rocky-9.6-GPU",  # This can be find after normalization
+        Federee.EUMETSAT.value: "Ubuntu 22.04 NVIDIA_AI", # ( usually fixed)
     }
 
     # Flavors
@@ -115,6 +116,8 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: "vm.a6000.2",
     }
 
+    # Network
+    
     DEFAULT_NETWORK_MAP = {
         Federee.ECMWF.value: "private",
         Federee.EUMETSAT.value: "private",

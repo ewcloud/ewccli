@@ -181,7 +181,19 @@ def create_cmd(
     if not outputs:
         raise ClickException(os_message)
 
-    username = outputs.get("username")
+    normalized_image_name = outputs.get("normalized_image_name")
+    username = (
+        ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
+    )
+
+    # If missing the mapping in the configuration is missing, so configuration file needs to be checked.
+    if not username:
+        return (
+            1,
+            f"Username {username} is missing or empty",
+            outputs,
+        )
+
     # server_info = outputs.get("server_info")
     # external_network = outputs.get("external_network")
     internal_ip_machine = outputs["internal_ip_machine"]
