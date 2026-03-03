@@ -46,7 +46,7 @@ pip install ewccli
 
 ### Installing from source
 
-1. Fork this repository and move into it
+1. Clone this repository and move into it
 ```bash
 git clone THIS_REPO && cd ewccli
 ```
@@ -73,6 +73,38 @@ pip install --upgrade pip
 
 ```bash
 pip install -e .
+```
+
+### Installing in a container
+> If [Docker](https://www.docker.com/) is your preferred containerization tool, you can replace `podman` with `docker` in the commands below.
+
+You may also run in an completely isolated environment using containerization. After cloning the repository and `cd` into it.
+
+1. Clone this repository and move into it
+```bash
+git clone THIS_REPO && cd ewccli
+```
+
+2. Create a wheel package (`./dist/ewccli-<version>-py3-none-any.whl`)
+
+```bash
+pip install -q build
+```
+
+```bash
+python3 -m build
+```
+
+3. Build an image including the package previously created
+
+```bash
+podman build --no-cache -t ewccli -f ./Containerfile .
+```
+
+4. Start a container with an interactive shell
+
+```bash
+podman run -it --rm  --workdir /home/ewccli --entrypoint /bin/bash ewccli
 ```
 
 ## Getting started
@@ -261,44 +293,48 @@ pip install --user -e .[test]
 
 3. Modify the local code and test changes.
 
-4. When you are happy, push code to your fork and open a MR (Gitlab) or PR (Github)
+4. Push code to your fork and open a pull request.
 
-
-## Generate docs
-
-```bash
-sphinx-build -b html docs/source/ Documentation/
-```
-
-## Check coverage
+## Code Styling
+Execute all linting tests by running:
 
 ```bash
-coverage run -m pytest
+pre-commit run --all-files
+```
+This will provide you with hints about:
+* Basic format of the files (i.e. spacing, line breaking, etc.) using `black`
+* [PEP](https://peps.python.org/) standars infringement flagged by `flake8`
+* Static typing and type hinting recommendations given by `mypy`
+
+### Resolving Style Issues
+
+To enforce basic formating issues , run:
+```bash
+black ./
 ```
 
-## Run tests
+Currently, there is no automated way of addressing errors raised by `flake8` and `mypy`.
+To resolve those, check the logs from the `pre-commit` execution, understand the type of error and adjust the code accordingly.
+
+## Code Unittesting
+
+Execute all tests by running:
 
 ```bash
 pytest
 ```
 
-## Test in a container
+### Coverage Reporting
 
-After cloning the repository and cd into it.
-
-1. Create the .dist/ repo
-```bash
-pip install -q build
-```
+Generate unittest coverage reports in standard formats by executing:
 
 ```bash
-python3 -m build
+coverage run --module pytest --no-header --verbose -ra --junitxml=coverage.xml --html=coverage.html
 ```
 
-
-2. Create a container if you need to test anything before.
+## Documentating
+Generate documentation from source code docstrings:
 
 ```bash
-podman build -t test-ewccli -f ./Containerfile .
+sphinx-build -b html docs/source/ Documentation/
 ```
-or same command with `docker` if you use it.
