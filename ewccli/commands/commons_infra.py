@@ -7,6 +7,7 @@
 
 """Common methods for commands using infrastructure."""
 
+import re
 import sys
 import time
 from pathlib import Path
@@ -195,7 +196,78 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
         sys.exit(1)
 
 
+def normalize_os_image(image_name: str, federee: str) -> tuple[str | None, bool]:
+    """
+    Normalize OS image names provided.
+
+    Supports:
+    - Rocky-X.Y-BUILD → Rocky-X
+    - Ubuntu-22.04-BUILD → Ubuntu-22.04
+    - GPU images:
+        * Ubuntu-22.04-NVIDIA_AI (exact match)
+        * Rocky-9.6-GPU-20251107150148 → Rocky-9.6-GPU
+
+    Returns:
+        (normalized_value, is_short_name)
+
+        normalized_value: str | None
+        is_short_name: bool
+    """
+    value_original = image_name.strip()
+    image_name = value_original  # keep stripped
+
+    total_cpu_images = ewc_hub_config.EWC_CLI_CPU_IMAGES
+
+    if image_name in total_cpu_images:
+        return image_name, True
+
+    if federee == "EUMETSAT":
+        # -------------------------------
+        # 1. EUMETSAT GPU SPECIAL CASE:
+        #    Ubuntu 22.04 NVIDIA_AI
+        # -------------------------------
+        if image_name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee]:
+            return image_name, False
+
+        if image_name == "Ubuntu-22.04-GPU":
+            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee], True
+
+    if federee == "ECMWF":
+        if image_name == "Rocky-9-GPU":
+            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee], True
+
+        # 2. ECMWF GPU CASE: Rocky-9.6-GPU-<timestamp> → Rocky-9-GPU
+        m = re.match(r"^Rocky-(\d+)(?:\.\d+)?-GPU(?:-.+)?$", image_name)
+        if m:
+            normalized = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee]
+            return normalized, (normalized == value_original)
+
+    # ----------------------------------------
+    # 3. Rocky standard normalization
+    # Rocky-9.6-20251107141503 → Rocky-9
+    # ----------------------------------------
+    m = re.match(r"^(Rocky)-(\d+)(?:\.\d+)?-\d{14}$", image_name, re.IGNORECASE)
+    if m:
+        major = m.group(2)
+        normalized = f"Rocky-{major}"
+        return normalized, (normalized == value_original)
+
+    # ----------------------------------------
+    # 4. Ubuntu standard normalization
+    # Ubuntu-24.04-20251107 → Ubuntu-24.04
+    # ----------------------------------------
+    m = re.match(r"^(Ubuntu-\d+\.\d+)-\d{14}$", image_name)
+    if m:
+        normalized = m.group(1)
+        return normalized, (normalized == value_original)
+
+    # Not an image
+    return None, False
+
+
 def resolve_image_and_flavor(
+    conn: connection.Connection,
+    openstack_backend: OpenstackBackend,
     federee: str,
     flavour_name: Optional[str] = None,
     image_name: Optional[str] = None,
@@ -205,6 +277,7 @@ def resolve_image_and_flavor(
     Resolve both the image and flavor for the given federee.
 
     Args:
+        conn: Connection to Openstck API
         federee (str): Target federee ewccli.enums.Federee.
         flavour_name (Optional[str]): Name of the desired flavor.
         image_name (Optional[str]): Name of the desired OS image.
@@ -214,18 +287,28 @@ def resolve_image_and_flavor(
         Tuple[int, str, Optional[Dict[str, str]]]:
             - status_code: 0 for success, 1 for error
             - message: success or error message
-            - result: dict containing 'image_name', 'flavour_name', 'username' on success, None on error
+            - result: dict containing 'image_name (long name)', 'normalized_image_name', 'flavour_name', on success, None on error
     """
     result: Dict[str, str] = {}
+    _LOGGER.debug("Resolve image name and flavour...")
 
     try:
-        if is_gpu:
-            _LOGGER.info("The selected item requires a GPU flavor...")
-            image_name = ewc_hub_config.DEFAULT_IMAGES_GPU_MAP.get(federee)
+        # Assign default values if nothing is provided by the user or the catalog.
 
+        # If the catalogue item uses this flag then enter here
+        if is_gpu:
+            # GPU case
+            _LOGGER.info("The selected item requires a GPU flavor...")
+
+            # Assign Default GPU short name
+            if not image_name:
+                image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee)
+
+            # Assign Default GPU flavour (federee dependennt)
             if not flavour_name:
                 flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee)
             else:
+                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
                 gpu_flavours = ewc_hub_config.GPU_FLAVOURS_MAP.get(federee, [])
 
                 if flavour_name not in gpu_flavours:
@@ -236,47 +319,69 @@ def resolve_image_and_flavor(
                     )
                     return 1, message, result
         else:
+            # CPU case
+
+            # Assign Default CPU short name
             if not image_name:
                 image_name = ewc_hub_config.EWC_CLI_DEFAULT_IMAGE
+                _LOGGER.info(f"Using default CPU image {image_name}...")
 
+            # Assign Default CPU flavour (federee dependennt)
+            # TODO: Change once we have the same flavours
             if not flavour_name:
                 flavour_name = ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee)
 
-        # Collect all valid images for this federee
-        ewc_images: list = list(ewc_hub_config.EWC_CLI_IMAGES.values()) + [
-            ewc_hub_config.DEFAULT_IMAGES_GPU_MAP.get(federee)
-        ]
+        # Normalize the image name
+        normalized_image_name, is_short_name = normalize_os_image(image_name=image_name, federee=federee)
 
-        if image_name not in ewc_images:
-            message = (
-                "❌ Unsupported image selected.\n"
-                "🖥️ EWC currently supports the following operating system images:\n"
-                f"👉 [bold green]{', '.join(ewc_images)}[/bold green]\n"
-                "➡️ Please choose one of the supported OS images."
+        # Now check the image provided and verify is supported.
+        if not normalized_image_name:
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]]
+            error_message = (
+                f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
+                f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
+                "➡️ Please choose one of the supported OS images in short names or full name for similar OS.\n"
+                "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]\n"
             )
-            return 1, message, result
 
-        if not image_name or not flavour_name:
+            return 1, f"Unexpected error: {error_message}", result
+        
+        # Retrieve the latest image
+        latest_image = openstack_backend.find_latest_image(conn, normalized_image_name)
+ 
+        # if users use long names, let's check if they are using the latest known image and give them a warning in case.
+        if image_name not in [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]] and not is_short_name and latest_image:
+            if latest_image.name != image_name:
+                _LOGGER.warning(
+                    f"You are not using latest image for {image_name}."
+                    f"\nPlease consider using {normalized_image_name} or {latest_image.name} as image name."
+                )
+        else:
+            # Make sure if user uses short name, we can verify if that image exists always, otherwise fail here.
+            if not latest_image:
+                return (
+                    1,
+                    f"Latest image for {normalized_image_name} could not be retrieved",
+                    result,
+                )
+
+        # Always provide the name that is in Openstack.
+        provided_image_name = image_name if not is_short_name else latest_image.name
+
+        # Extra check to avoid issues in case the configuration is missing.
+        if not provided_image_name or not flavour_name:
             return (
                 1,
-                f"One of image_name {image_name} or flavour_name {flavour_name} is missing or empty",
+                f"One of image_name {provided_image_name} or flavour_name {flavour_name} is missing or empty",
                 result,
             )
 
-        username = (
-            ewc_hub_config.EWC_CLI_GPU_IMAGES_USER.get(federee)
-            if is_gpu
-            else ewc_hub_config.EWC_CLI_IMAGES_USER.get(image_name)
-        )
-
-        if not username:
-            return 1, f"username {username} is missing or empty", result
-
         result = {
-            "image_name": image_name,
+            "image_name": provided_image_name,
+            "normalized_image_name": normalized_image_name,
             "flavour_name": flavour_name,
-            "username": username,
         }
+
         return 0, "Success", result
 
     except Exception as e:
@@ -476,11 +581,31 @@ def deploy_server(
         ssh_private_key_path=Path(ssh_private_key_path),
     )
 
+    ##################################################################################
+    # Flavour and Image
+    ##################################################################################
+    sc, resolve_message, resolved_info = resolve_image_and_flavor(
+        conn=openstack_api,
+        openstack_backend=openstack_backend,
+        federee=federee,
+        flavour_name=flavour_name,
+        image_name=image_name,
+        is_gpu=is_gpu
+    )
+    if sc != 0 or not resolved_info:
+        return 1, resolve_message, outputs
+
+    # This image name can be short name or long name
+    resolved_image_name: str = resolved_info["image_name"]
+    normalized_image_name: str = resolved_info["normalized_image_name"]
+    resolved_flavour_name: str = resolved_info["flavour_name"]
+
     try:
         is_valid, message = openstack_backend.check_server_inputs(
             conn=openstack_api,
-            image_name=image_name,
-            flavour_name=flavour_name,
+            federee=federee,
+            image_name=resolved_image_name,
+            flavour_name=resolved_flavour_name,
             networks=networks,
             security_groups=security_groups,
         )
@@ -532,7 +657,7 @@ def deploy_server(
             diffs = check_server_conflict_with_inputs(
                 server_info=existing_server_info,
                 server_info_image=server_info_image,
-                image_name=image_name,
+                image_name=resolved_image_name,
                 keypair_name=keypair_name,
                 flavour_name=flavour_name,
                 networks=networks,
@@ -542,19 +667,6 @@ def deploy_server(
                 show_server_inputs_difference_table(
                     server_name=server_name, diffs=diffs
                 )
-
-    ##################################################################################
-    # Flavour and Image
-    ##################################################################################
-    sc, resolve_message, resolved_info = resolve_image_and_flavor(
-        federee=federee, flavour_name=flavour_name, image_name=image_name, is_gpu=is_gpu
-    )
-    if sc != 0 or not resolved_info:
-        return 1, resolve_message, outputs
-
-    resolved_image_name: str = resolved_info["image_name"]
-    resolved_flavour_name: str = resolved_info["flavour_name"]
-    username: str = resolved_info["username"]
 
     ##################################################################################
     # Network (private) and security groups
@@ -626,13 +738,6 @@ def deploy_server(
         time.sleep(_EWC_CLI_SLEEP_TIME)
 
     _LOGGER.info("Preparing to deploy VM on Openstack...")
-
-    if not resolved_image_name or not resolved_flavour_name or not username:
-        return (
-            1,
-            f"One of image_name {resolved_image_name}, flavour_name {resolved_flavour_name}, or username {username} is missing or empty",
-            outputs,
-        )
 
     openstack_server_status, create_server_message, server_info = (
         openstack_backend.create_server(
@@ -723,7 +828,7 @@ def deploy_server(
         "internal_ip_machine": internal_ip_machine,
         "external_ip_machine": external_ip_machine,
         "server_info": server_info,
-        "username": username,
+        "normalized_image_name": normalized_image_name
     }
 
     return 0, "Server deployed successfully", outputs

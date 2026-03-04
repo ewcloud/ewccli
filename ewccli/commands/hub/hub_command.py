@@ -12,7 +12,6 @@ import os
 import sys
 import yaml
 import typing
-
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -631,6 +630,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
         internal_ip_machine = outputs["internal_ip_machine"]
         external_ip_machine = outputs.get("external_ip_machine")
+        normalized_image_name = outputs["normalized_image_name"]
 
         #### DNS CHECK
 
@@ -664,8 +664,18 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                 )
 
         #### ANSIBLE PLAYBOOK ITEM DEPLOYMENT
+        username = (
+            ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
+        )
 
-        username = outputs.get("username")
+        # If missing the mapping in the configuration is missing, so configuration file needs to be checked.
+        if not username:
+            return (
+                1,
+                f"Username {username} is missing or empty",
+                outputs,
+            )
+
         # server_info = outputs.get("server_info")
         # external_network = outputs.get("external_network")
 

@@ -12,141 +12,145 @@ from typing import Optional
 
 import pytest
 from pydantic import BaseModel
+from unittest.mock import MagicMock
+from datetime import datetime, timedelta
 
 from ewccli.tests.ewccli_base_test import ServerInfo
 from ewccli.tests.ewccli_base_test import Address
-from ewccli.configuration import config as ewc_hub_config
+from ewccli.configuration import EWCCLIConfiguration as ewc_hub_config
 from ewccli.enums import Federee
-from ewccli.commands.commons_infra import resolve_image_and_flavor
+from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.commands.commons_infra import resolve_machine_ip
+from ewccli.commands.commons_infra import normalize_os_image
+
+# ---------------------------------------------------------------------------
+# Fake image using Pydantic for strict validation
+# ---------------------------------------------------------------------------
+
+class FakeImage(BaseModel):
+    name: str
+    created_at: datetime
 
 
-# Optional: define a Pydantic model for validation in tests
-class DeployRequest(BaseModel):
-    """
-    Pydantic model for deployment request parameters.
-
-    Attributes:
-        federee (str): Target federee (e.g., "EUMETSAT", "ECMWF").
-        flavour_name (Optional[str]): Optional flavour name.
-        image_name (Optional[str]): Optional OS image name.
-        is_gpu (bool): Whether GPU-enabled flavour is required.
-    """
-
-    federee: str
-    flavour_name: str | None = None
-    image_name: str | None = None
-    is_gpu: bool = False
+@pytest.fixture
+def conn():
+    """Mock OpenStack connection with compute.images()."""
+    mock_conn = MagicMock()
+    mock_conn.compute.images = MagicMock()
+    return mock_conn
 
 
-@pytest.mark.parametrize(
-    "deploy_request,expected_status,expected_image,expected_flavour,expected_user",
-    [
-        # GPU image, default flavour
-        (
-            DeployRequest(federee=Federee.ECMWF.value, is_gpu=True),
-            0,
-            ewc_hub_config.DEFAULT_IMAGES_GPU_MAP[Federee.ECMWF.value],
-            ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP[Federee.ECMWF.value],
-            ewc_hub_config.EWC_CLI_GPU_IMAGES_USER[Federee.ECMWF.value],
-        ),
-        # GPU image with invalid flavour
-        (
-            DeployRequest(
-                federee=Federee.ECMWF.value, flavour_name="invalid-flavour", is_gpu=True
-            ),
-            1,
-            None,
-            None,
-            None,
-        ),
-        # CPU image, default flavour for EUMETSAT
-        (
-            DeployRequest(federee=Federee.EUMETSAT.value, is_gpu=False),
-            0,
-            ewc_hub_config.EWC_CLI_DEFAULT_IMAGE,  # "Rocky-9.5-20250604142417"
-            ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP[Federee.EUMETSAT.value],
-            ewc_hub_config.EWC_CLI_IMAGES_USER[ewc_hub_config.EWC_CLI_DEFAULT_IMAGE],
-        ),
-        # Custom CPU image (must use full image ID)
-        (
-            DeployRequest(
-                federee=Federee.EUMETSAT.value,
-                image_name=ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"],
-                is_gpu=False,
-            ),
-            0,
-            ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"],
-            ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP[Federee.EUMETSAT.value],
-            ewc_hub_config.EWC_CLI_IMAGES_USER[
-                ewc_hub_config.EWC_CLI_IMAGES["ubuntu-22.04"]
-            ],
-        ),
-        # Unsupported image
-        (
-            DeployRequest(
-                federee=Federee.EUMETSAT.value, image_name="nonexistent", is_gpu=False
-            ),
-            1,
-            None,
-            None,
-            None,
-        ),
-    ],
-)
-def test_resolve_image_and_flavor(
-    deploy_request,
-    expected_status,
-    expected_image,
-    expected_flavour,
-    expected_user,
-):
-    """
-    Test the `resolve_image_and_flavor` function with various scenarios.
+@pytest.fixture
+def finder():
+    """Use find_latest_image as unbound method, no backend instance needed."""
+    return OpenstackBackend.find_latest_image
 
-    Scenarios tested:
-        1. GPU image with default flavour
-        2. GPU image with invalid flavour
-        3. CPU image with default flavour
-        4. CPU image with custom image
-        5. Unsupported image
 
-    Args:
-        deploy_request (DeployRequest): Deployment request parameters.
-        expected_status (int): Expected status code (0 for success, 1 for error).
-        expected_image (str | None): Expected image name in result.
-        expected_flavour (str | None): Expected flavour name in result.
-        expected_user (str | None): Expected username in result.
+# ---------------------------------------------------------------------------
+# CPU: Rocky-8
+# ---------------------------------------------------------------------------
 
-    Assertions:
-        - Status code matches expected.
-        - On success, result dict contains expected image, flavour, and username.
-        - On failure, result is None and error message is non-empty.
-    """
-    status, message, result = resolve_image_and_flavor(
-        federee=deploy_request.federee,
-        flavour_name=deploy_request.flavour_name,
-        image_name=deploy_request.image_name,
-        is_gpu=deploy_request.is_gpu,
+def test_find_latest_rocky8_cpu(finder, conn, monkeypatch):
+    now = datetime.utcnow()
+    img_old = FakeImage(name="Rocky-8.9-20250101010101", created_at=now - timedelta(days=10))
+    img_new = FakeImage(name="Rocky-8.9-20250202020202", created_at=now)
+
+    conn.compute.images.return_value = [img_old, img_new]
+
+    # Correct target to patch!
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_CPU_IMAGES",
+        {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    assert status == expected_status
-    if expected_status == 0:
-        assert result != {}
-        if expected_image:
-            assert result["image_name"] == expected_image
-        if expected_flavour:
-            assert result["flavour_name"] == expected_flavour
-        if expected_user:
-            assert result["username"] == expected_user
-        assert message == "Success"
-    else:
-        assert result == {}
-        assert message != ""
+    result = finder(None, conn, "Rocky-8")
+    assert result == img_new
+
+
+# ---------------------------------------------------------------------------
+# CPU: Ubuntu 22.04
+# ---------------------------------------------------------------------------
+
+def test_find_latest_ubuntu_2204_cpu(finder, conn, monkeypatch):
+    now = datetime.utcnow()
+    img1 = FakeImage(name="Ubuntu-22.04-20250101010101", created_at=now - timedelta(days=5))
+    img2 = FakeImage(name="Ubuntu-22.04-20250303030303", created_at=now)
+
+    conn.compute.images.return_value = [img1, img2]
+
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_CPU_IMAGES",
+        {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
+    )
+
+    result = finder(None, conn, "Ubuntu-22.04")
+    assert result == img2
+
+
+# ---------------------------------------------------------------------------
+# GPU: Rocky
+# ---------------------------------------------------------------------------
+
+def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
+    now = datetime.utcnow()
+    img1 = FakeImage(name="Rocky-9.6-GPU-20250101010101", created_at=now - timedelta(days=3))
+    img2 = FakeImage(name="Rocky-9.6-GPU-20250303030303", created_at=now)
+
+    conn.compute.images.return_value = [img1, img2]
+
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_CPU_IMAGES",
+        {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
+    )
+
+    result = finder(None, conn, "Rocky-9.6-GPU")
+    assert result == img2
+
+
+# ---------------------------------------------------------------------------
+# GPU: Ubuntu
+# ---------------------------------------------------------------------------
+
+def test_find_latest_ubuntu_gpu(finder, conn, monkeypatch):
+    now = datetime.utcnow()
+    img1 = FakeImage(name="Ubuntu 22.04 NVIDIA_AI", created_at=now - timedelta(days=1))
+    img2 = FakeImage(name="Ubuntu 22.04 NVIDIA_AI", created_at=now)
+
+    conn.compute.images.return_value = [img1, img2]
+
+    # GPU mapping
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {"EUMETSAT": "Ubuntu 22.04 NVIDIA_AI"},
+    )
+
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_CPU_IMAGES",
+        {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
+    )
+
+    result = finder(None, conn, "Ubuntu 22.04 NVIDIA_AI")
+    assert result == img2
+
+
+# ---------------------------------------------------------------------------
+# No match
+# ---------------------------------------------------------------------------
+
+def test_no_matching_images(finder, conn, monkeypatch):
+    conn.compute.images.return_value = [
+        FakeImage(name="UnrelatedImage", created_at=datetime.utcnow())
+    ]
+
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_CPU_IMAGES",
+        {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
+    )
+
+    assert finder(None, conn, "Rocky-8") is None
 
 
 # Pydantic models
-
 
 class IPResult(BaseModel):
     """
@@ -274,3 +278,113 @@ def test_resolve_machine_ip(federee, server_info, expected_status, expected_resu
         assert ip_result == expected_result
     else:
         assert result is None
+
+
+# ======================================================================
+# Tests
+# ======================================================================
+
+@pytest.fixture(autouse=True)
+def clean_config(monkeypatch):
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_CPU_IMAGES",
+        set()
+    )
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {
+            "ECMWF": "Rocky-9.6-GPU",
+            "EUMETSAT": "Ubuntu-22.04-NVIDIA_AI",
+        }
+    )
+
+
+# ----------------------- CPU Tests -----------------------
+
+def test_exact_cpu_match(monkeypatch):
+    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Rocky-8", "Ubuntu-22.04"})
+
+    normalized, exact = normalize_os_image("Rocky-8", "ECMWF")
+    assert normalized == "Rocky-8"
+    assert exact is True
+
+
+def test_normalize_rocky_timestamp(monkeypatch):
+    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Rocky-9"})
+
+    normalized, exact = normalize_os_image("Rocky-9.6-20251107141503", "ECMWF")
+    assert normalized == "Rocky-9"
+    assert exact is False
+
+
+def test_normalize_ubuntu_timestamp(monkeypatch):
+    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Ubuntu-24.04"})
+
+    normalized, exact = normalize_os_image("Ubuntu-24.04-20251107141503", "EUMETSAT")
+    assert normalized == "Ubuntu-24.04"
+    assert exact is False
+
+
+# ----------------------- EUMETSAT GPU -----------------------
+
+def test_eumetsat_exact_gpu(monkeypatch):
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {"EUMETSAT": "Ubuntu-22.04-NVIDIA_AI"}
+    )
+
+    normalized, exact = normalize_os_image("Ubuntu-22.04-NVIDIA_AI", "EUMETSAT")
+    assert normalized == "Ubuntu-22.04-NVIDIA_AI"
+    assert exact is False
+
+
+def test_eumetsat_translate_generic_gpu(monkeypatch):
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {"EUMETSAT": "Ubuntu-22.04-NVIDIA_AI"}
+    )
+
+    normalized, exact = normalize_os_image("Ubuntu-22.04-GPU", "EUMETSAT")
+    assert normalized == "Ubuntu-22.04-NVIDIA_AI"
+    assert exact is True
+
+
+# ----------------------- ECMWF GPU -----------------------
+
+def test_ecmwf_exact_gpu(monkeypatch):
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {"ECMWF": "Rocky-9-GPU"}
+    )
+
+    normalized, exact = normalize_os_image("Rocky-9-GPU", "ECMWF")
+    assert normalized == "Rocky-9-GPU"
+    assert exact is True
+
+
+def test_ecmwf_timestamp_gpu(monkeypatch):
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {"ECMWF": "Rocky-9-GPU"}
+    )
+
+    normalized, exact = normalize_os_image("Rocky-9.6-GPU-20250101010101", "ECMWF")
+    assert normalized == "Rocky-9-GPU"
+    assert exact is False
+
+
+# ----------------------- Unknown -----------------------
+
+def test_unknown_image(monkeypatch):
+    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Rocky-8"})
+
+    normalized, exact = normalize_os_image("NotAnImage", "EUMETSAT")
+    assert normalized is None
+    assert exact is False
+
