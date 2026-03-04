@@ -236,7 +236,7 @@ def openstack_optional_options(func):
         envvar="EWC_CLI_OPENSTACK_IMAGE_NAME",
         show_default=True,
         type=str,
-        help="Select image name to be used. (or set env var EWC_CLI_OPENSTACK_IMAGE_NAME)",
+        help="Select image name to be used. (or set env var EWC_CLI_OPENSTACK_IMAGE_NAME)\nExamples: --image-name Ubuntu-22.04 or --image-name Rocky-9 or --image-name Rocky-9-GPU",
     )(func)
     func = click.option(
         "--flavour-name",
