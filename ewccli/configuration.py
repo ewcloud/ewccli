@@ -33,8 +33,9 @@ class EWCCLIConfiguration:
 
     # EWC_CLI_HUB_ITEMS_PATH = files("ewccli.data").joinpath("items.yaml")
     EWC_CLI_HUB_ITEMS_PATH = EWC_CLI_BASE_PATH / "items.yaml"
-    EWC_CLI_PRIVATE_SSH_KEY_PATH = home_dir / ".ssh/id_rsa"
-    EWC_CLI_PUBLIC_SSH_KEY_PATH = home_dir / ".ssh/id_rsa.pub"
+    EWC_CLI_HUB_SSH_REPO_PATH = home_dir / ".ssh"
+    EWC_CLI_PRIVATE_SSH_KEY_PATH = EWC_CLI_HUB_SSH_REPO_PATH / "id_rsa"
+    EWC_CLI_PUBLIC_SSH_KEY_PATH = EWC_CLI_HUB_SSH_REPO_PATH / "id_rsa.pub"
 
     EWC_CLI_DEFAULT_PATH_INPUTS = EWC_CLI_BASE_PATH / "inputs"
     EWC_CLI_DEFAULT_PATH_OUTPUTS = EWC_CLI_BASE_PATH / "outputs"

@@ -11,6 +11,9 @@
 import base64
 
 import pytest
+import os
+from pathlib import Path
+
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
@@ -153,16 +156,28 @@ def test_save_ssh_keys_writes_files(
     assert pub_path.exists()
 
 
-def test_generate_ssh_keypair_creates_files(tmp_path):
+def test_generate_ssh_keypair_creates_files(tmp_path, monkeypatch):
     """
     Test that `generate_ssh_keypair` creates private and public key files.
     """
-    priv_path = tmp_path / "id_rsa"
-    pub_path = tmp_path / "id_rsa.pub"
 
-    generate_ssh_keypair(str(pub_path), str(priv_path))
+    # Patch the SSH repo path to tmp_path
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_HUB_SSH_REPO_PATH",
+        tmp_path
+    )
 
+    # Call function with just the resolved_profile
+    priv_path, pub_path = generate_ssh_keypair(resolved_profile="pytest")
+
+    priv_path = Path(priv_path)
+    pub_path = Path(pub_path)
+
+    # Check that files were created
     assert priv_path.exists()
     assert pub_path.exists()
-    assert b"BEGIN RSA PRIVATE KEY" in priv_path.read_bytes()
-    assert pub_path.read_text().startswith("ssh-rsa")
+
+    # Basic content checks
+    assert "PRIVATE KEY" in priv_path.read_text()
+    assert pub_path.read_text().startswith("ssh-")

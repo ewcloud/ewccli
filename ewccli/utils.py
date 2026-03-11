@@ -57,6 +57,8 @@ def _resolve_profile(
 def save_default_login_profile(
     federee: str,
     tenant_name: str,
+    ssh_private_key_path_to_save: str,
+    ssh_public_key_path_to_save: str,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
     region: Optional[str] = None,
@@ -85,6 +87,8 @@ def save_default_login_profile(
     save_cli_profile(
         federee=federee,
         tenant_name=tenant_name,
+        ssh_private_key_path_to_save=ssh_private_key_path_to_save,
+        ssh_public_key_path_to_save=ssh_public_key_path_to_save,
         profile=resolved_profile,
         token=token,
         application_credential_id=application_credential_id,
@@ -96,6 +100,8 @@ def save_default_login_profile(
 def save_cli_profile(
     federee: str,
     tenant_name: str,
+    ssh_private_key_path_to_save: str,
+    ssh_public_key_path_to_save: str,
     profile: Optional[str] = None,
     token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
@@ -112,6 +118,10 @@ def save_cli_profile(
         Federee name.
     tenant_name : str
         Tenant name.
+    ssh_private_key_path_to_save: str
+        SSH private key path
+    ssh_public_key_path_to_save: str
+        SSH public key path
     profile : str, optional
         Explicit profile name. If None, auto-generated using federee-tenant.
     token : str, optional
@@ -146,6 +156,8 @@ def save_cli_profile(
     # Non-sensitive
     cfg[resolved_profile]["federee"] = federee
     cfg[resolved_profile]["tenant_name"] = tenant_name
+    cfg[resolved_profile]["ssh_public_key_path"] = ssh_public_key_path_to_save
+    cfg[resolved_profile]["ssh_private_key_path"] = ssh_private_key_path_to_save
 
     if region:
         cfg[resolved_profile]["region"] = region
@@ -184,6 +196,8 @@ def load_cli_profile(
         Federee name, used for auto-resolution if profile is None.
     tenant_name : str, optional
         Tenant name, used for auto-resolution if profile is None.
+    profiles_file_path : Path, default to ewc_hub_config.EWC_CLI_PROFILES_PATH
+        The path to the file with all profiles.
 
     Returns
     -------
@@ -229,7 +243,6 @@ def load_cli_profile(
     # Case 2: requested profile missing
     if profile and profile not in cfg:
         if profile != default_profile:
-            print("here")
             click.secho(
                 f"❌ Profile '{profile}' not found.",
                 fg="red",
@@ -299,10 +312,28 @@ def load_cli_profile(
             f"`{federee}` federee not supported. Check your profiles in ~/.ewccli/profiles. Please use one from the following: {allowed_federees}"
         )
 
+    # Check if SSH keys path exist
+    ssh_public_key_path = section.get("ssh_public_key_path")
+
+    if not ssh_public_key_path:
+        raise ClickException(
+            f"`ssh_public_key_path` key is missing from your profile {profile}, please rerun ewc login."
+        )
+        
+    ssh_private_key_path = section.get("ssh_private_key_path")
+
+    if not ssh_private_key_path:
+        raise ClickException(
+            f"`ssh_private_key_path` key is missing from your profile {profile}, please rerun ewc login."
+        )
+
+
     return {
         "profile": profile,
         "federee": federee,
         "tenant_name": section.get("tenant_name"),
+        "ssh_public_key_path": ssh_public_key_path,
+        "ssh_private_key_path": ssh_private_key_path,
         "region": section.get("region"),
         "token": section.get("token"),
         "application_credential_id": section.get("application_credential_id"),
@@ -495,6 +526,56 @@ def verify_private_key(private_key: str):
         sys.exit(1)
 
 
+def ssh_keys_match(ssh_private_key_path: str, ssh_public_key_path: str) -> bool:
+    """
+    Check whether an SSH private key corresponds to a given public key.
+
+    Supports PEM and OpenSSH private key formats and common SSH algorithms
+    such as RSA, ECDSA, and Ed25519.
+
+    Args:
+        ssh_private_key_path: Path to the SSH private key file.
+        ssh_public_key_path: Path to the SSH public key file (.pub).
+
+    Returns:
+        True if the public key matches the private key.
+
+    Raises:
+        ValueError: If the private key format or algorithm is unsupported.
+    """
+    # Ensure files exist
+    for p in [ssh_private_key_path, ssh_public_key_path]:
+        if not Path(p).expanduser().is_file():
+            raise ValueError(f"SSH key file does not exist: {p}")
+
+    with open(ssh_private_key_path, "rb") as f:
+        private_data = f.read()
+
+    private_key = None
+
+    try:
+        private_key = serialization.load_pem_private_key(private_data, password=None)
+    except ValueError:
+        try:
+            private_key = serialization.load_ssh_private_key(private_data, password=None)
+        except ValueError:
+            raise ValueError("Unsupported or invalid private key format")
+
+    derived_public = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH
+    )
+
+    # Read provided public key and strip comment
+    with open(ssh_public_key_path, "r") as f:
+        parts = f.read().strip().split()
+        if len(parts) < 2:
+            raise ValueError(f"Invalid public key format: {ssh_public_key_path}")
+        provided_public = " ".join(parts[:2]).encode()
+
+    return derived_public == provided_public
+
+
 def save_ssh_key(ssh_key, path_key):
     """Store SSH key to the provided path."""
     # Define the file path to save the key
@@ -537,8 +618,7 @@ def save_ssh_keys(
 
 
 def generate_ssh_keypair(
-    ssh_public_key_path: str,
-    ssh_private_key_path: str,
+    resolved_profile: str
 ):
     """Generate RSA SSH Key Pair and save to ~/.ssh"""
     private_key = rsa.generate_private_key(
@@ -558,9 +638,9 @@ def generate_ssh_keypair(
     )
 
     # Ensure parent directories exist
-    Path(ssh_private_key_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(ssh_public_key_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH).parent.mkdir(parents=True, exist_ok=True)
 
+    ssh_private_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa"
     # Save private key
     with open(ssh_private_key_path, "wb") as f:
         f.write(private_key_pem)
@@ -568,6 +648,7 @@ def generate_ssh_keypair(
     # Restrict permissions to owner only
     os.chmod(ssh_private_key_path, 0o600)
 
+    ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa.pub"
     # Save public key
     with open(ssh_public_key_path, "wb") as f:
         f.write(public_key_ssh)
@@ -578,3 +659,5 @@ def generate_ssh_keypair(
     _LOGGER.info(
         f"SSH key pair generated at {ssh_private_key_path} and {ssh_public_key_path}"
     )
+
+    return ssh_private_key_path, ssh_public_key_path
