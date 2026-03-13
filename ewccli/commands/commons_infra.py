@@ -17,10 +17,11 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
+import click
 from click import ClickException
 from openstack import connection
 
-from ewccli.utils import save_ssh_keys
+from ewccli.utils import save_ssh_keys, ssh_keys_match
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.enums import Federee
 from ewccli.configuration import config as ewc_hub_config
@@ -30,6 +31,42 @@ _LOGGER = get_logger(__name__)
 _EWC_CLI_SLEEP_TIME = 30  # seconds
 
 console = Console()
+
+
+def check_user_ssh_keys(
+    ssh_public_key_path: Optional[str] = None,
+    ssh_private_key_path: Optional[str] = None,
+):
+    """Check if SSH keys are compatible or missing."""
+    # If still missing, raise exception
+    missing_ssh_keys = []
+    if not ssh_public_key_path:
+        missing_ssh_keys.append("--ssh-public-key-path")
+
+    if not ssh_private_key_path:
+        missing_ssh_keys.append("--ssh-private-key-path")
+
+    if missing_ssh_keys:
+        raise ClickException(
+            f"Missing required SSH key path(s): {', '.join(missing_ssh_keys)}. "
+            "Pass them via CLI flags or run `ewc login` to generate them."
+        )
+
+    is_matching = ssh_keys_match(
+        ssh_private_key_path=ssh_private_key_path,
+        ssh_public_key_path=ssh_public_key_path
+    )
+
+    if not is_matching:
+        raise ClickException(
+            "SSH keys provided are not a correct keypair:"
+            f"\nSSH public key path: {ssh_public_key_path}"
+            f"\nSSH private key path: {ssh_private_key_path}"
+            "\nMake sure either you pass correct SSH keypair in the EWC login command through the following flags `--ssh-private-key-path` and `--ssh-public-key-path`"
+            "or let the `ewc login` command create them for you. Exiting."
+        )
+    else:
+        _LOGGER.info("SSH private and public keys are matching! Continuing...")
 
 
 def check_server_conflict_with_inputs(

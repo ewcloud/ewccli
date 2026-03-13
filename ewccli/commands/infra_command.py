@@ -25,6 +25,7 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
+from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
 from ewccli.commands.commons_infra import deploy_server
 from ewccli.utils import load_cli_profile
@@ -114,9 +115,9 @@ def create_cmd(
     server_name,
     dry_run: bool,
     force: bool,
-    ssh_public_key_path: str,
-    ssh_private_key_path: str,
     keypair_name: str,
+    ssh_public_key_path: Optional[str] = None,
+    ssh_private_key_path: Optional[str] = None,
     federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
@@ -135,6 +136,18 @@ def create_cmd(
 
     cli_profile = ctx.cli_profile
     federee = federee or cli_profile["federee"]
+
+    # Try to fill from CLI profile if not provided
+    if not ssh_public_key_path:
+        ssh_public_key_path = cli_profile.get("ssh_public_key_path")
+
+    if not ssh_private_key_path:
+        ssh_private_key_path = cli_profile.get("ssh_private_key_path")
+
+    check_user_ssh_keys(
+        ssh_public_key_path=ssh_public_key_path,
+        ssh_private_key_path=ssh_private_key_path
+    )
 
     _LOGGER.info(f"The server will be deployed on {federee} side of the EWC.")
 

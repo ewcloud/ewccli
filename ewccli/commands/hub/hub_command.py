@@ -39,6 +39,7 @@ from ewccli.commands.commons import build_dns_record_name
 from ewccli.commands.commons import wait_for_dns_record
 from ewccli.commands.commons import load_hub_items
 from ewccli.commands.commons_infra import deploy_server
+from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.hub.hub_backends import git_clone_item
 from ewccli.commands.hub.hub_backends import run_ansible_playbook_item
 from ewccli.commands.hub.hub_backends import get_hub_item_env_variable_value
@@ -340,9 +341,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     application_credential_secret: str,
     dry_run: bool,
     force: bool,
-    ssh_public_key_path: str,
-    ssh_private_key_path: str,
     keypair_name: str,
+    ssh_public_key_path: Optional[str] = None,
+    ssh_private_key_path: Optional[str] = None,
     server_name: Optional[str] = None,
     profile: Optional[str] = None,
     item_inputs: Optional[Any] = None,
@@ -376,6 +377,19 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     tenancy_name = cli_profile["tenant_name"]
     federee: str = cli_profile["federee"]
+
+    # Try to fill from CLI profile if not provided
+    if not ssh_public_key_path:
+        ssh_public_key_path = ctx.cli_profile.get("ssh_public_key_path")
+
+    if not ssh_private_key_path:
+        ssh_private_key_path = ctx.cli_profile.get("ssh_private_key_path")
+
+    check_user_ssh_keys(
+        ssh_public_key_path=ssh_public_key_path,
+        ssh_private_key_path=ssh_private_key_path
+    )
+
     # Take item information
     _LOGGER.info(f"The item will be deployed on {federee} side of the EWC.")
 

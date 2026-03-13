@@ -820,6 +820,37 @@ class OpenstackBackend:
             _LOGGER.warning(f"{network_name} not found for server {server.name}")
             return NetworkResult(True, False)
 
+
+    def ssh_key_matches_openstack(
+        self,
+        public_key_path: str,
+        keypair: dict
+    ) -> bool:
+        """
+        Check whether the local SSH public key matches the OpenStack keypair.
+
+        Args:
+            public_key_path: Path to the local SSH public key.
+            keypair: keypair retrieved from OpenStack
+
+        Returns:
+            True if the keys match, False otherwise.
+        """
+        # Ensure local key exists
+        pub_path = Path(public_key_path)
+        if not pub_path.is_file():
+            raise ValueError(f"SSH public key not found at: {public_key_path}")
+
+        # Read local public key
+        with open(public_key_path, "r") as f:
+            local_key = " ".join(f.read().strip().split()[:2])
+
+        # Retrieve keypair from OpenStack
+        openstack_key = " ".join(keypair.public_key.strip().split()[:2])
+
+        return local_key == openstack_key
+
+
     def create_keypair(
         self,
         conn: openstack.connection.Connection,
@@ -844,10 +875,26 @@ class OpenstackBackend:
         existing_key = conn.compute.find_keypair(keypair_name)
 
         if existing_key:
-            return (
-                KeyPairResult(True, False),
-                f"Keypair '{keypair_name}' already exists on Openstack. Using this key to deploy the VM.",
+
+            match = OpenstackBackend.ssh_key_matches_openstack(
+                conn,
+                keypair=existing_key,
+                public_key_path=public_key_path
             )
+
+            if not match:
+                return (
+                    KeyPairResult(False, False),
+                    f"keypair ({keypair_name}) selected from OpenStack doesn't match the SSH public key at: {public_key_path}."
+                    "\nPlease make sure you have the correct SSH keys or you won't be able to login to the VM."
+                    "\nAlternatively, provide another name with the flag `--keypair-name` to create a new key keypair."
+                    f"\nOr use --force to remove the existing keypair {keypair_name} and let the EWCCLI recreate it with the SSH keys you have.",
+                )
+            else:
+                return (
+                    KeyPairResult(True, False),
+                    f"Keypair '{keypair_name}' already exists on Openstack. Using this key to deploy the VM.",
+                )
         else:
             try:
                 conn.compute.create_keypair(

@@ -283,6 +283,9 @@ def ssh_options_encoded(func):
 
 def validate_path(ctx, param, value):
     """Validate path."""
+    if not value:
+        return
+
     try:
         # Expand ~ and resolve to absolute path
         path = Path(value).expanduser().resolve(strict=False)
@@ -313,8 +316,7 @@ def ssh_options(func):
         "--ssh-public-key-path",
         required=False,
         envvar="EWC_CLI_SSH_PUBLIC_KEY_PATH",
-        type=str,
-        default=ewc_hub_config.EWC_CLI_PUBLIC_SSH_KEY_PATH,
+        type=Optional[str],
         help="Path to SSH public key.",
         callback=validate_path,
     )(func)
@@ -322,8 +324,7 @@ def ssh_options(func):
         "--ssh-private-key-path",
         required=False,
         envvar="EWC_CLI_SSH_PRIVATE_KEY_PATH",
-        type=str,
-        default=ewc_hub_config.EWC_CLI_PRIVATE_SSH_KEY_PATH,
+        type=Optional[str],
         help="Path to SSH private key.",
         callback=validate_path,
     )(func)
