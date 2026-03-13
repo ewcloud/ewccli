@@ -6,7 +6,7 @@ For more info about this SW, you may contact the [European Weather Cloud](http:/
 <[support@europeanweather.cloud](mailto:support@europeanweather.cloud)>.
 
 ## Copyright and License
-Copyright © EUMETSAT, ECMWF 2025.
+Copyright © EUMETSAT, ECMWF 2025, 2026
 
 The provided code and instructions are licensed under [GPLv3+](./LICENSE).
 They are intended to automate the setup of an environment that includes
@@ -143,6 +143,8 @@ federee = EUMETSAT or ECMWF
 tenant_name = eumetsat-ewc-communityhub
 application_credential_id = 
 application_credential_secret = 
+ssh_public_key_path =
+ssh_private_key_path =
 ```
 
 ## List items
