@@ -380,10 +380,10 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     # Try to fill from CLI profile if not provided
     if not ssh_public_key_path:
-        ssh_public_key_path = ctx.cli_profile.get("ssh_public_key_path")
+        ssh_public_key_path = cli_profile.get("ssh_public_key_path")
 
     if not ssh_private_key_path:
-        ssh_private_key_path = ctx.cli_profile.get("ssh_private_key_path")
+        ssh_private_key_path = cli_profile.get("ssh_private_key_path")
 
     check_user_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
