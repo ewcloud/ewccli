@@ -118,7 +118,7 @@ def check_server_conflict_with_inputs(
         compare(
             "Flavour",
             flavour_name,
-            getattr(server_info.get("flavor", {}), "original_name", None),
+            getattr(getattr(server_info, "flavor", None), "original_name", None),
         )
 
     # To be checked yet.
@@ -700,6 +700,7 @@ def deploy_server(
                 networks=networks,
                 security_groups=security_groups,
             )
+
             if diffs:
                 show_server_inputs_difference_table(
                     server_name=server_name, diffs=diffs
