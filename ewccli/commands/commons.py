@@ -348,14 +348,18 @@ def list_items_table(hub_items: dict):
 
     for item, item_v in hub_items.items():
         annotations = item_v.get("annotations")
-
         if not annotations:
+            _LOGGER.warning(f"Filtering {item} as it doesn't contain annotations.")
             continue
 
         others_annotations = annotations.get("others", "").split(",")
 
         # Filter items not EWCCLI compatible
         if HubItemOherAnnotation.EWCCLI_COMPATIBLE.value not in others_annotations:
+            _LOGGER.warning(
+                f"Filtering {item} as this is not compatible with the EWCCLI according to the catalog:"
+                f"\n`{HubItemOherAnnotation.EWCCLI_COMPATIBLE.value}` annotation is not in `others` annotations list."
+            )
             continue
 
         table.add_row(
