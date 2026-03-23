@@ -316,7 +316,7 @@ def ssh_options(func):
         "--ssh-public-key-path",
         required=False,
         envvar="EWC_CLI_SSH_PUBLIC_KEY_PATH",
-        type=Optional[str],
+        type=str,
         help="Path to SSH public key.",
         callback=validate_path,
     )(func)
@@ -324,7 +324,7 @@ def ssh_options(func):
         "--ssh-private-key-path",
         required=False,
         envvar="EWC_CLI_SSH_PRIVATE_KEY_PATH",
-        type=Optional[str],
+        type=str,
         help="Path to SSH private key.",
         callback=validate_path,
     )(func)
