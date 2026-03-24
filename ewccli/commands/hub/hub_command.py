@@ -294,9 +294,9 @@ def _validate_item(ctx, param, value):
     is_flag=False,
     required=False,
     default=None,
-    envvar="EWC_CLI_INSTANCE_NAME",
+    envvar="EWC_CLI_SERVER_NAME",
     show_default=False,
-    help="Select a name for the server.",
+    help="Select a name for the server. (or set env var EWC_CLI_SERVER_NAME)",
 )
 @click.option(
     "--item-inputs",
@@ -366,16 +366,20 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         _LOGGER.info("Dry run enabled...")
 
     if profile:
-        cli_profile = load_cli_profile(profile=profile)
+        cli_profile = load_cli_profile(
+            profile=profile,
+            dry_run=dry_run
+        )
     else:
         # Use default profile if exists
         cli_profile = load_cli_profile(
-            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
+            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
+            dry_run=dry_run
         )
 
     _LOGGER.info(f"Using `{cli_profile.get('profile')}` profile.")
 
-    tenancy_name = cli_profile["tenant_name"]
+    tenancy_name: str = cli_profile["tenant_name"]
     federee: str = cli_profile["federee"]
 
     # Try to fill from CLI profile if not provided
@@ -387,7 +391,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     check_user_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
-        ssh_private_key_path=ssh_private_key_path
+        ssh_private_key_path=ssh_private_key_path,
+        dry_run=dry_run
     )
 
     # Take item information
@@ -527,6 +532,10 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         )
         if not auth_url:
             auth_url = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee)
+
+        if dry_run:
+            console.print(Panel(f"Dry run: skipping OpenStack connection and exiting.", title="Info", style="green"))
+            sys.exit(0)
 
         try:
             openstack_backend = OpenstackBackend(
