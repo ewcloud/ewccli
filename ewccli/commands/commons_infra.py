@@ -21,7 +21,7 @@ from rich import box
 from click import ClickException
 from openstack import connection
 
-from ewccli.utils import save_ssh_keys, ssh_keys_match
+from ewccli.utils import save_encoded_ssh_keys, ssh_keys_match
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.enums import Federee
 from ewccli.configuration import config as ewc_hub_config
@@ -616,7 +616,24 @@ def deploy_server(
 
     _LOGGER.info(f"Preparing to deploy server {server_name}...")
 
-    save_ssh_keys(ssh_public_encoded, ssh_private_encoded)
+    if ssh_public_encoded or ssh_private_encoded:
+        if ssh_public_encoded:
+            ssh_public_key_path = "/tmp/tmp_encoded_public_key"
+
+        if ssh_private_encoded:
+            ssh_public_key_path = "/tmp/tmp_encoded_private_key"
+
+        save_encoded_ssh_keys(
+            ssh_public_key_path=ssh_private_key_path,
+            ssh_private_key_path=ssh_private_key_path,
+            ssh_public_encoded=ssh_public_encoded,
+            ssh_private_encoded=ssh_private_encoded
+        )
+
+        check_user_ssh_keys(
+            ssh_public_key_path=ssh_public_key_path,
+            ssh_private_key_path=ssh_private_key_path
+        )
 
     check_ssh_keys_exist(
         ssh_public_key_path=Path(ssh_public_key_path),

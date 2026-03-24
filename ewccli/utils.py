@@ -600,7 +600,9 @@ def save_ssh_key(ssh_key, path_key):
     )
 
 
-def save_ssh_keys(
+def save_encoded_ssh_keys(
+    ssh_public_key_path: str,
+    ssh_private_key_path: str,
     ssh_public_encoded: Optional[str] = None,
     ssh_private_encoded: Optional[str] = None,
 ):
@@ -609,7 +611,7 @@ def save_ssh_keys(
         _LOGGER.info("Using encoded public key provided.")
         public_key = load_ssh_public_key(encoded_key=ssh_public_encoded)
         save_ssh_key(
-            ssh_key=public_key, path_key=ewc_hub_config.EWC_CLI_PUBLIC_SSH_KEY_PATH
+            ssh_key=public_key, path_key=ssh_public_key_path
         )
 
     if ssh_private_encoded:
@@ -617,7 +619,7 @@ def save_ssh_keys(
         private_key = load_ssh_private_key(encoded_key=ssh_private_encoded)
         verify_private_key(private_key=private_key)
         save_ssh_key(
-            ssh_key=private_key, path_key=ewc_hub_config.EWC_CLI_PRIVATE_SSH_KEY_PATH
+            ssh_key=private_key, path_key=ssh_private_key_path
         )
 
 

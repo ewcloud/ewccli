@@ -23,7 +23,7 @@ from ewccli.utils import (
     load_ssh_public_key,
     verify_private_key,
     save_ssh_key,
-    save_ssh_keys,
+    save_encoded_ssh_keys,
     generate_ssh_keypair,
 )
 
@@ -150,7 +150,12 @@ def test_save_ssh_keys_writes_files(
         "utf-8"
     )
 
-    save_ssh_keys(ssh_public_encoded=encoded_pub, ssh_private_encoded=encoded_priv)
+    save_encoded_ssh_keys(
+        ssh_public_key_path=pub_path,
+        ssh_private_key_path=priv_path,
+        ssh_public_encoded=encoded_pub, 
+        ssh_private_encoded=encoded_priv
+    )
 
     assert priv_path.exists()
     assert pub_path.exists()
