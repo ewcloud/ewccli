@@ -184,6 +184,7 @@ def load_cli_profile(
     federee: Optional[str] = None,
     tenant_name: Optional[str] = None,
     profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+    dry_run: bool = False
 ) -> Dict[str, Optional[str]]:
     """
     Load all profile data (config + credentials) from the single profiles file.
@@ -209,6 +210,9 @@ def load_cli_profile(
     click.Abort
         If the profile cannot be found or cannot be resolved.
     """
+    if dry_run:
+        return {}
+
     if profile is None:
         if not federee or not tenant_name:
             click.secho(

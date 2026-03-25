@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
-import click
+
 from click import ClickException
 from openstack import connection
 
@@ -36,8 +36,13 @@ console = Console()
 def check_user_ssh_keys(
     ssh_public_key_path: Optional[str] = None,
     ssh_private_key_path: Optional[str] = None,
+    dry_run: bool = False
 ):
     """Check if SSH keys are compatible or missing."""
+    if dry_run:
+        _LOGGER.info("Dry Run enable: Skipping checking SSH private and public keys...")
+        return
+
     # If still missing, raise exception
     missing_ssh_keys = []
     if not ssh_public_key_path:
@@ -598,7 +603,7 @@ def deploy_server(
     outputs: dict[str, Optional[str]] = {}
 
     if dry_run:
-        return 0, "dru run enabled.", outputs
+        return 0, "Dry run: skipping deploy server...", outputs
 
     server_name: str = server_inputs["server_name"]
     keypair_name: str = server_inputs["keypair_name"]

@@ -164,6 +164,9 @@ def git_clone_item(
     ########################################################################
     # Prepare input for items
     ########################################################################
+    if dry_run:
+        return 0, "Dry run: skipping git clone..."
+
     _LOGGER.info("Git clone item...")
     ########################################################################
     # Git clone item to the correct path
