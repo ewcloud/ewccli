@@ -550,6 +550,7 @@ class OpenstackBackend:
         image_map = {image.id: image.name for image in conn.compute.images()}
 
         for server in conn.compute.servers():
+
             if (
                 not (
                     server.metadata.get("deployed")
@@ -562,7 +563,7 @@ class OpenstackBackend:
             image_id = server.image.get("id") if server.image else None
             image_name = image_map.get(image_id, "N/A") if image_id else "N/A"
 
-            addresses = server.get("addresses")
+            addresses = server.get("addresses") or {}
             network_ip = {}
 
             if federee == Federee.EUMETSAT.value:
@@ -585,7 +586,7 @@ class OpenstackBackend:
             else:
                 networks = "\n".join([n for n in server.addresses])
 
-            sec_groups = getattr(server, "security_groups", [])
+            sec_groups = getattr(server, "security_groups") or []
 
             servers[server.id] = {
                 "name": server.name,
@@ -596,6 +597,7 @@ class OpenstackBackend:
                 "security-groups": ",".join(sg.get("name") for sg in sec_groups),
                 "id": server.id,
             }
+
             _LOGGER.debug(f"{server.name} ({server.status}) - {server.id}")
 
         return servers
