@@ -587,7 +587,7 @@ def list_server_details(
     console.print(table)
 
 
-def deploy_server(
+def pre_deploy_server_setup(
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
@@ -597,24 +597,30 @@ def deploy_server(
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
     dry_run: bool = False,
-    force: bool = False,
+    force: bool = False,       
 ):
-    """Deploy Server in Openstack."""
+    """Pre deploy server setup steps:
+
+        - check SSH keys
+        - select correct image and flavour
+        - select correct network
+        - verify all inputs for the resources are valid
+        - get or create keypair
+    
+    """
     outputs: dict[str, Optional[str]] = {}
 
-    if dry_run:
-        return 0, "Dry run: skipping deploy server...", outputs
-
-    server_name: str = server_inputs["server_name"]
     keypair_name: str = server_inputs["keypair_name"]
     is_gpu: bool = server_inputs["is_gpu"]
     image_name: Optional[str] = server_inputs["image_name"]
     flavour_name: Optional[str] = server_inputs["flavour_name"]
-    external_ip: bool = server_inputs["external_ip"]
-    networks: Optional[tuple] = server_inputs["networks"]
     security_groups: Optional[tuple] = server_inputs["security_groups"]
+    item_default_security_groups: Optional[tuple] = server_inputs["item_default_security_groups"]
 
-    _LOGGER.info(f"Preparing to deploy server {server_name}...")
+    if dry_run:
+        return 0, "[Dry Run] skipping pre deploy server setup...", outputs
+
+    _LOGGER.info(f"Pre deploy server setup starting...")
 
     save_ssh_keys(ssh_public_encoded, ssh_private_encoded)
 
@@ -635,13 +641,51 @@ def deploy_server(
         is_gpu=is_gpu
     )
     if sc != 0 or not resolved_info:
-        return 1, resolve_message, outputs
+        return 1, f"[Pre deploy server setup] {resolve_message}", outputs
 
     # This image name can be short name or long name
     resolved_image_name: str = resolved_info["image_name"]
     normalized_image_name: str = resolved_info["normalized_image_name"]
     resolved_flavour_name: str = resolved_info["flavour_name"]
+    networks: Optional[tuple] = server_inputs["networks"]
 
+    outputs["resolved_image_name"] = resolved_image_name
+    outputs["normalized_image_name"] = normalized_image_name
+    outputs["flavour_name"] = flavour_name
+
+    ##################################################################################
+    # Network (private) and security groups
+    ##################################################################################
+    security_groups_inputs = ()
+
+    if security_groups:
+        security_groups_inputs += security_groups
+
+    if item_default_security_groups:
+        security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
+
+    if not networks:
+        default_network = ewc_hub_config.DEFAULT_NETWORK_MAP.get(federee)
+        if federee == Federee.ECMWF.value:
+            networks_identified = [n.name for n in openstack_api.list_networks()]
+            networks = tuple([n for n in networks_identified if default_network in n])
+        else:
+            networks = tuple([default_network])
+
+        outputs["networks"] = networks
+
+    security_groups = security_groups_inputs or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(
+        federee
+    )
+
+    if not security_groups:
+        security_groups = ()
+
+    outputs["security_groups"] = security_groups
+
+    ##################################################################################
+    ### Check server inputs are valid
+    ##################################################################################
     try:
         is_valid, message = openstack_backend.check_server_inputs(
             conn=openstack_api,
@@ -655,90 +699,11 @@ def deploy_server(
         if not is_valid:
             return (
                 1,
-                f"Server creation inputs are not valid: {message}. Please check the input parameters and try again.",
+                f"[Pre deploy server setup] Server creation inputs are not valid: {message}. Please check the input parameters and try again.",
                 outputs,
             )
     except Exception as e:
-        return 1, f"Could not check inputs from Openstack due to {e}", outputs
-
-    if not force:
-        # Retrive machine if exists
-        try:
-            existing_server_info = openstack_api.get_server(name_or_id=server_name)
-        except Exception as e:
-            return (
-                1,
-                f"Failed to retrieve information for server {server_name} due to {e}",
-                outputs,
-            )
-
-        if existing_server_info:
-            if not (
-                existing_server_info.metadata.get("deployed")
-                and existing_server_info.metadata.get("deployed") == "ewccli"
-            ):
-                return (
-                    1,
-                    f"Server {server_name} already exists and it has not been deployed with the EWC CLI. Exiting.",
-                    outputs,
-                )
-
-            try:
-                # Fetch image name from the image ID
-                image = openstack_api.compute.find_image(
-                    getattr(existing_server_info.image, "id", None)
-                )
-                server_info_image = image.name if image else None
-            except Exception as e:
-                return (
-                    1,
-                    f"Could not retrieve image name of {server_name} due to {e}",
-                    outputs,
-                )
-
-            diffs = check_server_conflict_with_inputs(
-                server_info=existing_server_info,
-                server_info_image=server_info_image,
-                image_name=resolved_image_name,
-                keypair_name=keypair_name,
-                flavour_name=flavour_name,
-                networks=networks,
-                security_groups=security_groups,
-            )
-
-            if diffs:
-                show_server_inputs_difference_table(
-                    server_name=server_name, diffs=diffs
-                )
-
-    ##################################################################################
-    # Network (private) and security groups
-    ##################################################################################
-    if not networks:
-        default_network = ewc_hub_config.DEFAULT_NETWORK_MAP.get(federee)
-        if federee == Federee.ECMWF.value:
-            networks_identified = [n.name for n in openstack_api.list_networks()]
-            networks = tuple([n for n in networks_identified if default_network in n])
-        else:
-            networks = tuple([default_network])
-
-    security_groups = security_groups or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(
-        federee
-    )
-
-    if not security_groups:
-        security_groups = ()
-
-    # if "default" not in security_groups:
-    #     security_groups += ("default",)
-
-    show_server_input_requested_summary(
-        image_name=resolved_image_name,
-        flavour_name=resolved_flavour_name,
-        networks=networks,
-        security_groups=security_groups,
-        keypair_name=keypair_name,
-    )
+        return 1, f"[Pre deploy server setup] Could not check inputs from Openstack due to {e}", outputs
 
     #################################################################################
     # Get or Create keypair
@@ -751,7 +716,7 @@ def deploy_server(
             conn=openstack_api, keypair_name=keypair_name
         )
         if not keypair_status[0]:
-            return 1, message, outputs
+            return 1, f"[Pre deploy server setup] {message}", outputs
 
     keypair_status, key_pair_message = openstack_backend.create_keypair(
         conn=openstack_api,
@@ -760,15 +725,120 @@ def deploy_server(
     )
 
     if not keypair_status[0]:
-        return 1, key_pair_message, outputs
+        return 1, f"[Pre deploy server setup] {key_pair_message}", outputs
     else:
         _LOGGER.info(key_pair_message)
+
+    return 0, f"Pre deploy server setup finished successfully.", outputs
+
+
+def identify_server_reconfiguration(
+    openstack_api: connection.Connection,
+    server_inputs: dict,  
+):
+    """Identify resources to be reconfigured."""
+    outputs: dict[str, Optional[str]] = {}
+
+    server_name: str = server_inputs["server_name"]
+    keypair_name: str = server_inputs["keypair_name"]
+    flavour_name: Optional[str] = server_inputs["flavour_name"]
+    resolved_image_name: str = server_inputs["resolved_image_name"]
+
+    networks: Optional[tuple] = server_inputs["networks"]
+    security_groups: Optional[tuple] = server_inputs["security_groups"]
+
+    # Retrive machine if exists
+    try:
+        existing_server_info = openstack_api.get_server(name_or_id=server_name)
+    except Exception as e:
+        return (
+            1,
+            f"Failed to retrieve information for server {server_name} due to {e}",
+            outputs,
+        )
+
+    if existing_server_info:
+        if not (
+            existing_server_info.metadata.get("deployed")
+            and existing_server_info.metadata.get("deployed") == "ewccli"
+        ):
+            return (
+                1,
+                f"Server {server_name} already exists and it has not been deployed with the EWC CLI. Exiting.",
+                outputs,
+            )
+
+        try:
+            # Fetch image name from the image ID
+            image = openstack_api.compute.find_image(
+                getattr(existing_server_info.image, "id", None)
+            )
+            server_info_image = image.name if image else None
+        except Exception as e:
+            return (
+                1,
+                f"Could not retrieve image name of {server_name} due to {e}",
+                outputs,
+            )
+
+        diffs = check_server_conflict_with_inputs(
+            server_info=existing_server_info,
+            server_info_image=server_info_image,
+            image_name=resolved_image_name,
+            keypair_name=keypair_name,
+            flavour_name=flavour_name,
+            networks=networks,
+            security_groups=security_groups,
+        )
+
+        if diffs:
+            show_server_inputs_difference_table(
+                server_name=server_name, diffs=diffs
+            )
+
+    return (
+        0,
+        f"No reconfiguration needed",
+        outputs,
+    )
+
+
+def deploy_server(
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    server_inputs: dict,
+    dry_run: bool = False,
+    force: bool = False,
+):
+    """Deploy Server in Openstack."""
+    outputs: dict[str, Optional[str]] = {}
+
+    if dry_run:
+        return 0, "Dry run: skipping deploy server...", outputs
+
+    server_name: str = server_inputs["server_name"]
+    keypair_name: str = server_inputs["keypair_name"]
+    networks: Optional[tuple] = server_inputs["networks"]
+    security_groups: Optional[tuple] = server_inputs["security_groups"]
+    resolved_image_name: str = server_inputs["resolved_image_name"]
+    resolved_flavour_name: str = server_inputs["resolved_flavour_name"]
+
+    _LOGGER.info(f"Deploy server {server_name} starting...")
+
+    show_server_input_requested_summary(
+        image_name=resolved_image_name,
+        flavour_name=resolved_flavour_name,
+        networks=networks,
+        security_groups=security_groups,
+        keypair_name=keypair_name,
+    )
 
     #################################################################################
     # Get or Create Server
     #################################################################################
     if force:
-        _LOGGER.warning("Force enabled, server will be deleted first, if existing.")
+        _LOGGER.warning("[Deploy server] Force enabled, server will be deleted first, if existing.")
 
         openstack_server_status, delete_server_message = (
             openstack_backend.delete_server(conn=openstack_api, server_name=server_name)
@@ -780,7 +850,7 @@ def deploy_server(
 
         time.sleep(_EWC_CLI_SLEEP_TIME)
 
-    _LOGGER.info("Preparing to deploy VM on Openstack...")
+    _LOGGER.info("[Deploy server] Requesting server from Openstack...")
 
     openstack_server_status, create_server_message, server_info = (
         openstack_backend.create_server(
@@ -814,7 +884,7 @@ def deploy_server(
         image = openstack_api.compute.find_image(image_id)
         image_name_used = image.name if image else "Unknown"
     except Exception as e:
-        return 1, f"Could not retrieve image due to {e}", outputs
+        return 1, f"[Deploy server] Could not retrieve image due to {e}", outputs
 
     vm_info = get_deployed_server_info(
         federee=federee,
@@ -823,6 +893,43 @@ def deploy_server(
     )
 
     list_server_details(vm_info)
+
+    outputs = {
+        "server_info": server_info,
+    }
+
+    return 0, "Deploy server finished successfully", outputs
+
+
+def post_deploy_server_setup(
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    server_inputs: dict,
+    server_info: dict,
+    dry_run: bool = False,
+):
+    """Post deploy server setup steps:
+
+        - attach floating IP
+        - attach volume
+    
+    """
+    outputs: dict[str, Optional[str]] = {}
+
+    if dry_run:
+        return 0, "[Dry Run] skipping post deploy server setup...", outputs
+
+    _LOGGER.info(f"Post deploy server setup starting...")
+
+    server_name: str = server_inputs["server_name"]
+
+    # Request of external IP from the CLI or from the Hub item
+    external_ip: bool = server_inputs["external_ip"]
+
+    ############################################################
+    # Add external IP
+    ###########################################################
 
     sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
         federee=federee, server_info=server_info
@@ -854,14 +961,14 @@ def deploy_server(
 
     # make sure it's not None
     if resolve_ip_outputs is None:
-        return 1, "No IPs identified.", outputs
+        return 1, "[Post deploy server setup] No IPs identified.", outputs
 
     internal_ip_machine = resolve_ip_outputs["internal_ip_machine"]
     # enforce internal must not be empty
     if not internal_ip_machine:
         return (
             1,
-            f"internal_ip_machine {internal_ip_machine} is missing or empty",
+            f"[Post deploy server setup] internal_ip_machine {internal_ip_machine} is missing or empty",
             outputs,
         )
 
@@ -871,7 +978,86 @@ def deploy_server(
         "internal_ip_machine": internal_ip_machine,
         "external_ip_machine": external_ip_machine,
         "server_info": server_info,
-        "normalized_image_name": normalized_image_name
     }
 
-    return 0, "Server deployed successfully", outputs
+    return 0, "Post deploy server setup finished successfully", outputs
+
+
+def create_server_command(
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    server_inputs: dict,
+    ssh_public_key_path: str,
+    ssh_private_key_path: str,
+    ssh_private_encoded: Optional[str] = None,
+    ssh_public_encoded: Optional[str] = None,
+    dry_run: bool = False,
+    force: bool = False, 
+):
+    """Create Server command."""
+    #### PRE DEPLOY SERVER ACTION
+    os_status_code, os_message, pre_deploy_server_outputs = pre_deploy_server_setup(
+        openstack_backend=openstack_backend,
+        openstack_api=openstack_api,
+        federee=federee,
+        server_inputs=server_inputs,
+        ssh_private_encoded=ssh_private_encoded,
+        ssh_public_encoded=ssh_public_encoded,
+        ssh_public_key_path=ssh_public_key_path,
+        ssh_private_key_path=ssh_private_key_path,
+        dry_run=dry_run,
+        force=force,  
+    )
+
+    if os_status_code != 0 or not pre_deploy_server_outputs:
+        console.print(Panel(os_message, title="Error", style="red"))
+        # Exit with a non-zero status
+        sys.exit(1)
+
+    server_inputs["normalized_image_name"] = pre_deploy_server_outputs["normalized_image_name"]
+    if "networks" in pre_deploy_server_outputs:
+        server_inputs["networks"] = pre_deploy_server_outputs["networks"]
+
+    server_inputs["security_groups"] = pre_deploy_server_outputs["security_groups"]
+    normalized_image_name = pre_deploy_server_outputs["normalized_image_name"]
+
+    #### VERIFY IF SERVER RECONFIGURATION IS NEEDED
+    if not force:
+        identify_server_reconfiguration()
+
+    #### DEPLOY SERVER ACTION
+    os_status_code, os_message, deploy_server_outputs = deploy_server(
+        openstack_backend=openstack_backend,
+        openstack_api=openstack_api,
+        federee=federee,
+        server_inputs=server_inputs,
+        dry_run=dry_run,
+        force=force,
+    )
+
+    if not deploy_server_outputs:
+        console.print(Panel(os_message, title="Error", style="red"))
+        # Exit with a non-zero status
+        sys.exit(1)
+
+    #### POST DEPLOY SERVER ACTION
+    os_status_code, os_message, post_deploy_server_outputs = post_deploy_server_setup(
+        openstack_backend=openstack_backend,
+        openstack_api=openstack_api,
+        federee=federee,
+        server_inputs=server_inputs,
+        server_info=deploy_server_outputs["server_info"],
+        dry_run=dry_run,
+    )
+
+    internal_ip_machine = post_deploy_server_outputs["internal_ip_machine"]
+    external_ip_machine = post_deploy_server_outputs["external_ip_machine"]
+
+    outputs = {
+        "normalized_image_name": normalized_image_name,
+        "internal_ip_machine": internal_ip_machine,
+        "external_ip_machine": external_ip_machine,
+    }
+
+    return os_status_code, os_message, outputs
