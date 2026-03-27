@@ -618,10 +618,10 @@ def deploy_server(
 
     if ssh_public_encoded or ssh_private_encoded:
         if ssh_public_encoded:
-            ssh_public_key_path = "/tmp/tmp_encoded_public_key"
+            ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH + f"tmp_encoded_public_key_{keypair_name}"
 
         if ssh_private_encoded:
-            ssh_public_key_path = "/tmp/tmp_encoded_private_key"
+            ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH + f"tmp_encoded_public_key_{keypair_name}"
 
         save_encoded_ssh_keys(
             ssh_public_key_path=ssh_private_key_path,
