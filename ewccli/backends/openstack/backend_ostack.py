@@ -33,8 +33,12 @@ _LOGGER = get_logger(__name__)
 # failures  The number of server creation failures creating the server
 ServerResult = namedtuple("ServerResult", "success changed failures")
 KeyPairResult = namedtuple("KeyPairResult", "success changed")
+ExtraVolumesResult = namedtuple("ExtraVolumesResult", "success changed")
+AttachVolumesResult = namedtuple("ExtraVolumesResult", "success changed")
+DetachVolumesResult = namedtuple("ExtraVolumesResult", "success changed")
 ExternalIPResult = namedtuple("ExternalIPResult", "success changed")
 NetworkResult = namedtuple("NetworkResult", "success changed")
+
 _MAX_CHARACTERS_SERVER_NAME_OPENSTACK = 63
 
 
@@ -414,6 +418,408 @@ class OpenstackBackend:
             )
 
 
+    def create_volumes(
+        self,
+        conn: openstack.connection.Connection,
+        base_name: str,
+        volume_sizes: tuple[int, ...],
+        volume_type: str | None = None,
+        attempts: int = 1,
+        retry_delay_s: int = 30,
+        wait_time_s: int = 600,
+        dry_run: bool = False,
+        metadata=None,
+    ) -> tuple[ExtraVolumesResult, list[openstack.block_storage.v3.volume.Volume], str]:
+        """
+        Create multiple Cinder volumes with retry and wait logic.
+
+        :param conn: OpenStack connection
+        :param base_name: Base name for volumes (e.g. server name)
+        :param volume_sizes: Tuple of sizes in GB
+        :param volume_type: Optional Cinder volume type
+        :param attempts: Retry attempts
+        :param retry_delay_s: Delay between attempts
+        :param wait_time_s: Max wait time for volume creation
+        :param dry_run: Do not create anything
+        :return: (ExtraVolumesResult, list of created volumes, message)
+        """
+        if dry_run:
+            _LOGGER.info(f"[Dry Run] Would create extra volumes with sizes: {volume_sizes}")
+            return (
+                ExtraVolumesResult(True, False),
+                [],
+                f"[Dry Run] Would create extra volumes with sizes: {volume_sizes}",
+            )
+
+        attempt = 1
+        error_message = ""
+        final_metadata = {
+            "ewccli": "true",
+            "server_name": base_name,
+            **metadata,
+        }
+        created_volumes = []
+
+        while attempt <= attempts:
+            _LOGGER.info(f"Creating volumes (attempt {attempt}/{attempts})")
+            created_volumes = []
+
+            try:
+                # Create all volumes
+                for idx, size in enumerate(volume_sizes):
+                    suffix = int(time.time())
+                    vol_name = f"{base_name}-vol-{idx+1}-{suffix}"
+                    _LOGGER.info(f"Creating volume {vol_name} ({size} GB)")
+
+                    vol = conn.block_storage.create_volume(
+                        size=size,
+                        name=vol_name,
+                        volume_type=volume_type,
+                        metadata=final_metadata
+                    )
+                    created_volumes.append(vol)
+
+                # Wait for all volumes to become available
+                ready_volumes = []
+                for vol in created_volumes:
+                    _LOGGER.info(f"Waiting for volume {vol.name} to become available")
+                    vol = conn.block_storage.wait_for_status(
+                        vol,
+                        status="available",
+                        failures=["error"],
+                        wait=wait_time_s,
+                    )
+                    ready_volumes.append(vol)
+
+                return (
+                    ExtraVolumesResult(True, True),
+                    ready_volumes,
+                    "Successfully created volumes.",
+                )
+
+            except Exception as ex:
+                error_message = f"Volume creation failed: {ex}"
+                _LOGGER.error(error_message)
+
+                # Cleanup failed volumes
+                for vol in created_volumes:
+                    try:
+                        _LOGGER.warning(f"Deleting failed volume {vol.name}")
+                        conn.block_storage.delete_volume(vol, ignore_missing=True)
+                    except Exception as cleanup_ex:
+                        _LOGGER.error(f"Failed to delete volume {vol.name}: {cleanup_ex}")
+
+                if attempt < attempts:
+                    _LOGGER.info(f"Retrying in {retry_delay_s} seconds…")
+                    time.sleep(retry_delay_s)
+                attempt += 1
+
+
+        return (
+            ExtraVolumesResult(False, False),
+            [],
+            error_message,
+        )
+
+
+    def list_volumes(
+        self,
+        conn,
+        metadata: dict[str, str] | None = None,
+        name: str | None = None,
+        status: str | None = None,
+    ):
+        """
+        List Cinder volumes filtered by metadata (default: ewccli=true).
+
+        :param conn: OpenStack connection
+        :param metadata: Extra metadata filters
+        :param name: Optional name filter
+        :param status: Optional status filter
+        :return: List of matching volumes
+        """
+
+        # Default metadata filter
+        base_metadata = {"ewccli": "true"}
+
+        # Merge user-provided metadata
+        if metadata:
+            base_metadata.update(metadata)
+
+        filters = {
+            "metadata": base_metadata,
+        }
+
+        if name:
+            filters["name"] = name
+
+        if status:
+            filters["status"] = status
+
+        # Query volumes
+        return list(conn.block_storage.volumes(details=True, **filters))
+
+
+    def delete_volumes(
+        self,
+        conn: openstack.connection.Connection,
+        base_name: str | None = None,
+        metadata: dict[str, str] | None = None,
+        attempts: int = 1,
+        retry_delay_s: int = 30,
+        wait_time_s: int = 600,
+        dry_run: bool = False,
+    ) -> tuple[ExtraVolumesResult, list[openstack.block_storage.v3.volume.Volume], str]:
+        """
+        Delete Cinder volumes filtered by metadata (default: ewccli=true).
+
+        :param conn: OpenStack connection
+        :param base_name: Optional base name (e.g. server name)
+        :param metadata: Extra metadata filters
+        :param attempts: Retry attempts
+        :param retry_delay_s: Delay between attempts
+        :param wait_time_s: Max wait time for deletion
+        :param dry_run: Do not delete anything
+        :return: (ExtraVolumesResult, list of deleted volumes, message)
+        """
+        # Default metadata filter
+        base_metadata = {"ewccli": "true"}
+
+        # Add server-name if provided
+        if base_name:
+            base_metadata["server_name"] = base_name
+
+        # Merge user metadata
+        if metadata:
+            base_metadata.update(metadata)
+
+        # Find volumes
+        volumes = list(conn.block_storage.volumes(details=True, metadata=base_metadata))
+
+        if not volumes:
+            return ExtraVolumesResult(True, False), [], "No volumes matched the filters."
+
+        if dry_run:
+            _LOGGER.info(f"[Dry Run] Would delete {len(volumes)} volumes: {[v.name for v in volumes]}")
+            return (
+                ExtraVolumesResult(True, False),
+                [],
+                f"[Dry Run] Would delete {len(volumes)} volumes",
+            )
+
+        deleted = []
+        errors = []
+
+        for vol in volumes:
+            for attempt in range(1, attempts + 1):
+                try:
+                    conn.block_storage.delete_volume(vol, ignore_missing=True)
+                    conn.block_storage.wait_for_delete(vol, wait=wait_time_s)
+                    deleted.append(vol)
+                    break
+                except Exception as exc:
+                    _LOGGER.warning(
+                        f"Failed to delete volume {vol.name} (attempt {attempt}/{attempts}): {exc}"
+                    )
+                    if attempt < attempts:
+                        time.sleep(retry_delay_s)
+                    else:
+                        errors.append((vol, str(exc)))
+
+        success = len(errors) == 0
+
+        msg = (
+            f"Deleted {len(deleted)} volumes"
+            if success
+            else f"Deleted {len(deleted)} volumes, {len(errors)} failed"
+        )
+
+        return ExtraVolumesResult(
+            True if success else False,
+            True if success else False
+        ), deleted, msg
+
+
+    def attach_volumes_to_server(
+        self,
+        conn: openstack.connection.Connection,
+        server_id: str,
+        volumes: list[openstack.block_storage.v3.volume.Volume],
+        attempts: int = 1,
+        retry_delay_s: int = 30,
+        wait_time_s: int = 600,
+        dry_run: bool = False,
+    ) -> tuple[AttachVolumesResult, list, str]:
+        """
+        Attach multiple volumes to a server with retry and wait logic.
+
+        :return: (AttachVolumesResult, list of attachments, message)
+        """
+
+        if dry_run:
+            _LOGGER.info(f"[Dry Run] Would attach {len(volumes)} volumes to server {server_id}")
+            return (
+                AttachVolumesResult(True, False),
+                [],
+                f"[Dry Run] Would attach {len(volumes)} volumes to server {server_id}",
+            )
+
+        attempt = 1
+        error_message = ""
+        attachments = []
+
+        while attempt <= attempts:
+            _LOGGER.info(f"Attaching volumes to server {server_id} (attempt {attempt}/{attempts})")
+            attachments = []
+
+            try:
+                # Create attachments
+                for vol in volumes:
+                    _LOGGER.info(f"Creating attachment for volume {vol.name} ({vol.id})")
+                    attachment = conn.compute.create_volume_attachment(
+                        server=server_id,
+                        volumeId=vol.id,
+                    )
+                    attachments.append(attachment)
+
+                # Wait for all volumes to become in-use
+                for vol in volumes:
+                    _LOGGER.info(f"Waiting for volume {vol.name} to become in-use")
+                    conn.block_storage.wait_for_status(
+                        vol,
+                        status="in-use",
+                        failures=["error"],
+                        wait=wait_time_s,
+                    )
+
+                return (
+                    AttachVolumesResult(True, True),
+                    attachments,
+                    f"Successfully attached {len(volumes)} volumes to server {server_id}.",
+                )
+
+            except Exception as ex:
+                error_message = f"Volume attachment failed: {ex}"
+                _LOGGER.error(error_message)
+
+                # Cleanup attachments
+                for attachment in attachments:
+                    try:
+                        _LOGGER.warning(
+                            f"Deleting failed attachment {attachment.id} for server {server_id}"
+                        )
+                        conn.compute.delete_volume_attachment(
+                            attachment=attachment.id,
+                            server=server_id,
+                            ignore_missing=True,
+                        )
+                    except Exception as cleanup_ex:
+                        _LOGGER.error(
+                            f"Failed to delete attachment {attachment.id}: {cleanup_ex}"
+                        )
+
+                if attempt < attempts:
+                    _LOGGER.info(f"Retrying in {retry_delay_s} seconds…")
+                    time.sleep(retry_delay_s)
+
+                attempt += 1
+
+        return (
+            AttachVolumesResult(False, False),
+            [],
+            error_message,
+        )
+
+
+    def detach_volumes_from_server(
+        self,
+        conn: openstack.connection.Connection,
+        server_id: str,
+        volumes: list[openstack.block_storage.v3.volume.Volume],
+        attempts: int = 1,
+        retry_delay_s: int = 30,
+        wait_time_s: int = 600,
+        dry_run: bool = False,
+    ) -> tuple[DetachVolumesResult, list[str], str]:
+        """
+        Detach volumes from a server and delete them, with retry and wait logic.
+
+        :return: (DetachVolumesResult, list of deleted volume IDs, message)
+        """
+
+        if dry_run:
+            _LOGGER.info(f"[Dry Run] Would detach and delete {len(volumes)} volumes from server {server_id}")
+            return (
+                DetachVolumesResult(True, False),
+                [],
+                f"[Dry Run] Would detach and delete {len(volumes)} volumes from server {server_id}",
+            )
+
+        attempt = 1
+        error_message = ""
+        deleted_volume_ids: list[str] = []
+
+        while attempt <= attempts:
+            _LOGGER.info(f"Detaching volumes from server {server_id} (attempt {attempt}/{attempts})")
+            deleted_volume_ids = []
+
+            try:
+                # 1. DETACH
+                for vol in volumes:
+                    _LOGGER.info(f"Detaching volume {vol.name} ({vol.id}) from server {server_id}")
+
+                    # Find attachment
+                    attachments = conn.compute.volume_attachments(server_id)
+                    attachment = next((a for a in attachments if a.volume_id == vol.id), None)
+
+                    if attachment:
+                        conn.compute.delete_volume_attachment(
+                            server_id,
+                            attachment.id,
+                            ignore_missing=True,
+                        )
+
+                    # Wait for detachment
+                    _LOGGER.info(f"Waiting for volume {vol.name} to return to 'available'")
+                    conn.block_storage.wait_for_status(
+                        vol,
+                        status="available",
+                        failures=["error"],
+                        wait=wait_time_s,
+                    )
+
+                # 2. DELETE
+                for vol in volumes:
+                    _LOGGER.info(f"Deleting volume {vol.name} ({vol.id})")
+                    conn.block_storage.delete_volume(vol, ignore_missing=True)
+
+                    # Wait for deletion
+                    conn.block_storage.wait_for_delete(vol, wait=wait_time_s)
+                    deleted_volume_ids.append(vol.id)
+
+                return (
+                    DetachVolumesResult(True, True),
+                    deleted_volume_ids,
+                    f"Successfully detached and deleted {len(deleted_volume_ids)} volumes.",
+                )
+
+            except Exception as ex:
+                error_message = f"Volume detach/delete failed: {ex}"
+                _LOGGER.error(error_message)
+
+                if attempt < attempts:
+                    _LOGGER.info(f"Retrying in {retry_delay_s} seconds…")
+                    time.sleep(retry_delay_s)
+
+                attempt += 1
+
+        return (
+            DetachVolumesResult(False, False),
+            [],
+            error_message,
+        )
+
+
     def find_latest_image(
         self,
         conn: openstack.connection.Connection,
@@ -697,35 +1103,44 @@ class OpenstackBackend:
         return ServerResult(True, True, 0), f"({server_name}) deleted successfully."
 
     def remove_external_ip(
-        self, conn: openstack.connection.Connection, server: Server, external_ip: str
+        self,
+        conn: openstack.connection.Connection,
+        server: Server,
+        external_ip: str,
     ):
-        """Remove external IP from the machine.
+        """Detach and release external IP from the machine."""
 
-        :param conn: The OpenStack connection
-        :param server: Server object
-        :param external_ip: The external IP
-        """
         try:
             ports = list(conn.network.ports(device_id=server.id))
             server_port = ports[0]
+
             floating_ips = list(conn.network.ips(port_id=server_port.id))
             fip = floating_ips[0]
+
             _LOGGER.debug(
                 f"Found floating IP {fip.floating_ip_address} on port {server_port.id}"
             )
 
+            # 1. Detach floating IP from the port
             conn.network.update_ip(fip, port_id=None)
             _LOGGER.info(
                 f"Floating IP ({fip.floating_ip_address}) detached from the machine."
             )
 
+            # 2. Release (delete) the floating IP
+            conn.network.delete_ip(fip, ignore_missing=True)
+            _LOGGER.info(
+                f"Floating IP ({fip.floating_ip_address}) released back to the pool."
+            )
+
         except Exception as e:
             _LOGGER.error(
-                f"Floating IP ({fip.floating_ip_address}) not detached from the machine due to: {e}"
+                f"Floating IP ({external_ip}) not detached/released due to: {e}"
             )
             return ExternalIPResult(False, False)
 
         return ExternalIPResult(True, True)
+
 
     def add_external_ip(
         self,
@@ -853,7 +1268,6 @@ class OpenstackBackend:
             _LOGGER.warning(f"{network_name} not found for server {server.name}")
             return NetworkResult(True, False)
 
-
     def ssh_key_matches_openstack(
         self,
         public_key_path: str,
@@ -883,7 +1297,6 @@ class OpenstackBackend:
 
         return local_key == openstack_key
 
-
     def create_keypair(
         self,
         conn: openstack.connection.Connection,
@@ -898,7 +1311,11 @@ class OpenstackBackend:
         :param public_key_path: Path to the public_key_path
         """
         if dry_run:
-            return KeyPairResult(True, False)
+            _LOGGER.debug(f"[Dry Run] Would create keypair '{keypair_name}'.")
+            return (
+                KeyPairResult(True, False),
+                f"[Dry Run] Would create keypair '{keypair_name}'.",
+            )
 
         # Step: Upload the public key
         with open(public_key_path, "r") as key_file:

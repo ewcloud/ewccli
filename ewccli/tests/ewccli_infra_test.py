@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 from ewccli.ewccli import cli
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
+from ewccli.commands.infra_command import pre_delete_server
 
 
 # -----------------------------
@@ -196,3 +197,140 @@ def test_error_server(conn, backend):
     result = backend.list_servers(conn, show_all=True)
 
     assert result["1"]["status"] == "ERROR"
+
+
+class FakeVolume:
+    def __init__(self, vol_id, metadata):
+        self.id = vol_id
+        self.metadata = metadata
+
+
+class FakeServerInfo:
+    def __init__(self, attached_volumes):
+        self.id = "server-123"
+        self.attached_volumes = attached_volumes
+
+
+def test_pre_delete_no_volumes():
+    backend = MagicMock()
+    api = MagicMock()
+
+    server_info = FakeServerInfo(attached_volumes=[])
+
+    rc, msg = pre_delete_server(
+        openstack_backend=backend,
+        openstack_api=api,
+        federee="testfed",
+        server_name="vm1",
+        server_info=server_info,
+        dry_run=False,
+    )
+
+    assert rc == 0
+    assert "finished successfully" in msg
+
+
+def test_pre_delete_non_ewccli_volumes():
+    backend = MagicMock()
+    api = MagicMock()
+
+    server_info = FakeServerInfo(attached_volumes=[{"id": "vol1"}])
+
+    api.block_storage.get_volume.return_value = FakeVolume(
+        "vol1",
+        metadata={"other": "true"}
+    )
+
+    rc, msg = pre_delete_server(
+        openstack_backend=backend,
+        openstack_api=api,
+        federee="testfed",
+        server_name="vm1",
+        server_info=server_info,
+        dry_run=False,
+    )
+
+    assert rc == 0
+    assert "finished successfully" in msg
+    backend.detach_volumes_from_server.assert_not_called()
+
+
+def test_pre_delete_ewccli_volume_detach_delete():
+    backend = MagicMock()
+    api = MagicMock()
+
+    server_info = FakeServerInfo(attached_volumes=[{"id": "vol1"}])
+
+    api.block_storage.get_volume.return_value = FakeVolume(
+        "vol1",
+        metadata={"ewccli": "true", "server_name": "vm1"}
+    )
+
+    backend.detach_volumes_from_server.return_value = (
+        MagicMock(success=True),
+        ["vol1"],
+        "ok"
+    )
+
+    rc, msg = pre_delete_server(
+        openstack_backend=backend,
+        openstack_api=api,
+        federee="testfed",
+        server_name="vm1",
+        server_info=server_info,
+        dry_run=False,
+    )
+
+    assert rc == 0
+    assert "finished successfully" in msg
+    backend.detach_volumes_from_server.assert_called_once()
+
+
+def test_pre_delete_detach_failure():
+    backend = MagicMock()
+    api = MagicMock()
+
+    server_info = FakeServerInfo(attached_volumes=[{"id": "vol1"}])
+
+    api.block_storage.get_volume.return_value = FakeVolume(
+        "vol1",
+        metadata={"ewccli": "true", "server_name": "vm1"}
+    )
+
+    backend.detach_volumes_from_server.return_value = (
+        MagicMock(success=False),
+        [],
+        "detach failed"
+    )
+
+    rc, msg = pre_delete_server(
+        openstack_backend=backend,
+        openstack_api=api,
+        federee="testfed",
+        server_name="vm1",
+        server_info=server_info,
+        dry_run=False,
+    )
+
+    assert rc == 1
+    assert "detach/delete failed" in msg
+
+
+def test_pre_delete_dry_run():
+    backend = MagicMock()
+    api = MagicMock()
+
+    server_info = FakeServerInfo(attached_volumes=[{"id": "vol1"}])
+
+    rc, msg = pre_delete_server(
+        openstack_backend=backend,
+        openstack_api=api,
+        federee="testfed",
+        server_name="vm1",
+        server_info=server_info,
+        dry_run=True,
+    )
+
+    assert rc == 0
+    assert "Dry Run" in msg
+    backend.detach_volumes_from_server.assert_not_called()

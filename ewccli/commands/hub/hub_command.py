@@ -40,6 +40,7 @@ from ewccli.commands.commons import wait_for_dns_record
 from ewccli.commands.commons import load_hub_items
 from ewccli.commands.commons_infra import create_server_command
 from ewccli.commands.commons_infra import check_user_ssh_keys
+from ewccli.commands.commons_infra import CreateServerInputs
 from ewccli.commands.hub.hub_backends import git_clone_item
 from ewccli.commands.hub.hub_backends import run_ansible_playbook_item
 from ewccli.commands.hub.hub_backends import get_hub_item_env_variable_value
@@ -352,6 +353,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     external_ip: bool = False,
     networks: Optional[tuple] = None,
     security_groups: Optional[tuple] = None,
+    extra_volume: Optional[tuple] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
 ):
@@ -616,20 +618,20 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         # Deploy Server (Openstack)
         #####################################################################################
 
-        server_inputs = {
-            "server_name": server_name,
-            "is_gpu": is_gpu,
-            "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value) if not image_name else image_name,
-            "keypair_name": keypair_name,
-            "flavour_name": flavour_name,
-            "external_ip": external_ip
-            or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
-            "networks": networks,
-            "security_groups": security_groups,
-            "item_default_security_groups": item_info_ewccli.get(
+        server_inputs = CreateServerInputs.safe_create(
+            server_name=server_name,
+            is_gpu=is_gpu,
+            image_name=image_name or item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value),
+            keypair_name=keypair_name,
+            flavour_name=flavour_name,
+            external_ip=external_ip or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
+            networks=networks,
+            security_groups=security_groups,
+            item_default_security_groups=item_info_ewccli.get(
                 HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
-            )
-        }
+            ),
+            extra_volume=extra_volume,
+        )
 
         os_status_code, os_message, outputs = create_server_command(
             openstack_backend=openstack_backend,

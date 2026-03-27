@@ -464,6 +464,7 @@ def test_deploy_server_success(conn):
         "security_groups": ("ssh",),
         "resolved_image_name": "Ubuntu-22.04",
         "resolved_flavour_name": "m1.small",
+        "extra_volume": None
     }
 
     pre_deploy_server_outputs = {
@@ -493,6 +494,7 @@ def test_deploy_server_failure(conn):
         "security_groups": ("ssh",),
         "resolved_image_name": "Ubuntu-22.04",
         "resolved_flavour_name": "m1.small",
+        "extra_volume": None
     }
 
     pre_deploy_server_outputs = {
