@@ -353,6 +353,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     external_ip: bool = False,
     networks: Optional[tuple] = None,
     security_groups: Optional[tuple] = None,
+    extra_volume: Optional[tuple] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
 ):
