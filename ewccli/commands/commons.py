@@ -268,14 +268,14 @@ def ssh_options_encoded(func):
         required=False,
         envvar="EWC_CLI_ENCODED_SSH_PRIVATE_KEY",
         type=str,
-        help="Base64 encoded SSH private key.",
+        help="Base64 encoded SSH private key. (or set env var EWC_CLI_ENCODED_SSH_PRIVATE_KEY)",
     )(func)
     func = click.option(
         "--ssh-public-encoded",
         required=False,
         envvar="EWC_CLI_ENCODED_SSH_PUBLIC_KEY",
         type=str,
-        help="Base64 encoded SSH public key.",
+        help="Base64 encoded SSH public key. (or set env var EWC_CLI_ENCODED_SSH_PUBLIC_KEY)",
     )(func)
 
     return func
@@ -285,7 +285,6 @@ def validate_path(ctx, param, value):
     """Validate path."""
     if not value:
         return
-
     try:
         # Expand ~ and resolve to absolute path
         path = Path(value).expanduser().resolve(strict=False)
@@ -317,7 +316,7 @@ def ssh_options(func):
         required=False,
         envvar="EWC_CLI_SSH_PUBLIC_KEY_PATH",
         type=str,
-        help="Path to SSH public key.",
+        help="Path to SSH public key. (or set env var EWC_CLI_SSH_PUBLIC_KEY_PATH)",
         callback=validate_path,
     )(func)
     func = click.option(
@@ -325,7 +324,7 @@ def ssh_options(func):
         required=False,
         envvar="EWC_CLI_SSH_PRIVATE_KEY_PATH",
         type=str,
-        help="Path to SSH private key.",
+        help="Path to SSH private key. (or set env var EWC_CLI_SSH_PRIVATE_KEY_PATH)",
         callback=validate_path,
     )(func)
 
