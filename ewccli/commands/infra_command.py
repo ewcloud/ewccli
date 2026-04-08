@@ -127,6 +127,7 @@ def create_cmd(
     external_ip: bool = False,
     networks: Optional[tuple] = None,
     security_groups: Optional[tuple] = None,
+    extra_volume: Optional[tuple] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
 ):
@@ -176,6 +177,7 @@ def create_cmd(
         "external_ip": external_ip,
         "networks": networks,
         "security_groups": security_groups,
+        "extra_volume": extra_volume
     }
 
     os_status_code, os_message, outputs = deploy_server(
