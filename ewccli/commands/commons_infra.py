@@ -651,7 +651,7 @@ def pre_deploy_server_setup(
 
     outputs["resolved_image_name"] = resolved_image_name
     outputs["normalized_image_name"] = normalized_image_name
-    outputs["flavour_name"] = flavour_name
+    outputs["resolved_flavour_name"] = resolved_flavour_name
 
     ##################################################################################
     # Network (private) and security groups
@@ -734,15 +734,16 @@ def pre_deploy_server_setup(
 
 def identify_server_reconfiguration(
     openstack_api: connection.Connection,
-    server_inputs: dict,  
+    server_inputs: dict,
+    pre_deploy_server_outputs: dict
 ):
     """Identify resources to be reconfigured."""
     outputs: dict[str, Optional[str]] = {}
 
     server_name: str = server_inputs["server_name"]
     keypair_name: str = server_inputs["keypair_name"]
-    flavour_name: Optional[str] = server_inputs["flavour_name"]
-    resolved_image_name: str = server_inputs["resolved_image_name"]
+    flavour_name: Optional[str] = pre_deploy_server_outputs["resolved_flavour_name"]
+    resolved_image_name: str = pre_deploy_server_outputs["resolved_image_name"]
 
     networks: Optional[tuple] = server_inputs["networks"]
     security_groups: Optional[tuple] = server_inputs["security_groups"]
@@ -808,6 +809,7 @@ def deploy_server(
     openstack_api: connection.Connection,
     federee: str,
     server_inputs: dict,
+    pre_deploy_server_outputs: dict,
     dry_run: bool = False,
     force: bool = False,
 ):
@@ -821,8 +823,8 @@ def deploy_server(
     keypair_name: str = server_inputs["keypair_name"]
     networks: Optional[tuple] = server_inputs["networks"]
     security_groups: Optional[tuple] = server_inputs["security_groups"]
-    resolved_image_name: str = server_inputs["resolved_image_name"]
-    resolved_flavour_name: str = server_inputs["resolved_flavour_name"]
+    resolved_image_name: str = pre_deploy_server_outputs["resolved_image_name"]
+    resolved_flavour_name: str = pre_deploy_server_outputs["resolved_flavour_name"]
 
     _LOGGER.info(f"Deploy server {server_name} starting...")
 
@@ -1024,7 +1026,11 @@ def create_server_command(
 
     #### VERIFY IF SERVER RECONFIGURATION IS NEEDED
     if not force:
-        identify_server_reconfiguration()
+        identify_server_reconfiguration(
+            openstack_api=openstack_api,
+            server_inputs=server_inputs,
+            pre_deploy_server_outputs=pre_deploy_server_outputs  
+        )
 
     #### DEPLOY SERVER ACTION
     os_status_code, os_message, deploy_server_outputs = deploy_server(
@@ -1032,6 +1038,7 @@ def create_server_command(
         openstack_api=openstack_api,
         federee=federee,
         server_inputs=server_inputs,
+        pre_deploy_server_outputs=pre_deploy_server_outputs,
         dry_run=dry_run,
         force=force,
     )
