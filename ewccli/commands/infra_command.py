@@ -8,12 +8,14 @@
 
 """EWC CLI: VM interaction."""
 
+import sys
 import os
 from typing import Optional
 
 import rich_click as click
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
 from rich import box
 from click import ClickException
 
@@ -27,7 +29,7 @@ from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
 from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
-from ewccli.commands.commons_infra import deploy_server
+from ewccli.commands.commons_infra import create_server_command
 from ewccli.utils import load_cli_profile
 from ewccli.logger import get_logger
 
@@ -175,10 +177,10 @@ def create_cmd(
         "flavour_name": flavour_name,
         "external_ip": external_ip,
         "networks": networks,
-        "security_groups": security_groups,
+        "security_groups": security_groups
     }
 
-    os_status_code, os_message, outputs = deploy_server(
+    os_status_code, os_message, outputs = create_server_command(
         openstack_backend=ctx.openstack_backend,
         openstack_api=openstack_api,
         federee=federee,
@@ -188,29 +190,26 @@ def create_cmd(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         dry_run=dry_run,
-        force=force,
+        force=force,  
     )
-
-    if not outputs:
-        raise ClickException(os_message)
-
+    internal_ip_machine = outputs["internal_ip_machine"]
+    external_ip_machine = outputs["external_ip_machine"]
     normalized_image_name = outputs.get("normalized_image_name")
+
     username = (
         ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
     )
 
     # If missing the mapping in the configuration is missing, so configuration file needs to be checked.
     if not username:
-        return (
-            1,
-            f"Username {username} is missing or empty",
-            outputs,
-        )
-
-    # server_info = outputs.get("server_info")
-    # external_network = outputs.get("external_network")
-    internal_ip_machine = outputs["internal_ip_machine"]
-    external_ip_machine = outputs.get("external_ip_machine")
+        console.print(
+            Panel(
+                f"[Ansible Item] username for {normalized_image_name} could not be identified.",
+                title="Error",
+                style="red")
+            )
+        # Exit with a non-zero status
+        sys.exit(1)
 
     if os_status_code != 0:
         raise ClickException(os_message)

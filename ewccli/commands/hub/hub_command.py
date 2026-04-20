@@ -38,7 +38,7 @@ from ewccli.commands.commons import default_username
 from ewccli.commands.commons import build_dns_record_name
 from ewccli.commands.commons import wait_for_dns_record
 from ewccli.commands.commons import load_hub_items
-from ewccli.commands.commons_infra import deploy_server
+from ewccli.commands.commons_infra import create_server_command
 from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.hub.hub_backends import git_clone_item
 from ewccli.commands.hub.hub_backends import run_ansible_playbook_item
@@ -607,19 +607,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             raise click.UsageError(validation_message)
 
         #####################################################################################
-        # Deploy Server
+        # Deploy Server (Openstack)
         #####################################################################################
-
-        security_groups_inputs = ()
-
-        if security_groups:
-            security_groups_inputs += security_groups
-
-        item_default_security_groups = item_info_ewccli.get(
-            HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
-        )
-        if item_default_security_groups:
-            security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
 
         server_inputs = {
             "server_name": server_name,
@@ -630,10 +619,13 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             "external_ip": external_ip
             or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
             "networks": networks,
-            "security_groups": security_groups_inputs,
+            "security_groups": security_groups,
+            "item_default_security_groups": item_info_ewccli.get(
+                HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
+            )
         }
 
-        os_status_code, os_message, outputs = deploy_server(
+        os_status_code, os_message, outputs = create_server_command(
             openstack_backend=openstack_backend,
             openstack_api=openstack_api,
             federee=federee,
@@ -643,20 +635,16 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             ssh_public_key_path=ssh_public_key_path,
             ssh_private_key_path=ssh_private_key_path,
             dry_run=dry_run,
-            force=force,
+            force=force,  
         )
 
-        if not outputs:
-            console.print(Panel(os_message, title="Error", style="red"))
-            # Exit with a non-zero status
-            sys.exit(1)
-
         internal_ip_machine = outputs["internal_ip_machine"]
-        external_ip_machine = outputs.get("external_ip_machine")
-        normalized_image_name = outputs["normalized_image_name"]
+        external_ip_machine = outputs["external_ip_machine"]
+        normalized_image_name = outputs.get("normalized_image_name")
 
+        #####################################################################################
         #### DNS CHECK
-
+        #####################################################################################
         check_dns = item_info_ewccli.get(HubItemCLIKeys.CHECK_DNS.value)
 
         if check_dns:
@@ -686,21 +674,24 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                     " directly and the ewc cli will continue checking for the DNS record to be ready and continue from where it left."
                 )
 
+        #######################################################################################
         #### ANSIBLE PLAYBOOK ITEM DEPLOYMENT
+        #######################################################################################
+
         username = (
             ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
         )
 
         # If missing the mapping in the configuration is missing, so configuration file needs to be checked.
         if not username:
-            return (
-                1,
-                f"Username {username} is missing or empty",
-                outputs,
-            )
-
-        # server_info = outputs.get("server_info")
-        # external_network = outputs.get("external_network")
+            console.print(
+                Panel(
+                    f"[Ansible Item] username for {normalized_image_name} could not be identified.",
+                    title="Error",
+                    style="red")
+                )
+            # Exit with a non-zero status
+            sys.exit(1)
 
         # Install requirements for ansible playbook
         requirements_file_relative_path = item_info_ewccli.get(
