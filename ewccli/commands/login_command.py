@@ -10,11 +10,14 @@
 
 import os
 import re
+from typing import Optional
 from pathlib import Path
 
 import rich_click as click
 from rich.console import Console
 from click import ClickException
+
+from configparser import ConfigParser
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.widgets import RadioList, Box, Frame
@@ -31,8 +34,8 @@ from openstack.exceptions import (  # noqa: N813
 )
 
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import save_cli_profile, _resolve_profile
-from ewccli.utils import generate_ssh_keypair, ssh_keys_match
+from ewccli.utils import save_cli_profile, _resolve_profile, load_cli_profile
+from ewccli.utils import generate_ssh_keypair, check_ssh_keys_match
 from ewccli.utils import save_default_login_profile
 from ewccli.enums import Federee
 from ewccli.logger import get_logger
@@ -170,7 +173,6 @@ def init_options(func):
         required=False,
         envvar="EWC_CLI_SSH_PUBLIC_KEY_PATH",
         type=str,
-        default=ewc_hub_config.EWC_CLI_PUBLIC_SSH_KEY_PATH,
         show_default=True,
         help="Path to SSH public key.",
     )(func)
@@ -179,7 +181,6 @@ def init_options(func):
         required=False,
         envvar="EWC_CLI_SSH_PRIVATE_KEY_PATH",
         type=str,
-        default=ewc_hub_config.EWC_CLI_PRIVATE_SSH_KEY_PATH,
         show_default=True,
         help="Path to SSH private key.",
     )(func)
@@ -238,11 +239,17 @@ def select_provider():
 
 
 def check_and_generate_ssh_keys(
-    ssh_public_key_path: str,
-    ssh_private_key_path: str,
+    ssh_public_key_path: Optional[str],
+    ssh_private_key_path: Optional[str],
     resolved_profile: str
 ):
     """Check for SSH keys, prompt to generate if missing"""
+    if not ssh_private_key_path:
+        ssh_private_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa"
+
+    if not ssh_public_key_path:
+        ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa.pub"
+
     private_exists = Path(ssh_private_key_path).exists()
     public_exists = Path(ssh_public_key_path).exists()
 
@@ -253,9 +260,9 @@ def check_and_generate_ssh_keys(
             f"\nSSH public key path: {ssh_public_key_path}"
             f"\nSSH private key path: {ssh_private_key_path}\n"
         )
-        console.print("SSH key pair exists, checking consitency...")
+        console.print("SSH key pair exists, checking consistency...")
 
-        is_matching = ssh_keys_match(
+        is_matching = check_ssh_keys_match(
             ssh_private_key_path=ssh_private_key_path,
             ssh_public_key_path=ssh_public_key_path
         )
@@ -276,7 +283,7 @@ def check_and_generate_ssh_keys(
     elif not private_exists and not public_exists:
         # case 2: neither exists
         console.print(
-            "SSH key pair is missing:"
+            "SSH keypair is missing:"
             f"\nSSH public key path: {ssh_public_key_path}"
             f"\nSSH private key path: {ssh_private_key_path}\n"
         )
@@ -318,7 +325,7 @@ def init_command(
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
-    profile: str = None,
+    profile: str = None
     # token: str,
 ):
     """EWC CLI Login."""
@@ -333,11 +340,32 @@ def init_command(
 
     resolved_profile = _resolve_profile(profile, federee, tenant_name)
 
+    profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+
+    if not os.path.exists(profiles_file_path) or not cfg.sections():
+        pass
+    else:
+        # Check only when the profile path exist
+        if resolved_profile and resolved_profile in cfg:
+            click.secho(
+                f"❌ Profile '{resolved_profile}' already exists in {ewc_hub_config.EWC_CLI_PROFILES_PATH}",
+                fg="red",
+                bold=True,
+            )
+            click.secho(
+                "Use a different profile name or delete the existing profile first.",
+                fg="yellow",
+            )
+            raise click.Abort()
+
     ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         resolved_profile=resolved_profile,
     )
+    
 
     if openstack_config_available():
         console.print(
