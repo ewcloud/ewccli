@@ -28,7 +28,7 @@ def test_existing_matching_keys(tmp_path, monkeypatch):
 
     # Patch where function is USED
     monkeypatch.setattr(
-        "ewccli.commands.login_command.ssh_keys_match",
+        "ewccli.commands.login_command.check_ssh_keys_match",
         lambda ssh_private_key_path, ssh_public_key_path: True,
     )
 
@@ -53,7 +53,7 @@ def test_existing_mismatching_keys(tmp_path, monkeypatch):
     pub.write_text("public")
 
     monkeypatch.setattr(
-        "ewccli.commands.login_command.ssh_keys_match",
+        "ewccli.commands.login_command.check_ssh_keys_match",
         lambda ssh_private_key_path, ssh_public_key_path: False,
     )
 

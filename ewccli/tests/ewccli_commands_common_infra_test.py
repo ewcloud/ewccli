@@ -190,6 +190,43 @@ def test_get_deployed_server_info_no_addresses():
     assert vm_info["security-groups"] == []
 
 
+def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
+    backend = MagicMock()
+    backend.check_server_inputs.return_value = (True, "")
+    backend.create_keypair.return_value = ((True,), "keypair created")
+
+    server_inputs = {
+        "keypair_name": "mykey",
+        "is_gpu": False,
+        "image_name": None,
+        "flavour_name": None,
+        "security_groups": (),
+        "item_default_security_groups": (),
+        "networks": ("private",),
+    }
+
+    with patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
+         patch("ewccli.commands.commons_infra.resolve_image_and_flavor",
+               return_value=(0, "ok", {
+                   "image_name": "Ubuntu-22.04",
+                   "normalized_image_name": "Ubuntu-22.04",
+                   "flavour_name": "m1.small"
+               })), \
+         patch("ewccli.commands.commons_infra.save_encoded_ssh_keys",
+               return_value=(False, False)):
+
+        code, msg, outputs = pre_deploy_server_setup(
+            backend, conn, "EUMETSAT", server_inputs,
+            ssh_public_key_path="/tmp/id.pub",
+            ssh_private_key_path="/tmp/id",
+            ssh_private_encoded="AAA",
+            ssh_public_encoded="BBB"
+        )
+
+    assert code == 1
+    assert "Both encoded SSH keys are invalid" in msg
+
+
 def test_pre_deploy_server_setup_success(conn):
     backend = MagicMock()
     backend.check_server_inputs.return_value = (True, "")
@@ -205,8 +242,7 @@ def test_pre_deploy_server_setup_success(conn):
         "networks": ("private",),
     }
 
-    with patch("ewccli.commands.commons_infra.save_ssh_keys"), \
-         patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
+    with patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
          patch("ewccli.commands.commons_infra.resolve_image_and_flavor",
                return_value=(0, "ok", {
                    "image_name": "Ubuntu-22.04",
@@ -217,13 +253,13 @@ def test_pre_deploy_server_setup_success(conn):
         code, msg, outputs = pre_deploy_server_setup(
             backend, conn, "EUMETSAT", server_inputs,
             ssh_public_key_path="/tmp/id.pub",
-            ssh_private_key_path="/tmp/id",
-            ssh_private_encoded="AAA",
-            ssh_public_encoded="BBB"
+            ssh_private_key_path="/tmp/id"
         )
 
     assert code == 0
     assert "successfully" in msg
+    assert outputs["resolved_image_name"] == "Ubuntu-22.04"
+    assert outputs["resolved_flavour_name"] == "m1.small"
 
 
 def test_pre_deploy_server_setup_invalid_inputs(conn):
@@ -240,8 +276,7 @@ def test_pre_deploy_server_setup_invalid_inputs(conn):
         "networks": ("private",),
     }
 
-    with patch("ewccli.commands.commons_infra.save_ssh_keys"), \
-         patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
+    with patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
          patch("ewccli.commands.commons_infra.resolve_image_and_flavor",
                return_value=(0, "ok", {
                    "image_name": "Ubuntu-22.04",

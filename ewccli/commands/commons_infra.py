@@ -21,7 +21,7 @@ from rich import box
 from click import ClickException
 from openstack import connection
 
-from ewccli.utils import save_encoded_ssh_keys, ssh_keys_match
+from ewccli.utils import save_encoded_ssh_keys, check_ssh_keys_match
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.enums import Federee
 from ewccli.configuration import config as ewc_hub_config
@@ -44,20 +44,17 @@ def check_user_ssh_keys(
         return
 
     # If still missing, raise exception
-    missing_ssh_keys = []
-    if not ssh_public_key_path:
-        missing_ssh_keys.append("--ssh-public-key-path")
+    keys_exist = check_ssh_keys_exist(
+        ssh_private_key_path=ssh_private_key_path,
+        ssh_public_key_path=ssh_public_key_path
+    )
 
-    if not ssh_private_key_path:
-        missing_ssh_keys.append("--ssh-private-key-path")
-
-    if missing_ssh_keys:
+    if not keys_exist:
         raise ClickException(
-            f"Missing required SSH key path(s): {', '.join(missing_ssh_keys)}. "
-            "Pass them via CLI flags or run `ewc login` to generate them."
+            f"\n Exiting."
         )
 
-    is_matching = ssh_keys_match(
+    is_matching = check_ssh_keys_match(
         ssh_private_key_path=ssh_private_key_path,
         ssh_public_key_path=ssh_public_key_path
     )
@@ -188,7 +185,7 @@ def show_server_inputs_difference_table(server_name: str, diffs: dict):
     )
 
 
-def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) -> None:
+def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) -> bool:
     """
     Verifies the existence of the specified SSH key files.
 
@@ -235,7 +232,9 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
                 panel_content, title="SSH Key Check Failed", style="red", expand=False
             )
         )
-        sys.exit(1)
+        return False
+
+    return True
 
 
 def normalize_os_image(image_name: str, federee: str) -> tuple[str | None, bool]:
@@ -624,27 +623,43 @@ def pre_deploy_server_setup(
 
     if ssh_public_encoded or ssh_private_encoded:
         if ssh_public_encoded:
-            ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH + f"tmp_encoded_public_key_{keypair_name}"
+            ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"tmp_encoded_public_key_{keypair_name}"
 
         if ssh_private_encoded:
-            ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH + f"tmp_encoded_public_key_{keypair_name}"
+            ssh_private_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"tmp_encoded_private_key_{keypair_name}"
 
-        save_encoded_ssh_keys(
-            ssh_public_key_path=ssh_private_key_path,
+        public_written, private_written = save_encoded_ssh_keys(
+            ssh_public_key_path=ssh_public_key_path,
             ssh_private_key_path=ssh_private_key_path,
             ssh_public_encoded=ssh_public_encoded,
             ssh_private_encoded=ssh_private_encoded
         )
 
-        check_user_ssh_keys(
-            ssh_public_key_path=ssh_public_key_path,
-            ssh_private_key_path=ssh_private_key_path
-        )
+        # Only validate keys if both were successfully written
+        if public_written and private_written:
+            check_user_ssh_keys(
+                ssh_public_key_path=ssh_public_key_path,
+                ssh_private_key_path=ssh_private_key_path
+            )
 
-    check_ssh_keys_exist(
+        # Casw 2: one valid → tell me which one
+        elif public_written and not private_written:
+            return 1, f"[Pre deploy server setup] Invalid encoded private key: could not decode or write private key.", outputs
+
+        elif private_written and not public_written:
+            return 1, f"[Pre deploy server setup] Invalid encoded public key: could not decode or write public key.", outputs
+
+        # Case 3: None valid → fail.
+        else:
+            return 1, f"[Pre deploy server setup] Both encoded SSH keys are invalid: cannot decode or write either key.", outputs
+
+    keys_exist = check_ssh_keys_exist(
         ssh_public_key_path=Path(ssh_public_key_path),
         ssh_private_key_path=Path(ssh_private_key_path),
     )
+
+    if not keys_exist:
+        return 1, f"\n[Pre deploy server setup] Exiting.", outputs
 
     ##################################################################################
     # Flavour and Image

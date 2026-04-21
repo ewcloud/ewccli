@@ -477,33 +477,30 @@ def download_items(force: bool = False):
 
 def load_ssh_private_key(encoded_key: Optional[str] = None):
     """Load SSH private key"""
-    if encoded_key:
-        try:
-            private_key = base64.b64decode(encoded_key).decode("utf-8")
-            # Use the private_key variable with ssh-add or other SSH tools
-            return private_key
-        except Exception as e:
-            _LOGGER.error(f"Error decoding private key: {e}")
-            sys.exit(1)
-    else:
+    if encoded_key is None:
         _LOGGER.error("EWC_CLI_ENCODED_SSH_PRIVATE_KEY environment variable not set.")
         sys.exit(1)
 
+    try:
+        private_key = base64.b64decode(encoded_key).decode("utf-8")
+        return private_key
+    except Exception as e:
+        _LOGGER.error(f"Error decoding private key: {e}")
+        return None
+
 
 def load_ssh_public_key(encoded_key: Optional[str] = None):
-    """Load SSH public key"""
-    # OpenSSH public keys have the format: <key-type> <base64-data> <comment>
-    if encoded_key:
-        try:
-            public_key = base64.b64decode(encoded_key).decode("utf-8")
-            # Use the public_key variable with ssh-add or other SSH tools
-            return public_key
-        except Exception as e:
-            _LOGGER.error(f"Error decoding public key: {e}")
-            sys.exit()
-    else:
+    """Load SSH public key from a base64-encoded string."""
+    if encoded_key is None:
         _LOGGER.error("EWC_CLI_ENCODED_SSH_PUBLIC_KEY environment variable not set.")
         sys.exit(1)
+
+    try:
+        public_key = base64.b64decode(encoded_key).decode("utf-8")
+        return public_key
+    except Exception as e:
+        _LOGGER.error(f"Error decoding public key: {e}")
+        return None
 
 
 def verify_private_key(private_key: str):
@@ -530,7 +527,7 @@ def verify_private_key(private_key: str):
         sys.exit(1)
 
 
-def ssh_keys_match(ssh_private_key_path: str, ssh_public_key_path: str) -> bool:
+def check_ssh_keys_match(ssh_private_key_path: str, ssh_public_key_path: str) -> bool:
     """
     Check whether an SSH private key corresponds to a given public key.
 
@@ -607,25 +604,40 @@ def save_encoded_ssh_keys(
     ssh_private_encoded: Optional[str] = None,
 ):
     """Store SSH keys provided as encoded strings."""
+    public_written = False
+    private_written = False
+
+    # PUBLIC KEY
     if ssh_public_encoded:
         _LOGGER.info("Using encoded public key provided.")
         public_key = load_ssh_public_key(encoded_key=ssh_public_encoded)
-        save_ssh_key(
-            ssh_key=public_key, path_key=ssh_public_key_path
-        )
 
+        if public_key is not None:
+            ssh_public_key_path.parent.mkdir(parents=True, exist_ok=True)
+            save_ssh_key(
+                ssh_key=public_key, path_key=ssh_public_key_path
+            )
+            public_written = True
+
+    # PRIVATE KEY
     if ssh_private_encoded:
         _LOGGER.info("Using encoded private key provided.")
         private_key = load_ssh_private_key(encoded_key=ssh_private_encoded)
-        verify_private_key(private_key=private_key)
-        save_ssh_key(
-            ssh_key=private_key, path_key=ssh_private_key_path
-        )
+
+        if private_key is not None:
+            ssh_private_key_path.parent.mkdir(parents=True, exist_ok=True)
+            verify_private_key(private_key=private_key)
+            save_ssh_key(
+                ssh_key=private_key, path_key=ssh_private_key_path
+            )
+            private_written = True
+
+    return public_written, private_written
 
 
 def generate_ssh_keypair(
     resolved_profile: str
-):
+) -> Tuple[str, str]:
     """Generate RSA SSH Key Pair and save to ~/.ssh"""
     private_key = rsa.generate_private_key(
         public_exponent=65537, key_size=2048, backend=default_backend()
@@ -644,9 +656,10 @@ def generate_ssh_keypair(
     )
 
     # Ensure parent directories exist
-    Path(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH).parent.mkdir(parents=True, exist_ok=True)
+    Path(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH).mkdir(parents=True, exist_ok=True)
 
     ssh_private_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa"
+
     # Save private key
     with open(ssh_private_key_path, "wb") as f:
         f.write(private_key_pem)
@@ -666,4 +679,4 @@ def generate_ssh_keypair(
         f"SSH key pair generated at {ssh_private_key_path} and {ssh_public_key_path}"
     )
 
-    return ssh_private_key_path, ssh_public_key_path
+    return ssh_private_key_path.as_posix(), ssh_public_key_path.as_posix()
