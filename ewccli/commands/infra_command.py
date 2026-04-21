@@ -81,13 +81,15 @@ def list_server_table(servers: dict):
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Status", style="magenta")
     table.add_column("Networks", style="yellow")
+    table.add_column("Flavor", style="yellow")
 
     # Add each server as a row
     for server_id, server_info in servers.items():
         name = str(server_info.get("name", ""))
         status = str(server_info.get("status", ""))
         networks = str(server_info.get("networks", ""))
-        table.add_row(name, status, networks)
+        flavor = str(server_info.get("flavor", ""))
+        table.add_row(name, status, networks, flavor)
 
     console.print(table)
 
