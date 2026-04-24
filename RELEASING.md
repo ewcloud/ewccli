@@ -1,17 +1,40 @@
 # Releasing ewccli
 
-0. Make sure the code references the correct new version you want in the pyproject.yaml and in the __init__.py
-1. checkout main branch: `git checkout main`
-2. pull from repo: `git pull`
-3. run the unittests with pytest.
-4. Update the `CHANGELOG.md` file using vim or similar. (You can use `git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s (%h)" > CHANGELOG_UNRELEASED.md` to generate the list of commits and PR used also)
+## Prepare changelog and tag
+
+### 0. Pull latest main and create new branch
+```bash
+git checkout main
+git pull
+git checkout -b release/vX.Y.Z
+```
+
+### 1. Prepare the version bump
+
+Update the version in:
+
+- `pyproject.toml`
+- `ewccli/__init__.py`
+
+### 2. Run the full test suite (it will be run also in the PR but anyway)
+```bash
+pytest
+```
+
+### 3. Update the CHANGELOG
+Generate the list of commits since the last tag and update the `CHANGELOG.md` file using vim or similar. (You can use for example `git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"- %s (%h)" > CHANGELOG_UNRELEASED.md` to generate the list of commits and PR used also)
 ```
 ### Bug Fixes
 * Force ansible roles download when new versions exist ([#22](https://github.com/ewcloud/ewccli/pull/22)) ([#3](https://github.com/ewcloud/ewccli/issues/3)) ([9263391](https://github.com/ewcloud/ewccli/commit/92633917a71d3cf5cf6aea23f4fef83e052f3f92))
 * Remove dependency not used ([#19](https://github.com/ewcloud/ewccli/pull/19)) ([#6](https://github.com/ewcloud/ewccli/issues/6)) ([d44135b](https://github.com/ewcloud/ewccli/commit/d44135bbaf8864722dc324f201d0ad4f61c5a89d))
 ```
-5. git add CHANGELOG.md
-6. git commit --cleanup=whitespace # commit title and body to be added. Example below:
+
+### 4. Commit the release changes
+```bash
+git add CHANGELOG.md pyproject.toml ewccli/__init__.py
+git commit --cleanup=whitespace -m "chore: release X.Y.Z"
+```
+
 ```
 chore: 0.2.0 [skip ci]
 
@@ -27,10 +50,21 @@ chore: 0.2.0 [skip ci]
 - fix: Set DNS check to 15 minutes [9f24e2f](https://github.com/ewcloud/ewccli/commit/9f24e2f5a7584db980eb0863fc9ab57521536151)
 - fix: ewc hub list command item name should show all name always ([#25](https://github.com/ewcloud/ewccli/pull/25)) [e4869fc](https://github.com/ewcloud/ewccli/commit/e4869fcd4757910160ec68894417fae76ca622b5)
 ```
-7. Create a tag with the new version number, eg:
+
+### 5. Open a Pull Request titled: `Release X.Y.Z`and Request review from a colleague.
+Push your branch:
+
+```bash
+git push -u origin release/vX.Y.Z
+
+```
+
+### 6. Once approved and CI pass, merge the PR.
+
+### 7. Pull the updated main locally and create a tag with the new version number, eg:
 
    ```
-   git tag -a <new version> -m "Version <new version>"
+   git tag -a <X.Y.Z> -m "Version <X.Y.Z>"
    ```
 
    For example if the previous tag was `0.1.1` and the new release is a
@@ -42,23 +76,15 @@ chore: 0.2.0 [skip ci]
 
    See [semver.org](http://semver.org/) on how to write a version number.
 
-8. Push commits `git push`
-9. Push tags to github `git push --follow-tags`
-10. Verify github action unittests passed.
-11. Create a "Release" on GitHub by going to
-   https://github.com/eumetsat/MetopDatasets.jl/releases and clicking "Draft a new release".
-   On the next page enter the newly created tag in the "Tag version" field,
-   "Version X.Y.Z" in the "Release title" field, and paste the markdown from
-   the changelog (the portion under the version section header) in the
-   "Describe this release" box. Finally click "Publish release".
+### 8. Push tags to GitHub `git push --follow-tags`
 
-12. Now you can start the process to release on PyPI (only admins)
+## Release on PyPI (only admins with PyPI keys)
 
-12.1 Build package
+### 1. Build package
 
-Now generate the distribution. To build the package, use PyPA build.
+To build the package and generate the distribution, use PyPA build.
 
-1. Install the build tool
+#### 1.1. Install the build tool
 ```bash
 pip install -q build
 ```
@@ -69,9 +95,9 @@ python3 -m build
 
 you will end up with a `/dist` file. The .whl file and .tar.gz can then be distributed and installed or pushed to PyPI.
 
-9.2 Push package to PyPI
+### 2. Push package to TestPyPI
 
-Install twine
+#### 2.1. Install twine
 ```bash
 pip install twine
 ```
@@ -81,36 +107,45 @@ If you want to test first, use TestPyPI:
 twine upload --repository testpypi dist/*
 ```
 
+You'll be prompted for your TestPyPI username & password.
+
+Once done check on [TestPyPI](https://test.pypi.org/).
+
+### 3. Push package to PyPI
+
 To upload your package to PyPI, use Twine:
 ```bash
 twine upload dist/*
 ```
 You'll be prompted for your PyPI username & password.
 
-10. Once release is on PyPI, you can create the change on conda-forge (only admins) https://www.pyopensci.org/python-package-guide/tutorials/publish-conda-forge.html#
+## Release on conda-forge (only admins) NOT AVAILABLE YET, SKIP FOR NOW.
+
+Once release is on PyPI, you can create the change on conda-forge (only admins) https://www.pyopensci.org/python-package-guide/tutorials/publish-conda-forge.html#
 
 Step 1: Install grayskull
+
 ```bash
 pip install grayskull
 ```
 
 Step 2: Fork and clone the conda-forge staged-recipes repository
-```
+
+```bash
 git clone git@github.com:conda-forge/staged-recipes.git
 ```
 
-
 Step 3: Create your conda-forge recipe
 
-```
+```bash
 cd staged-recipes/
 ```
 
-```
+```bash
 cd examples/
 ```
 
-```
+```bash
 grayskull pypi ewccli
 ```
 
