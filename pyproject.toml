@@ -1,11 +1,11 @@
 # Package Name: ewccli
 # License: GPL-3.0-or-later
-# Copyright (c) 2025 EUMETSAT, ECMWF for European Weather Cloud
+# Copyright (c) 2025, 2026 EUMETSAT, ECMWF for European Weather Cloud
 # See the LICENSE file for more details
 
 [project]
 name = "ewccli"
-version = "0.3.0"
+version = "0.3.1"
 description = "Python package to handle EWC resources."
 authors = [
     { name = "EWC", email = "support@europeanweather.cloud" }
