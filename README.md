@@ -1,26 +1,81 @@
-# ewccli
+<!-- PROJECT LOGO -->
+<br />
+<div align="center">
+  <a href="https://github.com/othneildrew/Best-README-Template">
+    <img src="https://raw.githubusercontent.com/ewcloud/ewc-community-hub/refs/heads/main/logos/EWCLogo.png" alt="Logo" width="80" height="80">
+  </a>
 
-`ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). This tool is developed to support EWC users on the use of the EWC services.
+  <h3 align="center">ewccli</h3>
 
-For more info about this SW, you may contact the [European Weather Cloud](http://support.europeanweather.cloud/)
-<[support@europeanweather.cloud](mailto:support@europeanweather.cloud)>.
+  <p align="center">
+    European Weather Cloud Command Line Interface
+    <br />
+    <a href="https://confluence.ecmwf.int/x/u0XOIQ#CommunityHubToolingDeployingviaewccli-VideoDemo">View Usage Demo</a>
+    &middot;
+    <a href="https://github.com/ewcloud/ewccli/issues">Report Bugs</a>
+    &middot;
+    <a href="https://github.com/ewcloud/ewccli/issues">Request Features</a>
+    &middot;
+    <a href="mailto:support@europeanweather.cloud">Get Support</a>
+  </p>
+</div>
 
-## Copyright and License
-Copyright © EUMETSAT, ECMWF 2025, 2026
+<!-- TABLE OF CONTENTS -->
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li><a href="#introduction">Introduction</a></li>
+    <li><a href="#prerequisties">Prerequisites</a>
+      <ul>
+        <li><a href="#openstack-inputs">Openstack Inputs</a></li>
+      </ul>
+    </li>
+    <li><a href="#installing">Installing</a></li>
+      <ul>
+        <li><a href="#installing-with-pip-from-pypi">Installing with PIP from PyPI</a></li>
+        <li><a href="#installing-from-source">Installing from source</a></li>
+        <li><a href="#installing-in-a-container">Installing in a container</a></li>
+      </ul>
+    <li><a href="#getting-started">Getting started</a></li>
+    <li><a href="#login-to-prepare-the-environment">Login to prepare the environment</a></li>
+    <li><a href="#list-items-in-the-catalog">List Items in the catalog</a></li>
+    <li><a href="#deploy-items-from-the-catalog">Deploy Items from the catalog</a></li>
+    <li><a href="#test-items-unreleased-or-from-private-sources">Test Items unreleased or from private sources</a></li>
+      <ul>
+        <li><a href="#preparing-a-test">Preparing a test</a></li>
+        <li><a href="#running-a-test">Running a test</a></li>
+      </ul>
+    <li><a href="#Backends">Deploy a custom Item</a></li>
+      <ul>
+        <li><a href="#Openstack">Openstack</a></li>
+        <li><a href="#Ansible">Ansible</a></li>
+        <li><a href="#Terraform">Terraform</a></li>
+        <li><a href="#Kubernetes">Kubernetes</a></li>
+      </ul>
+    <li><a href="#sw-bill-of-materials-(sbom)">SW Bill of Materials</a></li>
+      <ul>
+        <li><a href="#dependencies">Dependencies</a></li>
+        <li><a href="#build/edit/test-dependencies">Build/Edit/Test Dependencies</a></li>
+      </ul>
+    <li><a href="#changelog">Changelog</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#development">Development</a></li>
+    <li><a href="#code-styling">Code Styling</a></li>
+      <ul>
+        <li><a href="#resolving-style-issues">Resolving Style Issues</a></li>
+      </ul>
+    <li><a href="#code-unittesting">Code Unittesting</a></li>
+    <li><a href="#coverage-reporting">Coverage Reporting</a></li>
+    <li><a href="#documenting">Documenting</a></li>
+    <li><a href="#copyright-and-license">Copyright and License</a></li>
+    <li><a href="#authors">Authors</a></li>
+  </ol>
+</details>
 
-The provided code and instructions are licensed under [GPLv3+](./LICENSE).
-They are intended to automate the setup of an environment that includes
-third-party software components.
-The usage and distribution terms of the resulting environment are
-subject to the individual licenses of those third-party libraries.
+## Introduction
 
-Users are responsible for reviewing and complying with the licenses of
-all third-party components included in the environment.
+The `ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). This tool is developed to support EWC users on the use of the EWC services.
 
-Contact [EUMETSAT](http://www.eumetsat.int) for details on the usage and distribution terms.
-
-## Authors
-* [**Francesco Murdaca**](mailto:francesco.murdaca@eumetsat.int) - *Initial work and maintainer* - [EUMETSAT](http://www.eumetsat.int)
 
 ## Prerequisites
 
@@ -147,9 +202,9 @@ ssh_public_key_path =
 ssh_private_key_path =
 ```
 
-## List items
+## List Items in the catalog
 
-The following command shows the current available items. Official items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
+The following command shows the current available Items. Official Items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
 
 ```bash
 ewc hub list
@@ -157,7 +212,7 @@ ewc hub list
 ![ewccli-hub-list](https://raw.githubusercontent.com/ewcloud/ewccli/main/images/ewccli-hub-list.png)
 
 
-## Deploy an item
+## Deploy Items from the catalog
 
 ![ewccli-hub-deploy](https://raw.githubusercontent.com/ewcloud/ewccli/main/images/ewccli-hub-deploy.png)
 
@@ -166,24 +221,35 @@ ewc hub deploy ITEM
 ```
 where ITEM is taken from `ewc hub list` command under Item column.
 
-## Deploy a custom item
+## Test Items unreleased or from private sources
 
-If you want to test the deployment of a new item, not yet published to EWC Community Hub, you can use the `--path-to-catalog` flag available. 
+If you would like to test the deployment of:
+* **an Item with private source code (local or remote)**
+  
+  OR
+* **a new Item, not yet published in the EWC Community Hub**
 
-For example you can create the following custom catalogue `custom_catalog.yaml` with the following Ansible Playbook item (you can have more in case):
+  OR
 
-NOTE: Please verify the latest metadata needed for an item directly from the official EWC Hub Catalogue page available [here](https://github.com/ewcloud/ewc-community-hub?tab=readme-ov-file#items-metadata).
+* **a new version of an Item, not yet updated in the EWC Community Hub**
+
+you can take advantage of the `--path-to-catalog` to point the EWCCLI to the correct source location, and deploy the Item to your target tenant of choice.
+
+### Preparing a test
+Create a local catalogue file, named `./custom_catalog.yaml`, with the complete metadata for your Item:
+
+>⚠️ Always verify the latest Items metadata schema directly from the [EWC Hub Catalogue documentation](https://github.com/ewcloud/ewc-community-hub?tab=readme-ov-file#items-metadata).
 
 ```yaml
 apiVersion: communityhub.europeanweather.cloud/v1alpha1
 kind: CommunityHubCatalog
 spec:
-  items:
+  Items:
     my-test-item:
       name: "my-test-item"
       version: "0.0.1"
       description: |
-        My first item in EWC Community Hub
+        My first Item in EWC Community Hub
 
       ewccli:
         pathToRequirementsFile: path_to_your_requirements_file
@@ -211,8 +277,8 @@ spec:
         supportLevel: "Community"
         licenseType: "Apache License 2.0"
         others: "Deployable,EWCCLI-compatible"
-      displayName: My First EWC Community hub item
-      summary: My test item
+      displayName: My First EWC Community hub Item
+      summary: My test Item
       license: https://github.com/your-repo/blob/main/LICENSE
       published: true
 ```
@@ -221,20 +287,24 @@ where
 
 - `sources` can be (only the first element in the list is considered):
     - Public repo URL (e.g. https://github.com/your-repo.git) if your repository is public already
-    - Absolute path to a directory with the item (e.g. /home/murdaca/custom-items/new-item). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
+    - Absolute path to a directory with the Item (e.g. `/home/murdaca/custom-items/new-item`). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
 - `pathToMainFile` is the relattive path to your directory or repository
 - `pathToRequirementsFile` is the relattive path to your directory or repository
 - `publicIP` is a flag used to enable deployment of 
 - `ewccli.inputs` is the list of inputs you want the user to be able to provide, they can be mandatory or optional, respecively with default key not set or set.
 
-Once ready you can try the following commands:
+### Running a test
+Once metadata is correct and complete, execute `list`, `show` or `deploy` commands as needed:
 
 ```bash
-ewc hub --path-to-catalog PATH-TO-CATALOG list|show|deploy
+ewc hub --path-to-catalog ./custom_catalog.yaml list|show|deploy
 ```
-where PATH-TO-CATALOG is by default the official published catalog available [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
-
-list|show|deploy commands work the same, but they will rely on a custom catalogue file.
+```bash
+ewc hub --path-to-catalog ./custom_catalog.yaml show
+```
+```bash
+ewc hub --path-to-catalog ./custom_catalog.yaml deploy
+```
 
 ## Backends
 
@@ -360,9 +430,26 @@ Generate unittest coverage reports in standard formats by executing:
 coverage run --module pytest --no-header --verbose -ra --junitxml=coverage.xml --html=coverage.html
 ```
 
-## Documentating
+## Documenting
 Generate documentation from source code docstrings:
 
 ```bash
 sphinx-build -b html docs/source/ Documentation/
 ```
+
+## Copyright and License
+Copyright © EUMETSAT, ECMWF 2026
+
+The provided code and instructions are licensed under [GPLv3+](./LICENSE).
+They are intended to automate the setup of an environment that includes
+third-party software components.
+The usage and distribution terms of the resulting environment are
+subject to the individual licenses of those third-party libraries.
+
+Users are responsible for reviewing and complying with the licenses of
+all third-party components included in the environment.
+
+Contact [EUMETSAT](http://www.eumetsat.int) for details on the usage and distribution terms.
+
+## Authors
+* [**Francesco Murdaca**](mailto:francesco.murdaca@eumetsat.int) - *Initial work and maintainer* - [EUMETSAT](http://www.eumetsat.int)
