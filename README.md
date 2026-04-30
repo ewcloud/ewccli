@@ -244,7 +244,7 @@ Create a local catalogue file, named `./custom_catalog.yaml`, with the complete 
 apiVersion: communityhub.europeanweather.cloud/v1alpha1
 kind: CommunityHubCatalog
 spec:
-  Items:
+  items:
     my-test-item:
       name: "my-test-item"
       version: "0.0.1"
