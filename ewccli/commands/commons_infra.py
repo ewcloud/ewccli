@@ -45,8 +45,8 @@ def check_user_ssh_keys(
 
     # If still missing, raise exception
     keys_exist = check_ssh_keys_exist(
-        ssh_private_key_path=ssh_private_key_path,
-        ssh_public_key_path=ssh_public_key_path
+        ssh_private_key_path=Path(ssh_private_key_path),
+        ssh_public_key_path=Path(ssh_public_key_path)
     )
 
     if not keys_exist:
