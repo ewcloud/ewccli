@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 
 
+# 0.3.2
+
+### Bug Fixes
+- datatype for inputs of check_ssh_keys_exist is Path not str ([#106](https://github.com/ewcloud/ewccli/pull/106)) ([26ce614](https://github.com/ewcloud/ewccli/commit/26ce6141771b4f6948bdf7afac38a56adae8dd40))
+
 # 0.3.1
 
 ### Bug Fixes
