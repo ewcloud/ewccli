@@ -11,31 +11,25 @@
 import base64
 
 import pytest
-import os
-from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
-from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import (
-    load_ssh_private_key,
-    load_ssh_public_key,
-    verify_private_key,
-    save_ssh_key,
-    save_encoded_ssh_keys,
-    generate_ssh_keypair,
-)
+from ewccli.ssh_keys_manager import SSHKeyManager, SSHKeyError
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def manager() -> SSHKeyManager:
+    return SSHKeyManager()
 
 
 @pytest.fixture
 def valid_private_key_pem() -> str:
-    """
-    Fixture that generates a valid RSA private key in PEM format.
-
-    Returns:
-        str: PEM-encoded RSA private key.
-    """
+    """Generate a valid RSA private key in PEM format."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     pem = key.private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -47,16 +41,7 @@ def valid_private_key_pem() -> str:
 
 @pytest.fixture
 def valid_public_key_openssh(valid_private_key_pem: str) -> str:
-    """
-    Fixture that derives a valid OpenSSH-formatted public key
-    from the generated private key.
-
-    Args:
-        valid_private_key_pem (str): PEM-encoded private key.
-
-    Returns:
-        str: OpenSSH public key string.
-    """
+    """Derive a valid OpenSSH public key from the private key."""
     private_key = serialization.load_pem_private_key(
         valid_private_key_pem.encode("utf-8"), password=None
     )
@@ -67,122 +52,137 @@ def valid_public_key_openssh(valid_private_key_pem: str) -> str:
     ).decode("utf-8")
 
 
-def test_load_ssh_private_key_success(valid_private_key_pem):
-    """
-    Test that `load_ssh_private_key` decodes base64-encoded PEM correctly.
-    """
-    encoded = base64.b64encode(valid_private_key_pem.encode("utf-8")).decode("utf-8")
-    result = load_ssh_private_key(encoded_key=encoded)
+# ---------------------------------------------------------------------------
+# Decoding tests
+# ---------------------------------------------------------------------------
+
+def test_load_private_encoded_success(manager, valid_private_key_pem):
+    encoded = base64.b64encode(valid_private_key_pem.encode()).decode()
+    result = manager.load_private_encoded(encoded)
     assert "BEGIN RSA PRIVATE KEY" in result
 
 
-def test_load_ssh_private_key_missing(monkeypatch):
-    """
-    Test that `load_ssh_private_key` exits with error when no key is provided.
-    """
-    with pytest.raises(SystemExit):
-        load_ssh_private_key(encoded_key=None)
+def test_load_private_encoded_missing(manager):
+    with pytest.raises(SSHKeyError):
+        manager.load_private_encoded(None)
 
 
-def test_load_ssh_public_key_success(valid_public_key_openssh):
-    """
-    Test that `load_ssh_public_key` decodes base64-encoded OpenSSH public key.
-    """
-    encoded = base64.b64encode(valid_public_key_openssh.encode("utf-8")).decode("utf-8")
-    result = load_ssh_public_key(encoded_key=encoded)
-    assert result.startswith("ssh-rsa")
+def test_load_public_encoded_success(manager, valid_public_key_openssh):
+    encoded = base64.b64encode(valid_public_key_openssh.encode()).decode()
+    result = manager.load_public_encoded(encoded)
+    assert result.startswith("ssh-")
 
 
-def test_load_ssh_public_key_missing():
-    """
-    Test that `load_ssh_public_key` exits when key is not provided.
-    """
-    with pytest.raises(SystemExit):
-        load_ssh_public_key(encoded_key=None)
+def test_load_public_encoded_missing(manager):
+    with pytest.raises(SSHKeyError):
+        manager.load_public_encoded(None)
 
 
-def test_verify_private_key_valid(valid_private_key_pem):
-    """
-    Test that `verify_private_key` passes with a valid key.
-    """
-    # Should not raise SystemExit
-    verify_private_key(valid_private_key_pem)
+# ---------------------------------------------------------------------------
+# Verification tests
+# ---------------------------------------------------------------------------
+
+def test_verify_private_valid(manager, valid_private_key_pem):
+    manager.verify_private(valid_private_key_pem)  # Should not raise
 
 
-def test_verify_private_key_invalid():
-    """
-    Test that `verify_private_key` exits with error on invalid key.
-    """
-    with pytest.raises(SystemExit):
-        verify_private_key("this is not a valid key")
+def test_verify_private_invalid(manager):
+    with pytest.raises(SSHKeyError):
+        manager.verify_private("not a real key")
 
 
-def test_save_ssh_key_creates_file(tmp_path):
-    """
-    Test that `save_ssh_key` writes a file with correct permissions.
-    """
+# ---------------------------------------------------------------------------
+# Saving tests
+# ---------------------------------------------------------------------------
+
+def test_save_key_creates_file(manager, tmp_path):
     key_content = "dummy-key"
     path = tmp_path / "id_rsa"
 
-    save_ssh_key(ssh_key=key_content, path_key=str(path))
+    manager.save_key(key_content, path)
 
     assert path.exists()
     assert path.read_text() == key_content
     assert oct(path.stat().st_mode & 0o777) == "0o600"
 
 
-def test_save_ssh_keys_writes_files(
-    tmp_path, valid_private_key_pem, valid_public_key_openssh, monkeypatch
-):
-    """
-    Test that `save_ssh_keys` writes both private and public keys when provided.
-    """
+def test_save_encoded_keys(manager, tmp_path, valid_private_key_pem, valid_public_key_openssh):
     priv_path = tmp_path / "id_rsa"
     pub_path = tmp_path / "id_rsa.pub"
 
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_PRIVATE_SSH_KEY_PATH", str(priv_path))
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_PUBLIC_SSH_KEY_PATH", str(pub_path))
+    encoded_priv = base64.b64encode(valid_private_key_pem.encode()).decode()
+    encoded_pub = base64.b64encode(valid_public_key_openssh.encode()).decode()
 
-    encoded_priv = base64.b64encode(valid_private_key_pem.encode("utf-8")).decode(
-        "utf-8"
-    )
-    encoded_pub = base64.b64encode(valid_public_key_openssh.encode("utf-8")).decode(
-        "utf-8"
-    )
-
-    save_encoded_ssh_keys(
-        ssh_public_key_path=pub_path,
-        ssh_private_key_path=priv_path,
-        ssh_public_encoded=encoded_pub, 
-        ssh_private_encoded=encoded_priv
+    pub_written, priv_written = manager.save_encoded_keys(
+        public_path=pub_path,
+        private_path=priv_path,
+        public_encoded=encoded_pub,
+        private_encoded=encoded_priv,
     )
 
+    assert pub_written is True
+    assert priv_written is True
     assert priv_path.exists()
     assert pub_path.exists()
 
 
-def test_generate_ssh_keypair_creates_files(tmp_path, monkeypatch):
-    """
-    Test that `generate_ssh_keypair` creates private and public key files.
-    """
+# ---------------------------------------------------------------------------
+# Keypair generation tests
+# ---------------------------------------------------------------------------
 
-    # Patch the SSH repo path to tmp_path
-    monkeypatch.setattr(
-        ewc_hub_config,
-        "EWC_CLI_HUB_SSH_REPO_PATH",
-        tmp_path
-    )
+def test_generate_keypair(manager, tmp_path, monkeypatch):
+    monkeypatch.setattr(manager, "repo_path", tmp_path)
 
-    # Call function with just the resolved_profile
-    priv_path, pub_path = generate_ssh_keypair(resolved_profile="pytest")
+    priv_path, pub_path = manager.generate_keypair("pytest")
 
-    priv_path = Path(priv_path)
-    pub_path = Path(pub_path)
-
-    # Check that files were created
     assert priv_path.exists()
     assert pub_path.exists()
 
-    # Basic content checks
     assert "PRIVATE KEY" in priv_path.read_text()
     assert pub_path.read_text().startswith("ssh-")
+
+
+# ---------------------------------------------------------------------------
+# Existence + matching tests
+# ---------------------------------------------------------------------------
+
+def test_keys_exist(manager, tmp_path):
+    priv = tmp_path / "id_rsa"
+    pub = tmp_path / "id_rsa.pub"
+
+    priv.write_text("x")
+    pub.write_text("y")
+
+    assert manager.keys_exist(priv, pub) is None
+
+
+def test_keys_exist_missing(manager, tmp_path):
+    priv = tmp_path / "id_rsa"
+    pub = tmp_path / "id_rsa.pub"
+
+    priv.write_text("x")
+    # pub missing
+
+    with pytest.raises(SSHKeyError):
+        manager.keys_exist(priv, pub)
+
+
+def test_keys_match_success(manager, tmp_path, valid_private_key_pem, valid_public_key_openssh):
+    priv = tmp_path / "id_rsa"
+    pub = tmp_path / "id_rsa.pub"
+
+    priv.write_text(valid_private_key_pem)
+    pub.write_text(valid_public_key_openssh)
+
+    assert manager.keys_match(priv, pub) is True
+
+
+def test_keys_match_invalid(manager, tmp_path):
+    priv = tmp_path / "id_rsa"
+    pub = tmp_path / "id_rsa.pub"
+
+    priv.write_text("not a real key")
+    pub.write_text("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQfake")
+
+    with pytest.raises(SSHKeyError):
+        manager.keys_match(priv, pub)

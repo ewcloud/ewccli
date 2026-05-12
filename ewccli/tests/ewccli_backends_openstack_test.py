@@ -7,7 +7,6 @@
 
 
 import pytest
-from pathlib import Path
 from types import SimpleNamespace
 
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend

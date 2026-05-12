@@ -11,7 +11,7 @@
 import time
 import sys
 import os
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, Dict
 from collections import namedtuple
 from pathlib import Path
 
@@ -65,9 +65,7 @@ class OpenstackBackend:
                 )
                 self.auth_url = auth_url
             else:
-                config = (
-                    OpenStackConfig()
-                )  # ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
+                config = OpenStackConfig()  # ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
                 # Get the default cloud if no name is specified
                 cloud = (
                     config.get_one()
@@ -133,14 +131,14 @@ class OpenstackBackend:
         server_name: str,
         image_name: str,
         flavour_name: str,
-        networks: tuple,
+        networks: Optional[tuple],
         keypair_name: str,
-        sec_groups: tuple,
+        sec_groups: Optional[tuple],
         attempts: int = 1,
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
         dry_run: bool = False,
-    ) -> Tuple[ServerResult, Optional[str], dict[Any, Any]]:
+    ) -> Tuple[ServerResult, Optional[str], Dict[str, Any]]:
         """Create an OpenStack server.
 
         Automatically deletes and retries the creation process until a server is available.
@@ -388,16 +386,12 @@ class OpenstackBackend:
                 new_server,
             )
 
-
-    def find_latest_image(
-        self,
-        conn: openstack.connection.Connection,
-        prefix: str
-    ):
+    def find_latest_image(self, conn: openstack.connection.Connection, prefix: str):
         """
         Select the latest image for CPU or GPU families with special rules.
         """
         import re
+
         TIMESTAMP_RE = r"\d{14}"
 
         def is_cpu_image(prefix: str, name: str):
@@ -420,11 +414,13 @@ class OpenstackBackend:
         def is_gpu_rocky(name: str):
             # Prefix: Rocky-9-GPU
             # Match: Rocky-9.<minor>-GPU-<timestamp>
-            return bool(re.match(
-                rf"^Rocky-9\.\d+-GPU-{TIMESTAMP_RE}$",
-                name,
-                re.IGNORECASE,
-            ))
+            return bool(
+                re.match(
+                    rf"^Rocky-9\.\d+-GPU-{TIMESTAMP_RE}$",
+                    name,
+                    re.IGNORECASE,
+                )
+            )
 
         def is_gpu_ubuntu(name: str):
             # Prefix: Ubuntu 22.04 NVIDIA_AI
@@ -451,7 +447,11 @@ class OpenstackBackend:
             return False
 
         # Filter matching images
-        matches = [img for img in conn.compute.images() if image_matches(name=img.name, prefix=prefix)]
+        matches = [
+            img
+            for img in conn.compute.images()
+            if image_matches(name=img.name, prefix=prefix)
+        ]
 
         if not matches:
             return None
@@ -459,7 +459,6 @@ class OpenstackBackend:
         # Sort by created_at
         matches.sort(key=lambda img: img.created_at, reverse=True)
         return matches[0]
-
 
     def check_server_inputs(
         self,
@@ -474,7 +473,9 @@ class OpenstackBackend:
         image = conn.compute.find_image(image_name)
 
         if not image:
-            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]]
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [
+                ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]
+            ]
             error_message = (
                 f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
                 f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
@@ -528,7 +529,6 @@ class OpenstackBackend:
 
         return True, ""
 
-
     def list_servers(
         self,
         conn: openstack.connection.Connection,
@@ -550,7 +550,6 @@ class OpenstackBackend:
         image_map = {image.id: image.name for image in conn.compute.images()}
 
         for server in conn.compute.servers():
-
             if (
                 not (
                     server.metadata.get("deployed")
@@ -822,12 +821,7 @@ class OpenstackBackend:
             _LOGGER.warning(f"{network_name} not found for server {server.name}")
             return NetworkResult(True, False)
 
-
-    def ssh_key_matches_openstack(
-        self,
-        public_key_path: str,
-        keypair: dict
-    ) -> bool:
+    def ssh_key_matches_openstack(self, public_key_path: str, keypair: dict) -> bool:
         """
         Check whether the local SSH public key matches the OpenStack keypair.
 
@@ -851,7 +845,6 @@ class OpenstackBackend:
         openstack_key = " ".join(keypair.public_key.strip().split()[:2])
 
         return local_key == openstack_key
-
 
     def create_keypair(
         self,
@@ -877,11 +870,8 @@ class OpenstackBackend:
         existing_key = conn.compute.find_keypair(keypair_name)
 
         if existing_key:
-
             match = OpenstackBackend.ssh_key_matches_openstack(
-                conn,
-                keypair=existing_key,
-                public_key_path=public_key_path
+                conn, keypair=existing_key, public_key_path=public_key_path
             )
 
             if not match:

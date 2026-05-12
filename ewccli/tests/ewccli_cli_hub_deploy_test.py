@@ -7,9 +7,10 @@
 
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from ewccli.ewccli import cli
+
 
 @pytest.fixture
 def runner():
@@ -59,7 +60,7 @@ def mock_profile_loader(tmp_path, valid_private_key_pem, valid_public_key_openss
     pub_key.write_text(valid_public_key_openssh)
     priv_key.write_text(valid_private_key_pem)
 
-    with patch("ewccli.commands.hub.hub_command.load_cli_profile") as mock_load:
+    with patch("ewccli.commands.hub.hub_command.ProfileStore.load") as mock_load:
         mock_load.return_value = {
             "profile": "test-profile",
             "auth_url": "http://fake-auth-url",
@@ -78,9 +79,10 @@ def mock_profile_loader(tmp_path, valid_private_key_pem, valid_public_key_openss
 # -----------------------------
 @pytest.fixture(autouse=True)
 def mock_ctx_obj():
-    with patch("ewccli.commands.hub.hub_command.categorize_item_inputs") as m1, \
-         patch("ewccli.commands.hub.hub_command.check_missing_required_inputs") as m2:
-
+    with (
+        patch("ewccli.commands.hub.hub_command.categorize_item_inputs") as m1,
+        patch("ewccli.commands.hub.hub_command.check_missing_required_inputs") as m2,
+    ):
         m1.return_value = ([], [])
         m2.return_value = []
 
@@ -104,13 +106,7 @@ def test_deploy_dry_run_minimal(runner):
     result = runner.invoke(
         cli,
         ["hub", "deploy", "ssh-bastion-flavour", "--dry-run"],
-        obj={
-            "items": {
-                "ssh-bastion-flavour": {
-                    "cli": {"inputs": []}
-                }
-            }
-        },
+        obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
     print(result.output)
     print(result.exception)
@@ -118,7 +114,9 @@ def test_deploy_dry_run_minimal(runner):
     assert result.exit_code == 0
 
 
-def test_deploy_with_ssh_paths(runner, tmp_path, valid_private_key_pem, valid_public_key_openssh):
+def test_deploy_with_ssh_paths(
+    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh
+):
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
 
@@ -137,19 +135,15 @@ def test_deploy_with_ssh_paths(runner, tmp_path, valid_private_key_pem, valid_pu
             str(priv_key),
             "--dry-run",
         ],
-        obj={
-            "items": {
-                "ssh-bastion-flavour": {
-                    "cli": {"inputs": []}
-                }
-            }
-        },
+        obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
 
     assert result.exit_code == 0
 
 
-def test_deploy_with_env_vars(runner, tmp_path, valid_private_key_pem, valid_public_key_openssh):
+def test_deploy_with_env_vars(
+    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh
+):
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
 
@@ -163,13 +157,7 @@ def test_deploy_with_env_vars(runner, tmp_path, valid_private_key_pem, valid_pub
             "EWC_CLI_SSH_PUBLIC_KEY_PATH": str(pub_key),
             "EWC_CLI_SSH_PRIVATE_KEY_PATH": str(priv_key),
         },
-        obj={
-            "items": {
-                "ssh-bastion-flavour": {
-                    "cli": {"inputs": []}
-                }
-            }
-        },
+        obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
 
     assert result.exit_code == 0
