@@ -50,7 +50,7 @@ from ewccli.enums import HubItemTechnologyAnnotation
 from ewccli.enums import HubItemCategoryAnnotation
 from ewccli.enums import HubItemCLIKeys
 from ewccli.logger import get_logger
-from ewccli.utils import load_cli_profile
+from ewccli.profile import ProfileStore
 
 _LOGGER = get_logger(__name__)
 
@@ -68,8 +68,11 @@ console = Console()
     show_default=True,
     help="EWC CLI path to catalogue.",
 )
-@click.pass_context
-def ewc_hub_command(ctx, path_to_catalog):
+@click.pass_context   # type: ignore[misc]
+def ewc_hub_command(
+    ctx: click.Context,
+    path_to_catalog: Path | None,
+) -> None:
     """EWC Community Hub commands group."""
     download_items(force=ewc_hub_config.EWC_CLI_HUB_DOWNLOAD_ITEMS)
 
@@ -78,11 +81,15 @@ def ewc_hub_command(ctx, path_to_catalog):
 
     if path_to_catalog:
         if not path_to_catalog.exists():
-            raise click.ClickException(f"Catalog file doesn't exist at this path: {path_to_catalog}")
+            raise click.ClickException(
+                f"Catalog file doesn't exist at this path: {path_to_catalog}"
+            )
 
         # Check directory:
         if path_to_catalog.is_dir():
-            raise click.ClickException(f"Catalog path must be a file not a directory: {path_to_catalog}")
+            raise click.ClickException(
+                f"Catalog path must be a file not a directory: {path_to_catalog}"
+            )
 
         items = load_hub_items(path_to_catalog=path_to_catalog)
 
@@ -90,16 +97,12 @@ def ewc_hub_command(ctx, path_to_catalog):
         items = load_hub_items()
 
     # Store the option to make it available to all subcommands
-    ctx.obj['items'] = items
+    ctx.obj["items"] = items
 
-    ctx.obj['cli_profile'] = None
+    ctx.obj["cli_profile"] = None
 
 
-def categorize_item_inputs(
-    ctx,
-    item_info: dict,
-    item_info_inputs: list
-):  # noqa CCR001
+def categorize_item_inputs(ctx: click.Context, item_info: dict, item_info_inputs: list):  # noqa CCR001
     """Categorize item inputs into default and mandatory."""
     default_inputs = []
     required_inputs = []
@@ -252,7 +255,8 @@ _ITEM_INPUT_MESSAGE = (
     "  When passing lists or dictionaries, the syntax used to parse inputs is same as yaml.\n"
 )
 
-def _validate_item_inputs_format(ctx, param, values):
+
+def _validate_item_inputs_format(ctx: click.Context, param, values):
     if not values:
         return {}
 
@@ -264,7 +268,7 @@ def _validate_item_inputs_format(ctx, param, values):
     return parsed
 
 
-def _validate_item(ctx, param, value):
+def _validate_item(ctx: click.Context, param, value):
     """Validate that the provided item exists in the Hub and is deployable."""
     hub_items = ctx.obj.get("items", {})
 
@@ -333,9 +337,9 @@ def _validate_item(ctx, param, value):
     type=str,
     callback=_validate_item,
 )
-@click.pass_context
-def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
-    ctx,
+@click.pass_context  # type: ignore[misc]
+def deploy_cmd(     # noqa: CFQ002, CFQ001, CCR001, C901
+    ctx: click.Context,
     item: str,
     application_credential_id: str,
     application_credential_secret: str,
@@ -366,23 +370,19 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     if dry_run:
         _LOGGER.info("Dry run enabled...")
 
+    store = ProfileStore()
+
     if profile:
-        cli_profile = load_cli_profile(
-            profile=profile,
-            dry_run=dry_run
-        )
+        cli_profile = store.load(name=profile)
     else:
         # Use default profile if exists
-        cli_profile = load_cli_profile(
-            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
-            dry_run=dry_run
-        )
+        cli_profile = store.load(name=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME)
 
-    _LOGGER.info(f"Using `{cli_profile.get('profile')}` profile.")
+    _LOGGER.info(f"Using `{cli_profile.profile}` profile.")
 
-    tenancy_name: str = cli_profile.get("tenant_name")
-    federee: str = cli_profile.get("federee")
-    region: str = cli_profile.get("region")
+    tenancy_name: str = cli_profile.tenant_name
+    federee: str = cli_profile.federee
+    region: str = cli_profile.region
 
     allowed_regions = ewc_hub_config.allowed_regions(federee)
     if region not in allowed_regions:
@@ -392,15 +392,15 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     # Try to fill from CLI profile if not provided
     if not ssh_public_key_path:
-        ssh_public_key_path = cli_profile.get("ssh_public_key_path")
+        ssh_public_key_path = cli_profile.ssh_public_key_path
 
     if not ssh_private_key_path:
-        ssh_private_key_path = cli_profile.get("ssh_private_key_path")
+        ssh_private_key_path = cli_profile.ssh_private_key_path
 
     check_user_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
-        dry_run=dry_run
+        dry_run=dry_run,
     )
 
     # Take item information
@@ -412,7 +412,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     item = os.getenv("EWC_CLI_HUB_ITEM") or item
     console.print(f"You selected {item} item from the EWC Community Hub.")
 
-    item_info = ctx.obj['items'][item]
+    item_info = ctx.obj["items"][item]
 
     # Retrieve item inputs of the selected item from the catalogue
     item_info_ewccli = item_info.get(HubItemCLIKeys.ROOT.value, {})
@@ -437,10 +437,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     if missing_keys:
         message = prepare_missing_inputs_error_message(missing_keys)
-        raise click.UsageError(
-            f"{message}\n\n"
-            f"{_ITEM_INPUT_MESSAGE}"
-        )
+        raise click.UsageError(f"{message}\n\n{_ITEM_INPUT_MESSAGE}")
 
     #####################################################################################
     # Prepare item parameters
@@ -511,7 +508,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             raise ClickException(error_message)
 
     if not working_directory_path:
-        raise ClickException(f"Working directory path is empty, please verify sources metadata in your hub catalogue for {item} item")
+        raise ClickException(
+            f"Working directory path is empty, please verify sources metadata in your hub catalogue for {item} item"
+        )
 
     ########################################################################
     # Run logic based on the technology annotation of the item
@@ -532,17 +531,22 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         )
 
         application_credential_id = (
-            cli_profile.get("application_credential_id") or application_credential_id
+            cli_profile.application_credential_id or application_credential_id
         )
         application_credential_secret = (
-            cli_profile.get("application_credential_secret")
-            or application_credential_secret
+            cli_profile.application_credential_secret or application_credential_secret
         )
         if not auth_url:
             auth_url = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee).get(region)
 
         if dry_run:
-            console.print(Panel(f"Dry run: skipping OpenStack connection and exiting.", title="Info", style="green"))
+            console.print(
+                Panel(
+                    "Dry run: skipping OpenStack connection and exiting.",
+                    title="Info",
+                    style="green",
+                )
+            )
             sys.exit(0)
 
         try:
@@ -621,10 +625,12 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         server_inputs = CreateServerInputs.safe_create(
             server_name=server_name,
             is_gpu=is_gpu,
-            image_name=image_name or item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value),
+            image_name=image_name
+            or item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value),
             keypair_name=keypair_name,
             flavour_name=flavour_name,
-            external_ip=external_ip or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
+            external_ip=external_ip
+            or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
             networks=networks,
             security_groups=security_groups,
             item_default_security_groups=item_info_ewccli.get(
@@ -644,12 +650,12 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             ssh_public_key_path=ssh_public_key_path,
             ssh_private_key_path=ssh_private_key_path,
             dry_run=dry_run,
-            force=force,  
+            force=force,
         )
 
         internal_ip_machine = outputs["internal_ip_machine"]
         external_ip_machine = outputs["external_ip_machine"]
-        normalized_image_name = outputs.get("normalized_image_name")
+        normalized_image_name: str | None = outputs.get("normalized_image_name")
 
         #####################################################################################
         #### DNS CHECK
@@ -687,9 +693,10 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         #### ANSIBLE PLAYBOOK ITEM DEPLOYMENT
         #######################################################################################
 
-        username = (
-            ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
-        )
+        if normalized_image_name is None:
+            username = None
+        else:
+            username = ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
 
         # If missing the mapping in the configuration is missing, so configuration file needs to be checked.
         if not username:
@@ -697,8 +704,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                 Panel(
                     f"[Ansible Item] username for {normalized_image_name} could not be identified.",
                     title="Error",
-                    style="red")
+                    style="red",
                 )
+            )
             # Exit with a non-zero status
             sys.exit(1)
 
@@ -794,39 +802,39 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         )
 
 
-@ewc_hub_command.command("list")
-@click.option(
+@ewc_hub_command.command("list")  # type: ignore[misc]
+@click.option(  # type: ignore[misc]
     "--force",
     envvar="EWC_CLI_FORCE",
     is_flag=True,
     default=False,
     help="Force item file re-download.",
 )
-@click.pass_context
-def list_cmd(ctx, force: bool):
+@click.pass_context  # type: ignore[misc]
+def list_cmd(ctx: click.Context, force: bool) -> None: 
     """List EWC Hub items."""
     if force:
         download_items(force=force)
 
-    list_items_table(hub_items=ctx.obj['items'])
+    list_items_table(hub_items=ctx.obj["items"])
 
 
-@ewc_hub_command.command("show")
-@click.argument(
+@ewc_hub_command.command("show")  # type: ignore[misc]
+@click.argument(  # type: ignore[misc]
     "item",
     type=str,
 )
-@click.pass_context
-def show_cmd(ctx, item):
+@click.pass_context  # type: ignore[misc]
+def show_cmd(ctx: click.Context, item: str) -> None:
     """Show information on a specific EWC Hub item.
 
     ewc hub show <item>
 
     where <item> is taken from ewc hub list command.
     """
-    if item not in [i for i, _ in ctx.obj['items'].items()]:
+    if item not in [i for i, _ in ctx.obj["items"].items()]:
         list_items_table(
-            hub_items=ctx.obj['items'],
+            hub_items=ctx.obj["items"],
         )
         raise ClickException(
             f"{item} is not available in the EWC Hub. Please check the list above."
@@ -834,6 +842,6 @@ def show_cmd(ctx, item):
 
     else:
         show_item_table(
-            hub_item=ctx.obj['items'].get(item),
+            hub_item=ctx.obj["items"].get(item),
             default_admin_variables_map=HUB_ENV_VARIABLES_MAP,
         )

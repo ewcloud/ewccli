@@ -9,6 +9,26 @@ import os
 from pathlib import Path
 
 from ewccli.enums import Federee, Region, FedereeDNSMapping
+from typing import Optional
+from pydantic import BaseModel
+
+
+class LoginInput(BaseModel):  # type: ignore[misc]
+    """
+    Raw login input provided by the user before resolution.
+    """
+
+    tenant_name: str
+    federee: str
+    region: str
+
+    application_credential_id: Optional[str] = None
+    application_credential_secret: Optional[str] = None
+
+    ssh_public_key_path: Optional[str] = None
+    ssh_private_key_path: Optional[str] = None
+
+    profile: Optional[str] = None
 
 
 class EWCCLIConfiguration:
@@ -68,7 +88,7 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "https://keystone.cloudferro.com:5000",
             Region.R1.value: "https://keystone.api.r1.cloud.eumetsat.int",
-            Region.R2.value: "https://keystone.api.r2.cloud.eumetsat.int"
+            Region.R2.value: "https://keystone.api.r2.cloud.eumetsat.int",
         },
     }
 
@@ -78,7 +98,7 @@ class EWCCLIConfiguration:
         for url in regions.values()
     }
 
-    def allowed_regions(self, federee: Federee) -> list[str]:
+    def allowed_regions(self, federee: str) -> list[str]:
         return [region for region in self.EWC_CLI_SITE_MAP[federee].keys()]
 
     # GPU images short custom names
@@ -91,7 +111,7 @@ class EWCCLIConfiguration:
             Region.WAW31.value: "Ubuntu-22.04-GPU",
             Region.R1.value: "Ubuntu-24.04-GPU",
             Region.R2.value: "Ubuntu-24.04-GPU",
-        }
+        },
     }
 
     # GPU images
@@ -142,7 +162,6 @@ class EWCCLIConfiguration:
                 "16cpu-128gbmem-30gbdisk-40gbgpu",
             ],
         },
-
         Federee.EUMETSAT.value: {
             Region.WAW31.value: [
                 "vm.a6000.1",
@@ -168,7 +187,6 @@ class EWCCLIConfiguration:
             Region.CCI1.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
             Region.CCI2.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
         },
-
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "vm.a6000.2",
             Region.R1.value: "6cpu-32gbmem-h200.1g.18gb",
@@ -177,7 +195,7 @@ class EWCCLIConfiguration:
     }
 
     # Network
-    
+
     DEFAULT_NETWORK_MAP = {
         Federee.ECMWF.value: "private",
         Federee.EUMETSAT.value: "private",
