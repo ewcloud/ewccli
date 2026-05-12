@@ -22,7 +22,7 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -e .[test]
-        
+
       - name: Run pre-commit
         run: pre-commit run --all-files
 
@@ -43,6 +43,6 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -e .[test]
-        
+
       - name: Run pytest
         run: pytest

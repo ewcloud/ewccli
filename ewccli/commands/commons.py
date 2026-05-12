@@ -7,6 +7,8 @@
 
 """Common methods for all commands."""
 
+from __future__ import annotations
+
 import re
 import sys
 import os
@@ -14,7 +16,8 @@ import getpass
 import socket
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Tuple, Optional
+from typing import Callable
 from datetime import datetime, timezone
 
 import yaml
@@ -26,7 +29,7 @@ from rich.markdown import Markdown
 from rich.align import Align
 
 from ewccli.backends.kubernetes.utils import get_reason_from_conditions
-from ewccli.enums import HubItemOherAnnotation, HubItemCLIKeys
+from ewccli.enums import HubItemOherAnnotation
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.utils import download_items
 from ewccli.logger import get_logger
@@ -41,31 +44,38 @@ console = Console()
 class CommonBackendContext:
     """CommonBackendContext."""
 
-    def __init__(self):
-        self.cli_profile = None
+    def __init__(self) -> None:
+        self.cli_profile: Any = None
+
 
 class CommonContext:
     """CommonContext."""
 
-    def __init__(self):
-        self.cli_profile = None
-        self.items = load_hub_items()
+    def __init__(self) -> None:
+        self.cli_profile: Any = None
+        self.items: dict[str, Any] = load_hub_items()
 
 
-def validate_config_name(ctx, param, value):
+def validate_config_name(
+    ctx: click.Context,
+    param: click.Parameter,
+    value: Optional[str],
+) -> Optional[str]:
     """Validate config name."""
-    if not value:
-        return value
+    if value is None:
+        return None
 
     pattern = r"^[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+$"
     if not re.match(pattern, value):
         raise click.BadParameter(
-            "Config name must be exactly 4 alphanumeric parts separated by dashes (e.g. tenant-federee-east-zone)."
+            "Config name must be exactly 4 alphanumeric parts separated by dashes "
+            "(e.g. tenant-federee-east-zone)."
         )
+
     return value
 
 
-def login_options(func):
+def login_options(func: Callable[..., Any]) -> Callable[..., Any]:
     """Login option for the CLI commands."""
     func = click.option(
         "--profile",
@@ -76,7 +86,7 @@ def login_options(func):
     return func
 
 
-def default_keypair_name():
+def default_keypair_name() -> str:
     """Retrieve default keypair name from username."""
     # Safest way to get Linux username
     username = getpass.getuser()
@@ -87,36 +97,37 @@ def default_keypair_name():
 KEYPAIT_DEFAULT = default_keypair_name()
 
 
-def default_username():
+def default_username() -> str:
     """Retrieve username runnnig the CLI."""
     # Safest way to get Linux username
     username = getpass.getuser()
     return f"{username}"
 
 
-def load_hub_items(path_to_catalog: str = ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH) -> dict:
+def load_hub_items(
+    path_to_catalog: Path = ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH,
+) -> Dict[str, Any]:
     """Load EWC Hub Items from file."""
     download_items()
-    with open(path_to_catalog, "r") as file:
+    with open(path_to_catalog, "r", encoding="utf-8") as file:
         items_file = yaml.safe_load(file)
 
-        if not items_file:
-            _LOGGER.error("items.yaml is empty.")
-            sys.exit(1)
+    if not isinstance(items_file, dict):
+        _LOGGER.error("items.yaml is malformed or empty.")
+        sys.exit(1)
 
-        items_spec = items_file.get("spec")
+    items_spec = items_file.get("spec")
+    if not isinstance(items_spec, dict):
+        _LOGGER.error("spec key is missing or invalid in items.yaml.")
+        sys.exit(1)
 
-        if not items_spec:
-            _LOGGER.error("spec key is missing from items.yaml.")
-            sys.exit(1)
+    items = items_spec.get("items")
+    if not isinstance(items, dict):
+        _LOGGER.error("items key is missing or invalid under spec in items.yaml.")
+        sys.exit(1)
 
-        items = items_spec.get("items")
-
-        if not items:
-            _LOGGER.error("items key is missing from spec key in items.yaml.")
-            sys.exit(1)
-
-        return items
+    # At this point, mypy knows `items` is a dict[str, Any]
+    return items
 
 
 def split_config_name(config_name: str) -> tuple[str, str]:
@@ -137,7 +148,7 @@ def split_config_name(config_name: str) -> tuple[str, str]:
     return federee, tenant_name
 
 
-def openstack_options(func):
+def openstack_options(func: Callable[..., Any]) -> Callable[..., Any]:
     """Openstack options for the CLI commands."""
     func = click.option(
         "--auth-url",
@@ -165,7 +176,11 @@ def openstack_options(func):
     return func
 
 
-def _split_env_var(ctx, param, value) -> tuple:
+def _split_env_var(
+    ctx: click.Context,
+    param: click.Parameter,
+    value: Optional[str | Tuple[str, ...]],
+) -> Tuple[str, ...]:
     """Split env var or CLI input into a tuple of unique parameters."""
     if value is None:
         return ()
@@ -173,20 +188,21 @@ def _split_env_var(ctx, param, value) -> tuple:
     if isinstance(value, tuple):
         raw_parameters = value
     else:
-        raw_parameters = value.split(",")
+        raw_parameters = tuple(value.split(","))
 
-    seen = set()
-    unique_parameters = []
+    seen: set[str] = set()
+    unique_parameters: list[str] = []
+
     for parameter in raw_parameters:
-        parameter = parameter.strip()
-        if parameter and parameter not in seen:
-            seen.add(parameter)
-            unique_parameters.append(parameter)
+        p = parameter.strip()
+        if p and p not in seen:
+            seen.add(p)
+            unique_parameters.append(p)
 
     return tuple(unique_parameters)
 
 
-def openstack_optional_options(func):
+def openstack_optional_options(func: Callable[..., Any]) -> Callable[..., Any]:
     """Openstack optional options for the CLI commands."""
     func = click.option(
         "--networks",
@@ -261,7 +277,7 @@ def openstack_optional_options(func):
     return func
 
 
-def ssh_options_encoded(func):
+def ssh_options_encoded(func: Callable[..., Any]) -> Callable[..., Any]:
     """SSH options encoded for the CLI commands."""
     func = click.option(
         "--ssh-private-encoded",
@@ -281,10 +297,14 @@ def ssh_options_encoded(func):
     return func
 
 
-def validate_path(ctx, param, value):
-    """Validate path."""
+def validate_path(
+    ctx: click.Context,
+    param: click.Parameter,
+    value: Optional[str],
+) -> Optional[Path]:
+    """Validate and normalize a filesystem path for CLI parameters."""
     if not value:
-        return
+        return None
     try:
         # Expand ~ and resolve to absolute path
         path = Path(value).expanduser().resolve(strict=False)
@@ -309,7 +329,7 @@ def validate_path(ctx, param, value):
         raise click.BadParameter(f"Invalid path '{value}': {e}")
 
 
-def ssh_options(func):
+def ssh_options(func: Callable[..., Any]) -> Callable[..., Any]:
     """SSH options for the CLI commands."""
     func = click.option(
         "--ssh-public-key-path",
@@ -331,7 +351,7 @@ def ssh_options(func):
     return func
 
 
-def list_items_table(hub_items: dict):
+def list_items_table(hub_items: Dict[str, Any]) -> None:
     """List items in table."""
     table = Table(
         show_header=True,
@@ -374,7 +394,111 @@ def list_items_table(hub_items: dict):
     )
 
 
-def show_item_table(hub_item: dict, default_admin_variables_map: Optional[dict] = None):
+def _add_basic_metadata(table: Table, hub_item: Dict[str, Any]) -> None:
+    table.add_row("name", hub_item.get("name"))
+    table.add_row("version", hub_item.get("version"))
+    table.add_row("summary", hub_item.get("summary"))
+
+
+def _add_maintainers(table: Table, hub_item: Dict[str, Any]) -> None:
+    for maintainer in hub_item.get("maintainers", []):
+        name = maintainer.get("name")
+        url = maintainer.get("url")
+        email = maintainer.get("email")
+
+        if url:
+            table.add_row(
+                "maintainer",
+                f"[bold]{name}:[/bold] [link={url}]{url}",
+            )
+        else:
+            table.add_row(
+                f"maintainer: {name}",
+                f"[link={email}]{email}",
+            )
+
+
+def _add_annotations(table: Table, hub_item: Dict[str, Any]) -> None:
+    for key, value in hub_item.get("annotations", {}).items():
+        table.add_row(key, value)
+
+
+def _add_description(table: Table, hub_item: Dict[str, Any]) -> None:
+    md = Markdown(hub_item.get("description"))
+    table.add_row("description", Align(md, align="left", width=80))
+
+
+def _extract_default_admin_vars(default_map: Optional[Dict[str, Any]]) -> List[str]:
+    if not default_map:
+        return []
+    return list(default_map)
+
+
+def _input_is_mandatory(mi: Dict[str, Any], default_admin_vars: List[str]) -> bool:
+    name = mi.get("name")
+    return "default" not in mi and name not in default_admin_vars
+
+
+def _format_default(mi: Dict[str, Any]) -> str:
+    if "default" in mi:
+        return f" (default: {mi['default']})"
+    return ""
+
+
+def _format_input_line(mi: Dict[str, Any], mandatory: bool, default_str: str) -> str:
+    name = mi.get("name")
+    type_ = mi.get("type")
+    desc = mi.get("description")
+    tag = "(mandatory)" if mandatory else "(optional)"
+    return f"{tag} {name}: ({type_}){default_str}: {desc}\n"
+
+
+def _maybe_add_to_deploy_cmd(
+    deploy_cmd: str,
+    mi: Dict[str, Any],
+    mandatory: bool,
+) -> str:
+    if mandatory:
+        name = mi.get("name")
+        return f"{deploy_cmd} --item-inputs {name}='<>'"
+    return deploy_cmd
+
+
+def _render_inputs(
+    item_info: Dict[str, Any],
+    default_admin_vars: List[str],
+    deploy_cmd: str,
+) -> tuple[str, str]:
+    details = ""
+
+    for mi in item_info.get("inputs", []):
+        mandatory = _input_is_mandatory(mi, default_admin_vars)
+        default_str = _format_default(mi)
+
+        details += _format_input_line(mi, mandatory, default_str)
+        deploy_cmd = _maybe_add_to_deploy_cmd(deploy_cmd, mi, mandatory)
+
+    return details, deploy_cmd
+
+
+def _render_defaults(item_info: Dict[str, Any]) -> str:
+    defaults = []
+
+    image = item_info.get("defaultImageName")
+    if image:
+        defaults.append(f"Image Name: {image}")
+
+    sgs = item_info.get("defaultSecurityGroups", [])
+    if sgs:
+        defaults.append(f"Security Group/s: {','.join(sgs)}")
+
+    return "\n".join(defaults) + ("\n" if defaults else "")
+
+
+def show_item_table(
+    hub_item: Dict[str, Any],
+    default_admin_variables_map: Optional[Dict[str, Any]] = None,
+) -> None:
     """Show item metadata table."""
     table = Table(
         show_header=True,
@@ -386,75 +510,30 @@ def show_item_table(hub_item: dict, default_admin_variables_map: Optional[dict] 
     table.add_column("Metadata", no_wrap=False, min_width=15)
     table.add_column("Data", no_wrap=False, min_width=15)
 
-    table.add_row("name", hub_item.get("name"))
-    table.add_row("version", hub_item.get("version"))
-    table.add_row("summary", hub_item.get("summary"))
+    _add_basic_metadata(table, hub_item)
+    _add_maintainers(table, hub_item)
+    _add_annotations(table, hub_item)
+    _add_description(table, hub_item)
 
-    for maintainer in hub_item.get("maintainers", {}):
-        if maintainer.get("url"):
-            table.add_row(
-                "maintainer",
-                f"[bold]{maintainer.get('name')}:[/bold] [link={maintainer.get('url')}]{maintainer.get('url')}",
-            )
-        else:
-            table.add_row(
-                f"maintainer: {maintainer.get('name')}",
-                f"[link={maintainer.get('email')}]{maintainer.get('email')}",
-            )
-    table.add_row("home", f"[link={hub_item.get('home')}]{hub_item.get('home')}")
-    table.add_row(
-        "license", f"[link={hub_item.get('license')}]{hub_item.get('license')}"
+    item_info = hub_item.get("ewccli", {})
+    default_admin_vars = _extract_default_admin_vars(default_admin_variables_map)
+
+    deploy_cmd = f"ewc hub deploy {hub_item.get('name')}"
+    inputs_details, deploy_cmd = _render_inputs(
+        item_info, default_admin_vars, deploy_cmd
     )
 
-    for annotation, a_v in hub_item.get("annotations", {}).items():
-        table.add_row(annotation, a_v)
+    table.add_row("Inputs", inputs_details)
+    table.add_row("Deploy command example", deploy_cmd)
 
-    md_description = Markdown(hub_item.get("description"))
-    table.add_row("description", Align(md_description, align="left", width=80))
+    defaults_block = _render_defaults(item_info)
+    if defaults_block:
+        table.add_row("Deploy command defaults", defaults_block)
 
-    deploy_command_example = f"ewc hub deploy {hub_item.get('name')}"
-
-    if not default_admin_variables_map:
-        default_admin_variables_map = {}
-    default_admin_variables = [dav for dav in default_admin_variables_map]
-
-    details = ""
-    item_info_ewccli = hub_item.get(HubItemCLIKeys.ROOT.value, {})
-
-    for mi in item_info_ewccli.get(HubItemCLIKeys.INPUTS.value, []):
-        var_name = mi.get("name")
-        default_str = f" (default: {mi['default']})" if "default" in mi else ""
-        mandatory = (
-            "(mandatory)"
-            if ("default" not in mi and var_name not in default_admin_variables)
-            else "(optional) "
-        )
-        details += f"{mandatory} {var_name}: ({mi.get('type')}){default_str}: {mi.get('description')}\n"
-
-        if "default" not in mi and var_name not in default_admin_variables:
-            deploy_command_example += f" --item-inputs {var_name}='<>'"
-
-    table.add_row("Inputs", details)
-
-    table.add_row("Deploy command example", deploy_command_example)
-
-    deploy_command_defaults = ""
-    if item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value):
-        deploy_command_defaults = f"Image Name: {item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value)}\n"
-
-    if item_info_ewccli.get(HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value):
-        deploy_command_defaults = f"Security Group/s: {','.join([f for f in item_info_ewccli.get(HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value, [])])}\n"
-
-    if deploy_command_defaults:
-        table.add_row("Deploy command defaults", deploy_command_defaults)
-
-    console.print(
-        table,
-        # justify="center"
-    )
+    console.print(table)
 
 
-def list_dict_table(title: str, kv: dict):
+def list_dict_table(title: str, kv: Dict[str, Any]) -> None:
     """List dictionary in table."""
     table = Table(
         show_header=True,
@@ -477,102 +556,140 @@ def list_dict_table(title: str, kv: dict):
     )
 
 
-def show_objects(title: str, objects: list, plural: str, namespace: str) -> None:
-    """Show objects from kubernetes backend."""
-    if not objects:
-        click.echo(f"No {plural} found.")
-        return None
+def _extract_metadata(item: Dict[str, Any], default_ns: str) -> tuple[str, str, str]:
+    metadata = item.get("metadata", {})
+    name = metadata.get("name", "N/A")
+    namespace = metadata.get("namespace", default_ns)
+    creation_ts = metadata.get("creationTimestamp")
+    return name, namespace, creation_ts
 
+
+def _compute_age(creation_ts: str | None, now: datetime) -> str:
+    if not creation_ts:
+        return "N/A"
+
+    created = datetime.fromisoformat(creation_ts.replace("Z", "+00:00"))
+    age_seconds = (now - created).total_seconds()
+
+    if age_seconds < 60:
+        value, unit = int(age_seconds), "s"
+    elif age_seconds < 3600:
+        value, unit = int(age_seconds // 60), "m"
+    elif age_seconds < 86400:
+        value, unit = int(age_seconds // 3600), "h"
+    else:
+        value, unit = int(age_seconds // 86400), "d"
+
+    return f"{value}{unit}"
+
+
+def _extract_status(item: Dict[str, Any]) -> Any:
+    status_obj = item.get("status", {})
+    conditions = status_obj.get("conditions", [])
+    return get_reason_from_conditions(conditions)
+
+
+def _build_table(title: str) -> Table:
     table = Table(title=title)
     table.add_column("Name", style="cyan", no_wrap=True)
     table.add_column("Namespace", style="yellow")
     table.add_column("Age", style="green")
     table.add_column("Status", style="magenta")
+    return table
 
+
+def show_objects(
+    title: str, objects: List[Dict[str, Any]], plural: str, namespace: str
+) -> None:
+    """Show objects from Kubernetes backend."""
+    if not objects:
+        click.echo(f"No {plural} found.")
+        return
+
+    table = _build_table(title)
     now = datetime.now(timezone.utc)
 
     for item in objects:
-        metadata = item.get("metadata", {})
-        name = metadata.get("name", "N/A")
-        namespace = metadata.get("namespace", namespace)
-        creation_ts = metadata.get("creationTimestamp")
-        status_obj = item.get("status", {})
-        conditions = status_obj.get("conditions", [])
-
-        status = get_reason_from_conditions(conditions)
-
-        age = "N/A"
-        if creation_ts:
-            created = datetime.fromisoformat(creation_ts.replace("Z", "+00:00"))
-            age_seconds = (now - created).total_seconds()
-            if age_seconds < 60:
-                age = f"{int(age_seconds)}s"
-            elif age_seconds < 3600:
-                age = f"{int(age_seconds // 60)}m"
-            elif age_seconds < 86400:
-                age = f"{int(age_seconds // 3600)}h"
-            else:
-                age = f"{int(age_seconds // 86400)}d"
-
-        table.add_row(name, namespace, age, status)
+        name, ns, creation_ts = _extract_metadata(item, namespace)
+        age = _compute_age(creation_ts, now)
+        status = _extract_status(item)
+        table.add_row(name, ns, age, status)
 
     console.print(table)
 
 
-def describe_object(obj: dict) -> None:
-    """
-    Render a Kubernetes object (CR or built-in) in a kubectl-describe-like table.
-    """
-    if not obj:
-        return None
+def _flatten_dict(value: Dict[str, Any], parent: str) -> List[Tuple[str, Any]]:
+    items: List[Tuple[str, Any]] = []
+    for key, sub in value.items():
+        full_key = f"{parent}.{key}" if parent else key
+        items.extend(flatten_dict(sub, full_key))
+    return items
 
-    def _flatten(d, parent=""):
-        """Flatten dicts into key: value (dot notation for nested)."""
-        items = []
-        for k, v in d.items():
-            key = f"{parent}.{k}" if parent else k
-            if isinstance(v, dict):
-                items.extend(_flatten(v, key))
-            elif isinstance(v, list):
-                if all(isinstance(i, dict) for i in v):
-                    for idx, sub in enumerate(v):
-                        items.extend(_flatten(sub, f"{key}[{idx}]"))
-                else:
-                    items.append((key, ", ".join(str(i) for i in v)))
-            else:
-                items.append((key, v))
-        return items
 
-    # Flatten top-level metadata, spec, status
-    sections = {
+def _flatten_list(value: List[Any], parent: str) -> List[Tuple[str, Any]]:
+    items: List[Tuple[str, Any]] = []
+    if all(isinstance(i, dict) for i in value):
+        for idx, sub in enumerate(value):
+            items.extend(flatten_dict(sub, f"{parent}[{idx}]"))
+    else:
+        items.append((parent, ", ".join(str(i) for i in value)))
+    return items
+
+
+def flatten_dict(data: Any, parent: str = "") -> List[Tuple[str, Any]]:
+    """Flatten nested dicts/lists into dot-notation key/value pairs."""
+    if isinstance(data, dict):
+        return _flatten_dict(data, parent)
+
+    if isinstance(data, list):
+        return _flatten_list(data, parent)
+
+    # Base value
+    return [(parent, data)]
+
+
+def render_section(title: str, content: Dict[str, Any]) -> None:
+    """Render a single section of a Kubernetes object."""
+    if not content:
+        return
+
+    click.secho(title, fg="green", bold=True)
+    for key, value in flatten_dict(content):
+        click.echo(f"  {key:25} {value}")
+    click.echo()
+
+
+def extract_sections(obj: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Extract metadata/spec/status sections from a Kubernetes object."""
+    return {
         "Metadata": obj.get("metadata", {}),
         "Spec": obj.get("spec", {}),
         "Status": obj.get("status", {}),
     }
 
-    # Print header
-    click.secho(
-        f"Name: {obj.get('metadata', {}).get('name', '<unknown>')}",
-        fg="cyan",
-        bold=True,
-    )
-    click.secho(
-        f"Namespace: {obj.get('metadata', {}).get('namespace', '<default>')}", fg="cyan"
-    )
-    click.secho(
-        f"Kind: {obj.get('kind', '<unknown>')} | API: {obj.get('apiVersion', '')}",
-        fg="cyan",
-    )
+
+def describe_object(obj: Dict[str, Any]) -> None:
+    """
+    Render a Kubernetes object (CR or built-in) in a kubectl-describe-like table.
+    """
+    if not obj:
+        return
+
+    name = obj.get("metadata", {}).get("name", "<unknown>")
+    namespace = obj.get("metadata", {}).get("namespace", "<default>")
+    kind = obj.get("kind", "<unknown>")
+    api = obj.get("apiVersion", "")
+
+    click.secho(f"Name: {name}", fg="cyan", bold=True)
+    click.secho(f"Namespace: {namespace}", fg="cyan")
+    click.secho(f"Kind: {kind} | API: {api}", fg="cyan")
     click.echo()
 
-    # Print sections
-    for section, content in sections.items():
-        if not content:
-            continue
-        click.secho(section, fg="green", bold=True)
-        for key, value in _flatten(content):
-            click.echo(f"  {key:25} {value}")
-        click.echo()
+    for section_name, content in extract_sections(obj).items():
+        render_section(section_name, content)
+
+
+# DNS methods
 
 
 def build_dns_record_name(

@@ -8,8 +8,10 @@
 
 """Helpers methods for Kubernetes backend."""
 
+from typing import Any, List, Dict
 
-def get_status_from_conditions(conditions: list) -> str:
+
+def get_status_from_conditions(conditions: List[Dict[str, Any]]) -> Any:
     """
     Extract a human-readable status from conditions list.
 
@@ -27,7 +29,7 @@ def get_status_from_conditions(conditions: list) -> str:
     return f"{first.get('type')}: {first.get('status')}"
 
 
-def get_reason_from_conditions(conditions: list) -> str:
+def get_reason_from_conditions(conditions: List[Dict[str, Any]]) -> Any:
     """
     Extract the reason from the 'Ready' condition if available,
     otherwise fallback to the first condition's reason.
