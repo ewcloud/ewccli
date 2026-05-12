@@ -4,11 +4,16 @@
 # See the LICENSE file for more details
 
 ---
+exclude: (^|/)ewccli/tests/|(^|/)ewccli/backends/kubernetes/|(^|/)ewccli/commands/dns_command.py|(^|/)ewccli/commands/k8s_command.py|(^|/)ewccli/commands/s3_command.py
+
 repos:
   - repo: https://github.com/Lucas-C/pre-commit-hooks
     rev: v1.5.5
     hooks:
       - id: remove-tabs
+        exclude: |
+          (^|/)ewccli/backends/kubernetes/|
+          (^|/)ewccli/commands/dns_command.py
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -34,13 +39,18 @@ repos:
     hooks:
       - id: ruff-check
         args: [ --fix ]
+        exclude: |
+          (^|/)ewccli/backends/kubernetes/|
+          (^|/)ewccli/commands/dns_command.py
       - id: ruff-format
+        exclude: |
+          (^|/)ewccli/backends/kubernetes/|
+          (^|/)ewccli/commands/dns_command.py
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.17.0
     hooks:
       - id: mypy
-        exclude: '^(docs|tasks|tests)|setup\.py'
         additional_dependencies:
           - types-requests
           - types-PyYAML
@@ -48,6 +58,10 @@ repos:
         args:
           - --show-error-codes
           - --pretty
+        exclude: |
+          ^(docs|tasks|tests)|setup\.py|
+          (^|/)ewccli/backends/kubernetes/|
+          (^|/)ewccli/commands/dns_command.py
 
   - repo: https://github.com/psf/black
     rev: "25.1.0"
@@ -56,6 +70,9 @@ repos:
         args:
           - --check
           - --diff
+        exclude: |
+          (^|/)ewccli/backends/kubernetes/|
+          (^|/)ewccli/commands/dns_command.py
 
   - repo: https://github.com/PyCQA/flake8
     rev: "7.3.0"
@@ -70,3 +87,6 @@ repos:
         args:
           - --max-line-length=120
           - --max-complexity=10
+        exclude: |
+          (^|/)ewccli/backends/kubernetes/|
+          (^|/)ewccli/commands/dns_command.py

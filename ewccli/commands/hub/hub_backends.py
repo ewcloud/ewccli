@@ -13,7 +13,7 @@ import sys
 import json
 import time
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
 
 import requests
 from openstack import connection
@@ -28,10 +28,10 @@ _LOGGER = get_logger(__name__)
 
 ansible_backend = AnsibleBackend()
 
-HUB_ENV_VARIABLES_MAP = {
-    "os_network_name": {Federee.ECMWF.value: None, Federee.EUMETSAT.value: "private"},
+HUB_ENV_VARIABLES_MAP: Dict[str, Dict[str, str]] = {
+    "os_network_name": {Federee.ECMWF.value: "", Federee.EUMETSAT.value: "private"},
     "os_subnet_name": {
-        Federee.ECMWF.value: None,
+        Federee.ECMWF.value: "",
         Federee.EUMETSAT.value: "private-subnet",
     },
     "os_subnet_cidr": {
@@ -39,14 +39,14 @@ HUB_ENV_VARIABLES_MAP = {
         Federee.EUMETSAT.value: "10.0.0.0/24",
     },
     "dns_domain": {
-        Federee.ECMWF.value: None,
-        Federee.EUMETSAT.value: None,
+        Federee.ECMWF.value: "",
+        Federee.EUMETSAT.value: "",
     },
 }
 
 
-def get_hub_item_env_variable_value(
-    hub_item_env_variables_map: dict,
+def get_hub_item_env_variable_value(  # noqa: CCR001, C901
+    hub_item_env_variables_map: Dict[str, Dict[str, str]],
     federee: str,
     tenant_name: str,
     variable_name: str,
@@ -159,7 +159,7 @@ def git_clone_item(
     command_path: str,
     dry_run: bool = False,
     force: bool = False,
-):
+) -> Tuple[int, str]:
     """Git clone item."""
     ########################################################################
     # Prepare input for items
@@ -214,9 +214,9 @@ def git_clone_item(
     return return_code, message
 
 
-def run_ansible_item(
+def run_ansible_item(  # noqa: CCR001, CFQ002
     item: str,
-    item_inputs: Optional[dict],
+    item_inputs: Optional[Dict[str, str]],
     server_name: str,
     ip_machine: str,
     username: str,
@@ -225,10 +225,10 @@ def run_ansible_item(
     working_directory_path: str,
     ssh_private_key_path: str,
     dry_run: bool = False,
-):
+) -> int:
     """Run item based on Ansible Playbook."""
     if dry_run:
-        return 0, "Dry run. No actions"
+        return 0
 
     # Install roles
     ansible_backend.install_ansible_roles(
@@ -247,7 +247,6 @@ def run_ansible_item(
 
     inventory_content = f"[{server_name}]\n"
     inventory_content += "\n".join(machine_ips) + "\n\n"
-
     _LOGGER.debug(f"Inventory content {inventory_content}")
 
     with open(hosts_file_path, "w") as f:
@@ -336,7 +335,7 @@ def run_post_ansible_operations(
     repo_name: str,
     server_name: str,
     internal_ip_machine: str,
-):
+) -> None:
     """Run post ansible operation if something goes wrong."""
     hosts_file_name = f"hosts-{item}.ini"
     hosts_file_path = f"{command_path}/{repo_name}/{hosts_file_name}"
@@ -350,7 +349,7 @@ def run_post_ansible_operations(
         f.write(inventory_content)
 
 
-def run_ansible_playbook_item(
+def run_ansible_playbook_item(  # noqa: CFQ002
     item: str,
     server_name: str,
     username: str,
@@ -359,7 +358,7 @@ def run_ansible_playbook_item(
     working_directory_path: str,
     ip_machine: str,
     ssh_private_key_path: str,
-    item_inputs: Optional[dict],
+    item_inputs: Optional[Dict[str, str]],
     dry_run: bool = False,
 ) -> Tuple[int, str]:
     """Deploy Ansible item."""

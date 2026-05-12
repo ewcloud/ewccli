@@ -8,10 +8,15 @@
 
 """EWC CLI: VM interaction."""
 
+from __future__ import annotations
+
 import sys
 import os
 import time
 from typing import Optional
+
+from typing import Tuple, Dict, Any
+from pydantic import BaseModel
 
 import rich_click as click
 from rich.console import Console
@@ -34,7 +39,7 @@ from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
 from ewccli.commands.commons_infra import create_server_command
 from ewccli.commands.commons_infra import resolve_machine_ip
-from ewccli.utils import load_cli_profile
+from ewccli.profile import ProfileStore
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -46,32 +51,32 @@ infra_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 
 
 # Command Group
-@click.group(name="infra")
-@infra_context
+@click.group(name="infra")  # type: ignore[misc]
+@infra_context  # type: ignore[misc]
 @login_options
-def ewc_infra_command(ctx, profile):
+def ewc_infra_command(ctx: click.Context, profile: str) -> None:
     """EWC Infrastructure commands group."""
+    store = ProfileStore()
+
     if profile:
-        ctx.cli_profile = load_cli_profile(profile=profile)
+        ctx.cli_profile = store.load(name=profile)
         _LOGGER.info(f"Using `{profile}` profile.")
     else:
-        ctx.cli_profile = load_cli_profile(
-            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
-        )
-        _LOGGER.info(f"Using `{ctx.cli_profile.get('profile')}` profile.")
+        ctx.cli_profile = store.load(name=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME)
+        _LOGGER.info(f"Using `{ctx.cli_profile.profile}` profile.")
 
-    federee = ctx.cli_profile.get("federee")
-    region = ctx.cli_profile.get("region")
-    application_credential_id = ctx.cli_profile.get("application_credential_id")
-    application_credential_secret = ctx.cli_profile.get("application_credential_secret")
+    federee = ctx.cli_profile.federee
+    region = ctx.cli_profile.region
+    application_credential_id = ctx.cli_profile.application_credential_id
+    application_credential_secret = ctx.cli_profile.application_credential_secret
     ctx.openstack_backend = OpenstackBackend(
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
-        auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(federee).get(region),
+        auth_url=ewc_hub_config.EWC_CLI_SITE_MAP[federee][region],
     )
 
 
-def list_server_table(servers: dict):
+def list_server_table(servers: Dict[str, Any]) -> None:
     """List servers in a table with columns Name, Status, and Networks."""
     console = Console()
 
@@ -91,7 +96,6 @@ def list_server_table(servers: dict):
 
     # Add each server as a row
     for server_id, server_info in servers.items():
-        
         name = str(server_info.get("name", ""))
         keypair = str(server_info.get("keypair", ""))
         status = str(server_info.get("status", ""))
@@ -102,30 +106,59 @@ def list_server_table(servers: dict):
     console.print(table)
 
 
-@ewc_infra_command.command("create", help="Create server in Openstack.")
-@infra_context
+class ServerAuthConfig(BaseModel):  # type: ignore[misc]
+    federee: Optional[str] = None
+    region: Optional[str] = None
+    auth_url: Optional[str] = None
+    application_credential_id: Optional[str] = None
+    application_credential_secret: Optional[str] = None
+
+
+class ServerSSHConfig(BaseModel):  # type: ignore[misc]
+    keypair_name: str
+    ssh_public_key_path: Optional[str] = None
+    ssh_private_key_path: Optional[str] = None
+    ssh_private_encoded: Optional[str] = None
+    ssh_public_encoded: Optional[str] = None
+
+
+class ServerNetworkConfig(BaseModel):  # type: ignore[misc]
+    external_ip: bool = False
+    networks: Optional[Tuple[str, ...]] = None
+    security_groups: Optional[Tuple[str, ...]] = None
+
+
+class ServerCreateOptions(BaseModel):  # type: ignore[misc]
+    image_name: Optional[str] = None
+    flavour_name: Optional[str] = None
+    dry_run: bool = False
+    force: bool = False
+
+
+@ewc_infra_command.command("create", help="Create server in Openstack.")  # type: ignore[misc]
+@infra_context  # type: ignore[misc]
 @ssh_options
 @ssh_options_encoded
 @openstack_options
 @openstack_optional_options
-@click.option(
+@click.option(  # type: ignore[misc]
     "--dry-run",
     envvar="EWC_CLI_DRY_RUN",
     default=False,
     is_flag=True,
     help="Simulate deployment without running.",
 )
-@click.option(
+@click.option(  # type: ignore[misc]
     "--force",
     envvar="EWC_CLI_FORCE",
     is_flag=True,
     default=False,
     help="Force item recreation operation.",
 )
-@click.argument("server_name")
-def create_cmd(
-    ctx,
-    server_name,
+@click.argument("server_name")  # type: ignore[misc]
+def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
+    ctx: click.Context,
+    server_name: str,
     dry_run: bool,
     force: bool,
     keypair_name: str,
@@ -139,19 +172,35 @@ def create_cmd(
     image_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
     external_ip: bool = False,
-    networks: Optional[tuple] = None,
-    security_groups: Optional[tuple] = None,
-    extra_volume: Optional[tuple] = None,
+    networks: Optional[Tuple[str, str]] = None,
+    security_groups: Optional[Tuple[str, str]] = None,
+    extra_volume: Optional[Tuple[str, str]] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
-):
+) -> None:
     """Show Server from Openstack."""
-    if dry_run:
+    ssh = ServerSSHConfig(
+        keypair_name=keypair_name,
+        ssh_public_key_path=ssh_public_key_path,
+        ssh_private_key_path=ssh_private_key_path,
+        ssh_private_encoded=ssh_private_encoded,
+        ssh_public_encoded=ssh_public_encoded,
+    )
+
+    net = ServerNetworkConfig(
+        external_ip=external_ip, networks=networks, security_groups=security_groups
+    )
+
+    opts = ServerCreateOptions(
+        image_name=image_name, flavour_name=flavour_name, dry_run=dry_run, force=force
+    )
+
+    if opts.dry_run:
         _LOGGER.info("Dry run enabled...")
 
     cli_profile = ctx.cli_profile
-    federee = federee or cli_profile["federee"]
-    region = region or cli_profile["region"]
+    federee = federee or cli_profile.federee
+    region = region or cli_profile.region
 
     allowed_regions = ewc_hub_config.allowed_regions(federee)
     if region not in allowed_regions:
@@ -160,30 +209,61 @@ def create_cmd(
             f" The following regions are available: {allowed_regions}"
         )
 
-    # Try to fill from CLI profile if not provided
-    if not ssh_public_key_path:
-        ssh_public_key_path = cli_profile.get("ssh_public_key_path")
+    if not auth_url:
+        site_map = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee)
+        if site_map is None:
+            raise ClickException(f"[Infra] Unknown federee '{federee}'.")
 
-    if not ssh_private_key_path:
-        ssh_private_key_path = cli_profile.get("ssh_private_key_path")
+        auth_url = site_map.get(region)
+        if auth_url is None:
+            raise ClickException(
+                f"[Infra] Unknown region '{region}' for federee '{federee}'."
+            )
+
+    auth = ServerAuthConfig(
+        federee=federee,
+        region=region,
+        auth_url=auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret,
+    )
+
+    # Try to fill from CLI profile if not provided
+    if not ssh.ssh_public_key_path:
+        ssh_public_key_path = cli_profile.ssh_public_key_path
+
+    if not ssh.ssh_private_key_path:
+        ssh_private_key_path = cli_profile.ssh_private_key_path
 
     check_user_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
-        ssh_private_key_path=ssh_private_key_path
+        ssh_private_key_path=ssh_private_key_path,
     )
 
-    _LOGGER.info(f"The server will be deployed on {federee} side of the EWC.")
+    _LOGGER.info(
+        f"The server will be deployed on {federee} ({region}) side of the EWC."
+    )
 
     #####################################################################################
     # Authenticate to Openstack
     #####################################################################################
 
+    if dry_run:
+        console.print(
+            Panel(
+                "Dry run: skipping OpenStack connection and exiting.",
+                title="Info",
+                style="green",
+            )
+        )
+        sys.exit(0)
+
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
         openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
+            auth_url=auth.auth_url,
+            application_credential_id=auth.application_credential_id,
+            application_credential_secret=auth.application_credential_secret,
         )
     except Exception as op_error:
         raise ClickException(
@@ -203,25 +283,32 @@ def create_cmd(
         extra_volume=extra_volume,
     )
 
+    if ssh_public_key_path is None:
+        raise ClickException("[Create server] Missing ssh_public_key_path.")
+
+    if ssh_private_key_path is None:
+        raise ClickException("[Create server] Missing ssh_private_key_path.")
+
     os_status_code, os_message, outputs = create_server_command(
         openstack_backend=ctx.openstack_backend,
         openstack_api=openstack_api,
         federee=federee,
         region=region,
         server_inputs=server_inputs,
-        ssh_private_encoded=ssh_private_encoded,
-        ssh_public_encoded=ssh_public_encoded,
+        ssh_private_encoded=ssh.ssh_private_encoded,
+        ssh_public_encoded=ssh.ssh_public_encoded,
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
-        dry_run=dry_run,
-        force=force,  
+        dry_run=opts.dry_run,
+        force=opts.force,
     )
+
     internal_ip_machine = outputs["internal_ip_machine"]
     external_ip_machine = outputs["external_ip_machine"]
-    normalized_image_name = outputs.get("normalized_image_name")
+    normalized_image_name = outputs["normalized_image_name"]
 
-    username = (
-        ewc_hub_config.EWC_CLI_IMAGES_USER.get(normalized_image_name)
+    username: Optional[str] = ewc_hub_config.EWC_CLI_IMAGES_USER.get(
+        normalized_image_name
     )
 
     # If missing the mapping in the configuration is missing, so configuration file needs to be checked.
@@ -230,8 +317,9 @@ def create_cmd(
             Panel(
                 f"[Ansible Item] username for {normalized_image_name} could not be identified.",
                 title="Error",
-                style="red")
+                style="red",
             )
+        )
         # Exit with a non-zero status
         sys.exit(1)
 
@@ -242,7 +330,7 @@ def create_cmd(
         message = "[bold blue]🚀 Deployment Complete[/bold blue]\n"
         message += f"[bold]Item:[/bold] {server_name} server has been successfully deployed.\n\n"
 
-        if not external_ip:
+        if not net.external_ip:
             if not external_ip_machine:
                 initial_message_ip = (
                     "[bold yellow]⚠️ No external IP requested[/bold yellow]\n"
@@ -266,20 +354,20 @@ def create_cmd(
         console.print(message)
 
 
-@ewc_infra_command.command("show", help="Show Openstack server information.")
-@infra_context
+@ewc_infra_command.command("show", help="Show Openstack server information.")  # type: ignore[misc]
+@infra_context  # type: ignore[misc]
 @openstack_options
-@click.argument("server_name")
-def show_cmd(
-    ctx,
-    server_name,
+@click.argument("server_name")  # type: ignore[misc]
+def show_cmd(  # noqa: CCR001
+    ctx: click.Context,
+    server_name: str,
     federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
-):
+) -> None:
     """Show Server from Openstack."""
-    federee = federee or ctx.cli_profile["federee"]
+    federee = federee or ctx.cli_profile.federee
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
@@ -339,25 +427,23 @@ def show_cmd(
             root_volume = f"{vol.name or vol.id} [{vol.size}] (mount: {device})"
             continue
 
-        extra_volumes.append(
-            f"{vol.name or vol.id} [{vol.size}] (mount: {device})"
-        )
+        extra_volumes.append(f"{vol.name or vol.id} [{vol.size}] (mount: {device})")
 
     vm_info = get_deployed_server_info(
         federee=federee,
         server_info=server_info,
         image_name=image_name,
         root_volume=root_volume,
-        extra_volumes=extra_volumes
+        extra_volumes=extra_volumes,
     )
 
     list_server_details(vm_info)
 
 
-@ewc_infra_command.command(name="list", help="List servers in Openstack.")
-@infra_context
+@ewc_infra_command.command(name="list", help="List servers in Openstack.")  # type: ignore[misc]
+@infra_context  # type: ignore[misc]
 @openstack_options
-@click.option(
+@click.option(  # type: ignore[misc]
     "--show-all",
     is_flag=True,
     default=False,
@@ -366,16 +452,15 @@ def show_cmd(
     help="List machines even if not created by the EWC CLI.",
 )
 def list_cmd(
-    ctx,
+    ctx: click.Context,
     federee: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
     show_all: bool = False,
-):
+) -> None:
     """List Servers from Openstack."""
-    federee = federee or ctx.cli_profile["federee"]
-
+    federee = federee or ctx.cli_profile.federee
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
@@ -400,18 +485,23 @@ def list_cmd(
     list_server_table(servers=servers)
 
 
-@ewc_infra_command.command(name="delete", help="Delete server in Openstack.")
-@click.option(
+class ServerDeleteOptions(BaseModel):  # type: ignore[misc]
+    dry_run: bool = False
+    force: bool = False
+
+
+@ewc_infra_command.command(name="delete", help="Delete server in Openstack.")  # type: ignore[misc]
+@click.option(  # type: ignore[misc]
     "--dry-run",
     is_flag=True,
     default=False,
     help="Simulate the operation without making any changes.",
 )
-@click.argument(
+@click.argument(  # type: ignore[misc]
     "server-name",
     type=str,
 )
-@click.option(
+@click.option(  # type: ignore[misc]
     "--force",
     is_flag=True,
     default=False,
@@ -419,28 +509,40 @@ def list_cmd(
     show_default=True,
     help="Force deletion of machines not created by the ewccli.",
 )
-@infra_context
+@infra_context  # type: ignore[misc]
 @openstack_options
-def delete_cmd(
-    ctx,
+def delete_cmd(  # noqa: CFQ002, C901
+    ctx: click.Context,
     server_name: str,
-    force: bool = False,
+    dry_run: bool,
+    force: bool,
+    federee: Optional[str] = None,
+    region: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
-    dry_run: bool = False,
-):
+) -> None:
     """Delete VM from Openstack."""
     cli_profile = ctx.cli_profile
-    federee = cli_profile["federee"]
+    federee = cli_profile.federee
+
+    auth = ServerAuthConfig(
+        federee=federee,
+        region=region,
+        auth_url=auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret,
+    )
+
+    opts = ServerDeleteOptions(dry_run=dry_run, force=force)
 
     # Step 1: Authenticate and initialize the OpenStack connection
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
         openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
+            auth_url=auth.auth_url,
+            application_credential_id=auth.application_credential_id,
+            application_credential_secret=auth.application_credential_secret,
         )
     except Exception as op_error:
         raise ClickException(
@@ -453,19 +555,20 @@ def delete_cmd(
     try:
         server_info = openstack_api.get_server(name_or_id=server_name)
     except Exception as e:
-        raise ClickException(
-            f"Could not retrieve server {server_name} due to: {e}"
-        )
+        raise ClickException(f"Could not retrieve server {server_name} due to: {e}")
 
     # Step 3: Run pre-delete steps
     try:
+        if auth.federee is None:
+            raise ValueError("Missing federee in ServerAuthConfig")
+
         sc_pre, msg_pre = pre_delete_server(
             openstack_backend=ctx.openstack_backend,
             openstack_api=openstack_api,
-            federee=federee,
+            federee=auth.federee,
             server_name=server_name,
             server_info=server_info,
-            dry_run=dry_run,
+            dry_run=opts.dry_run,
         )
     except Exception as e:
         raise ClickException(
@@ -482,8 +585,8 @@ def delete_cmd(
         _, delete_message = ctx.openstack_backend.delete_server(
             conn=openstack_api,
             server_name=server_name,
-            force=force,
-            dry_run=dry_run,
+            force=opts.force,
+            dry_run=opts.dry_run,
         )
     except Exception as e:
         raise ClickException(
@@ -493,18 +596,18 @@ def delete_cmd(
     _LOGGER.info(delete_message)
 
 
-def pre_delete_server(
+def pre_delete_server(  # noqa: C901, CCR001, CFQ004
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
     server_name: str,
-    server_info: dict,
+    server_info: Dict[str, Any],
     dry_run: bool = False,
-):
+) -> Tuple[int, str]:
     """Pre delete server steps:
 
-        - detach floating IP
-        - detach and delete extra volumes
+    - detach floating IP
+    - detach and delete extra volumes
     """
     if dry_run:
         return 0, "[Dry Run] skipping pre delete server steps..."
@@ -538,12 +641,12 @@ def pre_delete_server(
     ############################################################
 
     if external_ip_machine:
-        _LOGGER.info(f"Detaching external IP {external_ip_machine} from server {server_name}")
+        _LOGGER.info(
+            f"Detaching external IP {external_ip_machine} from server {server_name}"
+        )
 
         detach_status, message = openstack_backend.remove_external_ip(
-            conn=openstack_api,
-            server=server_info,
-            external_ip=external_ip_machine
+            conn=openstack_api, server=server_info, external_ip=external_ip_machine
         )
 
         time.sleep(_EWC_CLI_SLEEP_TIME - 15)
@@ -577,16 +680,24 @@ def pre_delete_server(
                     volumes_to_process.append(vol)
 
         if volumes_to_process:
-            _LOGGER.info(f"Found {len(volumes_to_process)} ewccli volumes to detach/delete")
+            _LOGGER.info(
+                f"Found {len(volumes_to_process)} ewccli volumes to detach/delete"
+            )
 
-            detach_result, deleted_ids, msg = openstack_backend.detach_volumes_from_server(
-                conn=openstack_api,
-                server_id=server_info.get("id"),
-                volumes=volumes_to_process,
-                attempts=2,
-                retry_delay_s=30,
-                wait_time_s=600,
-                dry_run=dry_run,
+            server_id = server_info.get("id")
+            if server_id is None:
+                raise ValueError("server_info['id'] is missing")
+
+            detach_result, deleted_ids, msg = (
+                openstack_backend.detach_volumes_from_server(
+                    conn=openstack_api,
+                    server_id=server_id,
+                    volumes=volumes_to_process,
+                    attempts=2,
+                    retry_delay_s=30,
+                    wait_time_s=600,
+                    dry_run=dry_run,
+                )
             )
 
             if not detach_result.success:

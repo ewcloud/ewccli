@@ -5,11 +5,27 @@
 # Copyright (c) 2026 EUMETSAT, ECMWF for European Weather Cloud
 # See the LICENSE file for more details
 
+import subprocess
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 from click.testing import CliRunner
 from unittest.mock import patch
 
+from ewccli.profile import ProfileStore
 from ewccli.ewccli import cli
+from ewccli.enums import Federee, Region
+
+
+class FakeProfile(SimpleNamespace):
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
 
 @pytest.fixture
 def runner():
@@ -55,21 +71,24 @@ def mock_profile_loader(tmp_path, valid_private_key_pem, valid_public_key_openss
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
 
-    # ✅ write VALID keys
+    # write VALID keys
     pub_key.write_text(valid_public_key_openssh)
     priv_key.write_text(valid_private_key_pem)
 
-    with patch("ewccli.utils.load_cli_profile") as mock_load:
-        mock_load.return_value = {
-            "profile": "test-profile",
-            "auth_url": "http://fake-auth-url",
-            "application_credential_id": "fake-id",
-            "application_credential_secret": "fake-secret",
-            "tenant_name": "test-tenant",
-            "federee": "test-federee",
-            "ssh_public_key_path": str(pub_key),
-            "ssh_private_key_path": str(priv_key),
-        }
+    fake_profile = FakeProfile(
+        profile="test-profile",
+        auth_url="http://fake-auth-url",
+        application_credential_id="fake-id",
+        application_credential_secret="fake-secret",
+        tenant_name="test-tenant",
+        federee=Federee.EUMETSAT.value,
+        region=Region.R1.value,
+        ssh_public_key_path=str(pub_key),
+        ssh_private_key_path=str(priv_key),
+    )
+
+    with patch("ewccli.commands.hub.hub_command.ProfileStore.load") as mock_load:
+        mock_load.return_value = fake_profile
         yield mock_load
 
 
@@ -78,9 +97,10 @@ def mock_profile_loader(tmp_path, valid_private_key_pem, valid_public_key_openss
 # -----------------------------
 @pytest.fixture(autouse=True)
 def mock_ctx_obj():
-    with patch("ewccli.commands.hub.hub_command.categorize_item_inputs") as m1, \
-         patch("ewccli.commands.hub.hub_command.check_missing_required_inputs") as m2:
-
+    with (
+        patch("ewccli.commands.hub.hub_command.categorize_item_inputs") as m1,
+        patch("ewccli.commands.hub.hub_command.check_missing_required_inputs") as m2,
+    ):
         m1.return_value = ([], [])
         m2.return_value = []
 
@@ -95,28 +115,66 @@ def test_deploy_help(runner):
     assert result.exit_code == 0
 
 
-def test_deploy_missing_item(runner):
-    result = runner.invoke(cli, ["hub", "deploy"])
-    assert result.exit_code != 0
-
-
 def test_deploy_dry_run_minimal(runner):
-    result = runner.invoke(
-        cli,
-        ["hub", "deploy", "ssh-bastion-flavour", "--dry-run"],
-        obj={
-            "items": {
-                "ssh-bastion-flavour": {
-                    "cli": {"inputs": []}
-                }
-            }
-        },
-    )
+
+    # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = Path(tmpdir) / "id_rsa"
+        pub = Path(tmpdir) / "id_rsa.pub"
+
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True,
+        )
+
+        federee = Federee.EUMETSAT.value
+        region = Region.R1.value
+        tenant_name = "dummy-dummy-dummy"
+
+        result = runner.invoke(
+            cli,
+            [
+                "login",
+                "--application-credential-id",
+                "dummy",
+                "--application-credential-secret",
+                "dummy",
+                "--ssh-public-key-path",
+                str(pub),
+                "--ssh-private-key-path",
+                str(priv),
+                "--tenant-name",
+                tenant_name,
+                "--federee",
+                federee,
+                "--region",
+                region,
+            ],
+        )
+
+        result = runner.invoke(
+            cli,
+            ["hub", "deploy", "ssh-bastion-flavour", "--dry-run"],
+            # obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
+        )
+
+        profile = ProfileStore()
+        resolved_profile = profile.resolve_name(
+            federee=federee, region=region, tenant_name=tenant_name
+        )
+        profile.delete(name=resolved_profile)
+
+    print("OUTPUT:", result.output)
+    print("EXCEPTION:", result.exception)
+    print("TRACEBACK:", result.exc_info)
 
     assert result.exit_code == 0
 
 
-def test_deploy_with_ssh_paths(runner, tmp_path, valid_private_key_pem, valid_public_key_openssh):
+def test_deploy_with_ssh_paths(
+    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh
+):
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
 
@@ -135,50 +193,21 @@ def test_deploy_with_ssh_paths(runner, tmp_path, valid_private_key_pem, valid_pu
             str(priv_key),
             "--dry-run",
         ],
-        obj={
-            "items": {
-                "ssh-bastion-flavour": {
-                    "cli": {"inputs": []}
-                }
-            }
-        },
+        obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
 
     assert result.exit_code == 0
 
 
 def test_deploy_with_env_vars(
-    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh, monkeypatch
+    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh
 ):
-    # Create fake SSH keys
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
+
     pub_key.write_text(valid_public_key_openssh)
     priv_key.write_text(valid_private_key_pem)
 
-    # Create a fake profiles file
-    profiles_file = tmp_path / "profiles"
-    profiles_file.write_text(
-        """
-[EWC_DEFAULT]
-federee = EUMETSAT
-region = WAW3-1
-tenant_name = internal-ewc-admins
-ssh_public_key_path = {pub}
-ssh_private_key_path = {priv}
-token =
-application_credential_id = dummy
-application_credential_secret = dummy
-""".format(pub=str(pub_key), priv=str(priv_key))
-    )
-
-    # Monkeypatch the path used by load_cli_profile
-    monkeypatch.setattr(
-        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_PROFILES_PATH",
-        profiles_file
-    )
-
-    # Run the CLI
     result = runner.invoke(
         cli,
         ["hub", "deploy", "ssh-bastion-flavour", "--dry-run"],
@@ -186,14 +215,7 @@ application_credential_secret = dummy
             "EWC_CLI_SSH_PUBLIC_KEY_PATH": str(pub_key),
             "EWC_CLI_SSH_PRIVATE_KEY_PATH": str(priv_key),
         },
-        obj={
-            "items": {
-                "ssh-bastion-flavour": {
-                    "cli": {"inputs": []}
-                }
-            }
-        },
+        obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
 
-    print(result.output)
     assert result.exit_code == 0

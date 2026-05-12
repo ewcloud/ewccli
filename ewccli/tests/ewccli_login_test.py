@@ -8,15 +8,13 @@
 
 """Tests for EWC login command."""
 
-
-import pytest
 import tempfile
 import subprocess
-
 from pathlib import Path
+
+import pytest
 from click import ClickException
 from click.testing import CliRunner
-from unittest.mock import patch
 
 from configparser import ConfigParser
 from cryptography.hazmat.primitives import serialization
@@ -26,30 +24,32 @@ from ewccli.ewccli import cli
 from ewccli.enums import Federee, Region
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.commands.login_command import check_and_generate_ssh_keys, init_command
-from ewccli.utils import delete_cli_profile, _resolve_profile
+from ewccli.profile import ProfileStore
+from ewccli.commands.login_command import LoginInput
 
 
 # -----------------------------
 # Case 1: both keys exist & match
 # -----------------------------
 def test_existing_matching_keys(tmp_path, monkeypatch):
-    priv = tmp_path / "id_rsa"
-    pub = tmp_path / "id_rsa.pub"
+    resolved_profile = "testprofile"
 
-    priv.write_text("private")
-    pub.write_text("public")
+    # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = tmp_path / f"{resolved_profile}_id_rsa"
+        pub = tmp_path / f"{resolved_profile}_id_rsa.pub"
 
-    # Patch where function is USED
-    monkeypatch.setattr(
-        "ewccli.commands.login_command.check_ssh_keys_match",
-        lambda ssh_private_key_path, ssh_public_key_path: True,
-    )
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True,
+        )
 
-    result_priv, result_pub = check_and_generate_ssh_keys(
-        ssh_public_key_path=str(pub),
-        ssh_private_key_path=str(priv),
-        resolved_profile="testprofile",
-    )
+        result_priv, result_pub = check_and_generate_ssh_keys(
+            ssh_public_key_path=str(pub),
+            ssh_private_key_path=str(priv),
+            resolved_profile=resolved_profile,
+        )
 
     assert result_priv == str(priv)
     assert result_pub == str(pub)
@@ -59,54 +59,49 @@ def test_existing_matching_keys(tmp_path, monkeypatch):
 # Case 1b: keys exist but mismatch
 # -----------------------------
 def test_existing_mismatching_keys(tmp_path, monkeypatch):
-    priv = tmp_path / "id_rsa"
-    pub = tmp_path / "id_rsa.pub"
+    resolved_profile = "testprofile"
 
-    priv.write_text("private")
-    pub.write_text("public")
+    # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = tmp_path / f"{resolved_profile}_id_rsa"
+        pub = tmp_path / f"{resolved_profile}_id_rsa.pub"
 
-    monkeypatch.setattr(
-        "ewccli.commands.login_command.check_ssh_keys_match",
-        lambda ssh_private_key_path, ssh_public_key_path: False,
-    )
-
-    with pytest.raises(ClickException):
-        check_and_generate_ssh_keys(
-            ssh_public_key_path=str(pub),
-            ssh_private_key_path=str(priv),
-            resolved_profile="testprofile",
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(pub), "-N", ""],
+            check=True,
         )
+
+        with pytest.raises(ClickException):
+            check_and_generate_ssh_keys(
+                ssh_public_key_path=str(pub),
+                ssh_private_key_path=str(priv),
+                resolved_profile=resolved_profile,
+            )
 
 
 # -----------------------------
 # Case 2: both keys missing -> user generates
 # -----------------------------
 def test_missing_keys_generate(tmp_path, monkeypatch):
-    priv = tmp_path / "id_rsa"
-    pub = tmp_path / "id_rsa.pub"
+    resolved_profile = "testprofile"
 
-    # Patch click.confirm in login_command
-    monkeypatch.setattr(
-        "ewccli.commands.login_command.click.confirm",
-        lambda *args, **kwargs: True,
-    )
+    # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = tmp_path / f"{resolved_profile}_id_rsa"
+        pub = tmp_path / f"{resolved_profile}_id_rsa.pub"
 
-    # Fake generate now only takes resolved_profile
-    def fake_generate(resolved_profile):
-        priv.write_text("generated private")
-        pub.write_text("generated public")
-        return priv, pub
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True,
+        )
 
-    monkeypatch.setattr(
-        "ewccli.commands.login_command.generate_ssh_keypair",
-        fake_generate,
-    )
-
-    result_priv, result_pub = check_and_generate_ssh_keys(
-        ssh_public_key_path=str(pub),
-        ssh_private_key_path=str(priv),
-        resolved_profile="profile",
-    )
+        result_priv, result_pub = check_and_generate_ssh_keys(
+            ssh_public_key_path=str(pub),
+            ssh_private_key_path=str(priv),
+            resolved_profile="profile",
+        )
 
     assert Path(result_priv).exists()
     assert Path(result_pub).exists()
@@ -162,6 +157,7 @@ def test_only_public_key_exists(tmp_path):
             resolved_profile="profile",
         )
 
+
 def test_validate_region_valid_eumetsat():
     runner = CliRunner()
 
@@ -173,7 +169,7 @@ def test_validate_region_valid_eumetsat():
         # Generate a real SSH keypair
         subprocess.run(
             ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
-            check=True
+            check=True,
         )
 
         federee = Federee.EUMETSAT.value
@@ -184,18 +180,28 @@ def test_validate_region_valid_eumetsat():
             cli,
             [
                 "login",
-                "--application-credential-id", "dummy",
-                "--application-credential-secret", "dummy",
-                "--ssh-public-key-path", str(pub),
-                "--ssh-private-key-path", str(priv),
-                "--tenant-name", tenant_name,
-                "--federee", federee,
-                "--region", region,
-            ]
+                "--application-credential-id",
+                "dummy",
+                "--application-credential-secret",
+                "dummy",
+                "--ssh-public-key-path",
+                str(pub),
+                "--ssh-private-key-path",
+                str(priv),
+                "--tenant-name",
+                tenant_name,
+                "--federee",
+                federee,
+                "--region",
+                region,
+            ],
         )
 
-    resolved_profile = _resolve_profile(federee=federee, region=region, tenant_name=tenant_name)
-    delete_cli_profile(profile=resolved_profile)
+        profile = ProfileStore()
+        resolved_profile = profile.resolve_name(
+            federee=federee, region=region, tenant_name=tenant_name
+        )
+        profile.delete(name=resolved_profile)
 
     print("OUTPUT:", result.output)
     print("EXCEPTION:", result.exception)
@@ -231,8 +237,7 @@ def test_init_command_converts_path_objects_to_strings_without_prompt(tmp_path):
     region = Region.R1.value
     tenant_name = "dummy-tenant"
 
-    # --- Direct call: no CLI runner, no stdin, no ssh-keygen ---
-    exit_code = init_command(
+    login_data = LoginInput(
         application_credential_id="dummy",
         application_credential_secret="dummy",
         ssh_public_key_path=str(fake_pub),
@@ -243,13 +248,13 @@ def test_init_command_converts_path_objects_to_strings_without_prompt(tmp_path):
         profile=None,
     )
 
-    assert exit_code == 0
+    # --- Direct call: no CLI runner, no stdin, no ssh-keygen ---
+    init_command(data=login_data)
 
-    # --- Load saved profile ---
-    resolved_profile = _resolve_profile(
-        federee=federee,
-        region=region,
-        tenant_name=tenant_name
+    # --- Resolve profile name ---
+    profile = ProfileStore()
+    resolved_profile = profile.resolve_name(
+        federee=federee, region=region, tenant_name=tenant_name
     )
 
     cfg = ConfigParser()
@@ -266,15 +271,14 @@ def test_init_command_converts_path_objects_to_strings_without_prompt(tmp_path):
     assert saved_pub.endswith("id_rsa.pub")
 
     # --- Cleanup ---
-    delete_cli_profile(profile=resolved_profile)
+    profile.delete(name=resolved_profile)
 
 
 def test_cloud_name_matches_and_credentials_loaded(mocker):
     runner = CliRunner()
 
     mocker.patch(
-        "ewccli.commands.login_command.openstack_config_available",
-        return_value=True
+        "ewccli.commands.login_command.openstack_config_available", return_value=True
     )
 
     # Create temporary directory for SSH keys
@@ -285,7 +289,7 @@ def test_cloud_name_matches_and_credentials_loaded(mocker):
         # Generate a real SSH keypair
         subprocess.run(
             ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
-            check=True
+            check=True,
         )
 
         # Clouds.yaml template
@@ -314,24 +318,32 @@ clouds:
             cli,
             [
                 "login",
-                "--cloud-name", "openstack",
-                "--tenant-name", tenant_name ,
-                "--federee", federee,
-                "--region", region,
-                "--ssh-public-key-path", str(pub),
-                "--ssh-private-key-path", str(priv),
+                "--cloud-name",
+                "openstack",
+                "--tenant-name",
+                tenant_name,
+                "--federee",
+                federee,
+                "--region",
+                region,
+                "--ssh-public-key-path",
+                str(pub),
+                "--ssh-private-key-path",
+                str(priv),
             ],
-            env={
-                "OS_CLIENT_CONFIG_FILE": str(clouds_yaml)
-            }
+            env={"OS_CLIENT_CONFIG_FILE": str(clouds_yaml)},
         )
 
-    resolved_profile = _resolve_profile(federee=federee, region=region, tenant_name=tenant_name)
-    delete_cli_profile(profile=resolved_profile)
+    profile = ProfileStore()
+    resolved_profile = profile.resolve_name(
+        federee=federee, region=region, tenant_name=tenant_name
+    )
+    profile.delete(name=resolved_profile)
 
     if result.exit_code != 0:
         print("\n=== CLI OUTPUT ===")
         print(result.output)
         print("\n=== EXCEPTION ===")
         print(result.exception)
+
     assert result.exit_code == 0
