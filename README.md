@@ -106,7 +106,7 @@ pip install ewccli
 git clone THIS_REPO && cd ewccli
 ```
 
-2. Create virtualenv with minimum python version > 3.10
+2. Create a virtual environment with python version >= 3.10
 
 ```bash
 python3 -m venv ewcclienv
