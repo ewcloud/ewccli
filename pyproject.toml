@@ -15,7 +15,7 @@ license = { file = "LICENSE" }
 maintainers = [
   { name = "EWC", email = "support@europeanweather.cloud"}
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "requests==2.32.5",
     "click==8.3.0",
@@ -25,7 +25,7 @@ dependencies = [
     "pyyaml==6.0.3",
     "cryptography==46.0.2",
     "python-openstackclient==8.2.0",
-    "ansible==11.8.0",
+    "ansible==10.7.0",
     "ansible-runner==2.4.0",
     "kubernetes==34.1.0",
     "pydantic==2.12.5"
