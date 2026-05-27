@@ -34,7 +34,7 @@ env:
   ANSIBLE_SSH_PUBLIC_KEY: '${{ secrets.EUMETSAT_ANSIBLE_SSH_PUBLIC_KEY }}'
   ITEM_NAME: ${{ inputs.itemName }}
   CATALOG_REF: ${{ inputs.catalogRef }}
-  INPUT_SPEC_JSON: '${{ inputs.inputSpecJson }}'  
+  INPUT_SPEC_JSON: '${{ inputs.inputSpecJson }}'
 
 jobs:
   deploy-test:

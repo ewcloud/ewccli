@@ -11,7 +11,7 @@ export OS_AUTH_TYPE=v3applicationcredential
 export OS_INTERFACE=public
 export OS_IDENTITY_API_VERSION=3
 
-# --- Step 1 --- 
+# --- Step 1 ---
 echo "Clone catalog repository (ref: '${CATALOG_REF}')"
 PATH_TO_CATALOG_REPO="${GITHUB_WORKSPACE}/ewc-community-hub"
 git clone \
@@ -20,7 +20,7 @@ git clone \
   "https://github.com/ewcloud/ewc-community-hub.git" \
   "${PATH_TO_CATALOG_REPO}"
 
-# --- Step 2 --- 
+# --- Step 2 ---
 echo "Extract metadata of '${ITEM_NAME}' from catalog"
 PATH_TO_CATALOG="${PATH_TO_CATALOG_REPO}/items.yaml"
 item_metadata=$(yq '.spec.items."'"$ITEM_NAME"'" | del(.description)' $PATH_TO_CATALOG) # Drop the description attribute(for succinct step summary)
@@ -51,7 +51,7 @@ if [[ "${INPUT_SPEC_JSON}" != "{}" ]]; then
       to_entries[]
       | "--item-inputs"
       , (.key + "=" +
-          if .value == null then 
+          if .value == null then
             (null | tojson)
           elif (.value | type) == "array" or (.value | type) == "object" then
             (.value | tojson)
@@ -87,7 +87,7 @@ chmod 600 "$ANSIBLE_SSH_PUBLIC_KEY_FILE"
 export EWC_CLI_SSH_PUBLIC_KEY_PATH=$ANSIBLE_SSH_PUBLIC_KEY_FILE
 export EWC_CLI_SSH_PRIVATE_KEY_PATH=$ANSIBLE_SSH_PRIVATE_KEY_FILE
 
-# --- Step 7 --- 
+# --- Step 7 ---
 echo "Login"
 
 EWCCLI_LOGIN_EXIT_CODE=0
@@ -97,10 +97,10 @@ set +e
 EWCCLI_LOGIN_EXIT_CODE=$?
 set -e
 
-# --- Step 8 --- 
+# --- Step 8 ---
 echo "Deploy (including VM provisioning)"
 
-if [ -z "${EXTRA_VARS}" ]; then 
+if [ -z "${EXTRA_VARS}" ]; then
   EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --external-ip)
 else
   EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --external-ip "${EXTRA_VARS[@]}")
@@ -112,7 +112,7 @@ set +e
 EWCCLI_DEPLOY_EXIT_CODE=$?
 set -e
 
-# --- Step 9 --- 
+# --- Step 9 ---
 echo "Cleanup"
 
 EWCCLI_CLEANUP_EXIT_CODE=0
@@ -197,9 +197,9 @@ cp $GITHUB_STEP_SUMMARY "$ARTIFACTS_DIR/summary.md"
 # NOTE: As of 18.02.2026, this is needed for cleaning up any created Floating IPs, since the EWCCLI does not remove them and is unclear if it reuses existing consistently
 echo "Unlocking the Floating IP (best-effort approach)"
 floating_ip=$(openstack server show "github-vm-${GITHUB_RUN_ID}" -f json | jq '.addresses[].[] | select( (startswith("192.") or startswith("10.")) | not )' | tr -d '"' ) || true
-openstack floating ip delete $floating_ip || true 
+openstack floating ip delete $floating_ip || true
 
-# --- Step 13 --- 
+# --- Step 13 ---
 echo "Re-rasing test errors (if any)"
 if [ "$EWCCLI_STATUS" = "failing" ]; then
   echo "::error::One or more failures caught during testing. See the summary or logs for details"

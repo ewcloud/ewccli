@@ -27,43 +27,45 @@ from ewccli.commands.infra_command import ewc_infra_command
 # from ewccli.commands.s3_command import ewc_s3_command
 
 from ewccli.configuration import config as ewc_hub_config
+from ewccli.configuration import LoginInput
 
 
-CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 
-@click.group(context_settings=CONTEXT_SETTINGS)
-def cli():
+@click.group(context_settings=CONTEXT_SETTINGS)  # type: ignore[misc]
+def cli() -> None:
     """European Weather Cloud (EWC) CLI."""
     pass
 
 
-@cli.command(name="login", help="Initialize configuration for EWC CLI.")
+@cli.command(name="login", help="Initialize configuration for EWC CLI.")  # type: ignore[misc]
 @init_options
-def init(
+def init(  # noqa: CFQ002
+    tenant_name: str,
+    federee: str,
     application_credential_id: str,
     application_credential_secret: str,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
-    tenant_name: str,
-    federee: str,
     profile: Optional[str] = None,
     # token: str,
-):
+) -> None:
     """Login command."""
-    init_command(
+    data = LoginInput(
+        tenant_name=tenant_name,
+        federee=federee,
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
-        tenant_name=tenant_name,
-        federee=federee,
         profile=profile,
-        # token=token,
     )
 
+    init_command(data)
 
-def get_version():
+
+def get_version() -> str:
     """
     Return the version of the installed package.
 
@@ -86,8 +88,8 @@ def get_version():
         return __version__
 
 
-@cli.command(name="version", help="Show EWC CLI version.")
-def version_cmd():
+@cli.command(name="version", help="Show EWC CLI version.")  # type: ignore[misc]
+def version_cmd() -> None:
     """
     Display the version of the EWC CLI.
 

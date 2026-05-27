@@ -196,8 +196,8 @@ Info required for a profile:
 [my-profile]
 federee = EUMETSAT or ECMWF
 tenant_name = eumetsat-ewc-communityhub
-application_credential_id = 
-application_credential_secret = 
+application_credential_id =
+application_credential_secret =
 ssh_public_key_path =
 ssh_private_key_path =
 ```
@@ -225,7 +225,7 @@ where ITEM is taken from `ewc hub list` command under Item column.
 
 If you would like to test the deployment of:
 * **an Item with private source code (local or remote)**
-  
+
   OR
 * **a new Item, not yet published in the EWC Community Hub**
 
@@ -283,14 +283,14 @@ spec:
       published: true
 ```
 
-where 
+where
 
 - `sources` can be (only the first element in the list is considered):
     - Public repo URL (e.g. https://github.com/your-repo.git) if your repository is public already
     - Absolute path to a directory with the Item (e.g. `/home/murdaca/custom-items/new-item`). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
 - `pathToMainFile` is the relattive path to your directory or repository
 - `pathToRequirementsFile` is the relattive path to your directory or repository
-- `publicIP` is a flag used to enable deployment of 
+- `publicIP` is a flag used to enable deployment of
 - `ewccli.inputs` is the list of inputs you want the user to be able to provide, they can be mandatory or optional, respecively with default key not set or set.
 
 ### Running a test

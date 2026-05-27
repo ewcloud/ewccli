@@ -9,6 +9,9 @@
 """EWC CLI Logger."""
 
 import logging
+
+from logging import Logger, LogRecord
+from typing import Optional
 from datetime import datetime, timezone
 from rich.console import Console
 from rich.logging import RichHandler
@@ -22,7 +25,7 @@ console = Console()
 class UTCFormatter(logging.Formatter):
     """UTCFormatter for logging."""
 
-    def format_time(self, record, datefmt=None):
+    def format_time(self, record: LogRecord, datefmt: Optional[str] = None) -> str:
         """Format time."""
         dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
         if datefmt:
@@ -33,7 +36,7 @@ class UTCFormatter(logging.Formatter):
         return s
 
 
-def get_logger(name=None):
+def get_logger(name: Optional[str] = None) -> Logger:
     """Create logger"""
     logger = logging.getLogger(name)
 

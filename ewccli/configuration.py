@@ -8,7 +8,27 @@
 import os
 from pathlib import Path
 
+from typing import Optional
+from pydantic import BaseModel
+
 from ewccli.enums import Federee, FedereeDNSMapping
+
+
+class LoginInput(BaseModel):  # type: ignore[misc]
+    """
+    Raw login input provided by the user before resolution.
+    """
+
+    tenant_name: str
+    federee: str
+
+    application_credential_id: Optional[str] = None
+    application_credential_secret: Optional[str] = None
+
+    ssh_public_key_path: Optional[str] = None
+    ssh_private_key_path: Optional[str] = None
+
+    profile: Optional[str] = None
 
 
 class EWCCLIConfiguration:
@@ -57,7 +77,6 @@ class EWCCLIConfiguration:
         "Rocky-9": "cloud-user",
         "Rocky-9-GPU": "cloud-user",
         "Ubuntu 22.04 NVIDIA_AI": "eouser",
-
     }
 
     EWC_CLI_AUTH_URL_MAP = {
@@ -77,13 +96,12 @@ class EWCCLIConfiguration:
     }
 
     # GPU images
-    EWC_CLI_GPU_IMAGES = [v for _,v in EWC_CLI_GPU_IMAGES_SITE_MAP.items()]
-
+    EWC_CLI_GPU_IMAGES = [v for _, v in EWC_CLI_GPU_IMAGES_SITE_MAP.items()]
 
     # Openstack value of the GPU images
     EWC_CLI_OS_GPU_IMAGES_SITE_MAP = {
         Federee.ECMWF.value: "Rocky-9.6-GPU",  # This can be find after normalization
-        Federee.EUMETSAT.value: "Ubuntu 22.04 NVIDIA_AI", # ( usually fixed)
+        Federee.EUMETSAT.value: "Ubuntu 22.04 NVIDIA_AI",  # ( usually fixed)
     }
 
     # Flavors
@@ -118,7 +136,7 @@ class EWCCLIConfiguration:
     }
 
     # Network
-    
+
     DEFAULT_NETWORK_MAP = {
         Federee.ECMWF.value: "private",
         Federee.EUMETSAT.value: "private",

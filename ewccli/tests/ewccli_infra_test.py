@@ -18,6 +18,7 @@ from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 # Fixtures
 # -------------------------
 
+
 @pytest.fixture
 def conn():
     """Mock OpenStack connection."""
@@ -36,6 +37,7 @@ class FakeServer(SimpleNamespace):
     def get(self, key, default=None):
         return getattr(self, key, default)
 
+
 def make_server(**kwargs):
     return FakeServer(**kwargs)
 
@@ -43,6 +45,7 @@ def make_server(**kwargs):
 # -------------------------
 # Tests
 # -------------------------
+
 
 def test_basic_server(conn, backend):
     server = make_server(
@@ -52,11 +55,7 @@ def test_basic_server(conn, backend):
         metadata={"deployed": "ewccli"},
         image={"id": "img1"},
         flavor={"original_name": "vm.a6000.4"},
-        addresses={
-            "private": [
-                {"addr": "10.0.0.152", "OS-EXT-IPS:type": "fixed"}
-            ]
-        },
+        addresses={"private": [{"addr": "10.0.0.152", "OS-EXT-IPS:type": "fixed"}]},
         security_groups=[{"name": "default"}],
     )
 
