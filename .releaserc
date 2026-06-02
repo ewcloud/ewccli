@@ -23,6 +23,18 @@
             }
         ],
         [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "sed -i 's/version = \".*\"/version = \"${nextRelease.version}\"/' pyproject.toml"
+            }
+        ],
+        [
+            "@semantic-release/exec",
+            {
+                "prepareCmd": "sed -i 's/__version__ = \".*\"/__version__ = \"${nextRelease.version}\"/' ewccli/__init__.py"
+            }
+        ],
+        [
             "@semantic-release/git",
             {
                 "assets": ["CHANGELOG.md"],
