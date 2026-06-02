@@ -1,7 +1,7 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-  <a href="https://github.com/othneildrew/Best-README-Template">
+  <a href="https://europeanweather.cloud/community-hub/ewc-cli">
     <img src="https://raw.githubusercontent.com/ewcloud/ewc-community-hub/refs/heads/main/logos/EWCLogo.png" alt="Logo" width="80" height="80">
   </a>
 
@@ -10,7 +10,7 @@
   <p align="center">
     European Weather Cloud Command Line Interface
     <br />
-    <a href="https://confluence.ecmwf.int/x/u0XOIQ#CommunityHubToolingDeployingviaewccli-VideoDemo">View Usage Demo</a>
+    <a href="https://confluence.ecmwf.int/x/u0XOIQ#CommunityHubToolingDeployingviaewccli-VideoDemo">Watch Demo</a>
     &middot;
     <a href="https://github.com/ewcloud/ewccli/issues">Report Bugs</a>
     &middot;
@@ -71,6 +71,7 @@
     <li><a href="#authors">Authors</a></li>
   </ol>
 </details>
+<!-- NOTE: Header above was inspired on: https://github.com/othneildrew/Best-README-Template -->
 
 ## Introduction
 
@@ -371,10 +372,10 @@ Thanks for taking the time to join our community and start contributing!
 
 Please make sure to:
 
-- Familiarize yourself with our Code of Conduct before
+- Familiarize yourself with our [Code of Conduct](./CODE_OF_CONDUCT.md) before
 contributing.
 
-- See CONTRIBUTING.md for instructions on how to request
+- See [CONTRIBUTING.md](./CONTRIBUTING.md) for instructions on how to request
 or submit changes.
 
 ## Development
@@ -436,6 +437,11 @@ Generate documentation from source code docstrings:
 ```bash
 sphinx-build -b html docs/source/ Documentation/
 ```
+
+## Releasing to Package Registries
+
+Checkout [RELEASING.md](./RELEASING.md) for details.
+
 
 ## Copyright and License
 Copyright © EUMETSAT, ECMWF 2026
