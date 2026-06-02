@@ -32,8 +32,7 @@ changes into a topic branch in the private upstream of this GitHub repository.
 only one conventional commit as result from the merge; include full
 acknowledgement of the contributors (i.e. list their GitHub handles) in the
 body of the commit message.
-3. Update the [CHANGELOG.md](./CHANGELOG.md), commit-tag it
-to the main branch and mirror into GitHub.
+3. Verify the CI automation updates the [CHANGELOG.md](./CHANGELOG.md), and creates a new `git tag` on the main branch.
 4. Mark the relevant GitHub issue is as resolved.
 
 ### Commit Guidelines
