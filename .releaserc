@@ -1,0 +1,33 @@
+{
+    "branches": [
+        "main"
+    ],
+    "tagFormat": "${version}",
+    "plugins": [
+        [
+            "@semantic-release/commit-analyzer",
+            {
+                "preset": "angular"
+            }
+        ],
+        [
+            "@semantic-release/release-notes-generator",
+            {
+                "preset": "angular"
+            }
+        ],
+        [
+            "@semantic-release/changelog",
+            {
+                "changelogTitle": "# Changelog\n\nAll notable changes to this project are documented in this file. See\n[Conventional Commits](https://conventionalcommits.org) for commit guidelines."
+            }
+        ],
+        [
+            "@semantic-release/git",
+            {
+                "assets": ["CHANGELOG.md"],
+                "message": "chore: ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+            }
+        ]
+  ]
+}
