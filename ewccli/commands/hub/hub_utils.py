@@ -79,7 +79,7 @@ def classify_source(source: str) -> str:
       - 'github'     → GitHub HTTPS repo URL compatible with check_github_repo_accessible()
       - 'directory'  → local directory
       - 'unknown'    → neither
-  
+
     Notes:
     - GitHub URLs must be HTTPS and like:
         https://github.com/user/repo
@@ -96,7 +96,9 @@ def classify_source(source: str) -> str:
         return "directory"
 
     # 3. Unknown
-    raise click.BadParameter(f"Source provided: {source} is not a valid GitHub repo URL or an absolute path to a local directory with content.")
+    raise click.BadParameter(
+        f"Source provided: {source} is not a valid GitHub repo URL or an absolute path to a local directory with content."
+    )
 
 
 def is_github_https_url(source: str) -> bool:

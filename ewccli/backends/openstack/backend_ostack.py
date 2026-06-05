@@ -11,14 +11,19 @@
 import time
 import sys
 import os
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, Dict
+from typing import Generator
+from typing import cast
+
 from collections import namedtuple
 from pathlib import Path
 
 import openstack
+from openstack.network.v2.network import Network
 from openstack.config import OpenStackConfig
 from openstack.exceptions import ConfigException
 from openstack.compute.v2.server import Server
+from openstack.compute.v2.image import Image
 
 from ewccli.logger import get_logger
 from ewccli.enums import Federee
@@ -65,9 +70,7 @@ class OpenstackBackend:
                 )
                 self.auth_url = auth_url
             else:
-                config = (
-                    OpenStackConfig()
-                )  # ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
+                config = OpenStackConfig()  # ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
                 # Get the default cloud if no name is specified
                 cloud = (
                     config.get_one()
@@ -95,7 +98,7 @@ class OpenstackBackend:
         application_credential_secret: Optional[str] = None,
         app_version: str = "3",
         auth_type: str = "v3applicationcredential",
-    ):
+    ) -> openstack.connect:
         """Create connection to Openstack.
 
         :param auth_url: Openstack authorization URL
@@ -133,14 +136,14 @@ class OpenstackBackend:
         server_name: str,
         image_name: str,
         flavour_name: str,
-        networks: tuple,
+        networks: Optional[Tuple[str, ...]],
         keypair_name: str,
-        sec_groups: tuple,
+        sec_groups: Optional[Tuple[str, ...]],
         attempts: int = 1,
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
         dry_run: bool = False,
-    ) -> Tuple[ServerResult, Optional[str], dict[Any, Any]]:
+    ) -> Tuple[ServerResult, Optional[str], Dict[str, Any]]:
         """Create an OpenStack server.
 
         Automatically deletes and retries the creation process until a server is available.
@@ -213,7 +216,12 @@ class OpenstackBackend:
 
         security_group_names = []
 
-        for security_group_name in sec_groups:
+        # Normalize sec_groups to a list[str]
+        normalized_sec_groups: list[str] = (
+            list(sec_groups) if sec_groups is not None else []
+        )
+
+        for security_group_name in normalized_sec_groups:
             sec_group_name = conn.get_security_group(security_group_name)
 
             if not sec_group_name:
@@ -388,78 +396,84 @@ class OpenstackBackend:
                 new_server,
             )
 
-
-    def find_latest_image(
-        self,
-        conn: openstack.connection.Connection,
-        prefix: str
-    ):
+    def find_latest_image(self, conn: openstack.connection.Connection, prefix: str) -> Optional[str]:
         """
         Select the latest image for CPU or GPU families with special rules.
         """
         import re
+
         TIMESTAMP_RE = r"\d{14}"
 
-        def is_cpu_image(prefix: str, name: str):
-            # Rocky-8 → Rocky-8.<minor>-<timestamp>
+        def match_cpu_rocky(prefix: str, name: str) -> bool:
+
             if prefix.lower().startswith("rocky-8"):
-                return re.match(rf"^Rocky-8\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(re.match(rf"^Rocky-8\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE))
 
-            # Rocky-9 → Rocky-9.<minor>-<timestamp>
             if prefix.lower().startswith("rocky-9"):
-                return re.match(rf"^Rocky-9\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(re.match(rf"^Rocky-9\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE))
 
-            # Ubuntu-22.04 → Ubuntu-22.04-<timestamp>
+            return False
+
+        def match_gpu_rocky(name: str) -> bool:
+
+            return bool(
+                re.match(
+                    rf"^Rocky-9\.\d+-GPU-{TIMESTAMP_RE}$",
+                    name,
+                    re.IGNORECASE,
+                )
+            )
+
+        def match_cpu_ubuntu(prefix: str, name: str) -> bool:
             if prefix.lower() == "ubuntu-22.04":
-                return re.match(rf"^Ubuntu-22\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(re.match(rf"^Ubuntu-22\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE))
 
-            # Ubuntu-24.04 → Ubuntu-24.04-<timestamp>
             if prefix.lower() == "ubuntu-24.04":
-                return re.match(rf"^Ubuntu-24\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(re.match(rf"^Ubuntu-24\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE))
 
-        def is_gpu_rocky(name: str):
-            # Prefix: Rocky-9-GPU
-            # Match: Rocky-9.<minor>-GPU-<timestamp>
-            return bool(re.match(
-                rf"^Rocky-9\.\d+-GPU-{TIMESTAMP_RE}$",
-                name,
-                re.IGNORECASE,
-            ))
+            return False
 
-        def is_gpu_ubuntu(name: str):
+        def match_gpu_ubuntu(name: str, federee: str) -> bool:
             # Prefix: Ubuntu 22.04 NVIDIA_AI
             # Match: Ubuntu 22.04 NVIDIA_AI
-            if name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]:
-                return True
+            expected = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee]
+            return name == expected
 
-        def image_matches(name: str, prefix: str):
+        def is_image_match(name: str, prefix: str) -> bool:
             if not name:
                 return False
 
-            # Rocky-9-GPU
+            # GPU Rocky
             if prefix == "Rocky-9.6-GPU":
-                return is_gpu_rocky(name)
+                return match_gpu_rocky(name)
 
-            # Ubuntu 22.04 NVIDIA_AI (EUMETSAT)
+            # GPU Ubuntu (fixed)
             if prefix == "Ubuntu 22.04 NVIDIA_AI":
-                return is_gpu_ubuntu(name)
+                return match_gpu_ubuntu(name, "EUMETSAT")
 
-            # CPU images
-            if prefix in ewc_hub_config.EWC_CLI_CPU_IMAGES:
-                return is_cpu_image(prefix=prefix, name=name)
+            # CPU Ubuntu
+            if prefix.lower() in ("ubuntu-22.04", "ubuntu-24.04"):
+                return match_cpu_ubuntu(prefix, name)
+
+            # CPU Rocky
+            if prefix.lower().startswith("rocky-8") or prefix.lower().startswith("rocky-9"):
+                return match_cpu_rocky(prefix, name)
 
             return False
 
         # Filter matching images
-        matches = [img for img in conn.compute.images() if image_matches(name=img.name, prefix=prefix)]
+        matches: list[Image] = [
+            img
+            for img in conn.compute.images()
+            if is_image_match(name=img.name, prefix=prefix)
+        ]
 
         if not matches:
             return None
 
         # Sort by created_at
         matches.sort(key=lambda img: img.created_at, reverse=True)
-        return matches[0]
-
+        return cast(str, matches[0].name)
 
     def check_server_inputs(
         self,
@@ -467,14 +481,16 @@ class OpenstackBackend:
         federee: str,
         image_name: Optional[str] = None,
         flavour_name: Optional[str] = None,
-        networks: Optional[tuple] = None,
-        security_groups: Optional[tuple] = None,
+        networks: Optional[Tuple[str, ...]] = None,
+        security_groups: Optional[Tuple[str, ...]] = None,
     ) -> Tuple[bool, str]:
         """Check server inputs before creating the server."""
         image = conn.compute.find_image(image_name)
 
         if not image:
-            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]]
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [
+                ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]
+            ]
             error_message = (
                 f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
                 f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
@@ -528,13 +544,12 @@ class OpenstackBackend:
 
         return True, ""
 
-
     def list_servers(
         self,
         conn: openstack.connection.Connection,
         show_all: bool = False,
         federee: Optional[str] = None,
-    ):
+    ) -> Dict[str, Any]:
         """List all OpenStack servers."""
         if show_all:
             _LOGGER.info("--show-all is enabled.")
@@ -544,13 +559,12 @@ class OpenstackBackend:
             )
 
         # List all servers
-        servers = {}
+        servers: Dict[str, Any] = {}
 
         # Build a dict of image IDs to image names
         image_map = {image.id: image.name for image in conn.compute.images()}
 
         for server in conn.compute.servers():
-
             if (
                 not (
                     server.metadata.get("deployed")
@@ -568,13 +582,13 @@ class OpenstackBackend:
 
             if federee == Federee.EUMETSAT.value:
                 if "private" in addresses:
-                    for c in addresses.get("private"):
+                    for c in addresses.get("private", []):
                         if c.get("OS-EXT-IPS:type"):
                             ip_type = c["OS-EXT-IPS:type"]
                             network_ip[f"private-{ip_type}"] = c.get("addr")
 
                 if "manila-network" in addresses:
-                    for c in addresses.get("manila-network"):
+                    for c in addresses.get("manila-network", []):
                         network_ip["sfs-manila-network"] = c.get("addr")
 
             if federee == Federee.ECMWF.value:
@@ -666,13 +680,12 @@ class OpenstackBackend:
         return ServerResult(True, True, 0), f"({server_name}) deleted successfully."
 
     def remove_external_ip(
-        self, conn: openstack.connection.Connection, server: Server, external_ip: str
-    ):
+        self, conn: openstack.connection.Connection, server: Server
+    ) -> ExternalIPResult:
         """Remove external IP from the machine.
 
         :param conn: The OpenStack connection
         :param server: Server object
-        :param external_ip: The external IP
         """
         try:
             ports = list(conn.network.ports(device_id=server.id))
@@ -774,20 +787,20 @@ class OpenstackBackend:
             f"✅ Floating IP {floating_ip.floating_ip_address} assigned to server {server.name}",
             floating_ip,
         )
-
+    
     def list_networks(
         self,
         conn: openstack.connection.Connection,
-    ):
+    ) -> Generator[Network, None, None]:
         """
         List all networks accessible via the OpenStack connection.
         """
-        networks = conn.network.networks()  # returns a generator of Network objects
+        networks: Generator[Network]  = conn.network.networks()  # returns a generator of Network objects
         return networks
 
     def remove_network(
         self, conn: openstack.connection.Connection, server: Server, network_name: str
-    ):
+    ) -> NetworkResult:
         """Add network to the machine.
 
         :param conn: The OpenStack connection
@@ -806,7 +819,7 @@ class OpenstackBackend:
             if network.name == network_name:
                 try:
                     conn.compute.delete_server_interface(server, iface.port_id)
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"✅ Detached network {network.name} from server {server.name}"
                     )
                     detached = True
@@ -821,13 +834,10 @@ class OpenstackBackend:
         if not detached:
             _LOGGER.warning(f"{network_name} not found for server {server.name}")
             return NetworkResult(True, False)
+    
+        return NetworkResult(False, False)
 
-
-    def ssh_key_matches_openstack(
-        self,
-        public_key_path: str,
-        keypair: dict
-    ) -> bool:
+    def ssh_key_matches_openstack(self, public_key_path: str, keypair: Dict[str, Any]) -> bool:
         """
         Check whether the local SSH public key matches the OpenStack keypair.
 
@@ -847,17 +857,20 @@ class OpenstackBackend:
         with open(public_key_path, "r") as f:
             local_key = " ".join(f.read().strip().split()[:2])
 
-        # Retrieve keypair from OpenStack
-        openstack_key = " ".join(keypair.public_key.strip().split()[:2])
+        # Retrieve keypair from OpenStack (dict access, not attribute access)
+        openstack_key_raw = keypair.get("public_key")
+        if openstack_key_raw is None:
+            raise ValueError("OpenStack keypair does not contain 'public_key'")
+
+        openstack_key = " ".join(str(openstack_key_raw).strip().split()[:2])
 
         return local_key == openstack_key
-
 
     def create_keypair(
         self,
         conn: openstack.connection.Connection,
         keypair_name: str,
-        public_key_path: Path,
+        public_key_path: str,
         dry_run: bool = False,
     ) -> Tuple[KeyPairResult, str]:
         """Create Keypair from SSH Public key.
@@ -870,18 +883,15 @@ class OpenstackBackend:
             return KeyPairResult(True, False)
 
         # Step: Upload the public key
-        with open(public_key_path, "r") as key_file:
+        with open(Path(public_key_path), "r") as key_file:
             public_key = key_file.read()
 
         # Check if the key already exists
         existing_key = conn.compute.find_keypair(keypair_name)
 
         if existing_key:
-
             match = OpenstackBackend.ssh_key_matches_openstack(
-                conn,
-                keypair=existing_key,
-                public_key_path=public_key_path
+                conn, keypair=existing_key, public_key_path=public_key_path
             )
 
             if not match:

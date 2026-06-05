@@ -8,11 +8,10 @@
 
 """Tests for EWC login command."""
 
-
 import pytest
 from pathlib import Path
 from click import ClickException
-
+from ewccli.ssh_keys_manager import SSHKeyError
 from ewccli.commands.login_command import check_and_generate_ssh_keys
 
 
@@ -28,8 +27,8 @@ def test_existing_matching_keys(tmp_path, monkeypatch):
 
     # Patch where function is USED
     monkeypatch.setattr(
-        "ewccli.commands.login_command.check_ssh_keys_match",
-        lambda ssh_private_key_path, ssh_public_key_path: True,
+        "ewccli.ssh_keys_manager.SSHKeyManager.keys_match",
+        lambda *args, **kwargs: True,
     )
 
     result_priv, result_pub = check_and_generate_ssh_keys(
@@ -53,8 +52,8 @@ def test_existing_mismatching_keys(tmp_path, monkeypatch):
     pub.write_text("public")
 
     monkeypatch.setattr(
-        "ewccli.commands.login_command.check_ssh_keys_match",
-        lambda ssh_private_key_path, ssh_public_key_path: False,
+        "ewccli.ssh_keys_manager.SSHKeyManager.keys_match",
+        lambda *args, **kwargs: (_ for _ in ()).throw(SSHKeyError("mismatch")),
     )
 
     with pytest.raises(ClickException):
@@ -72,20 +71,18 @@ def test_missing_keys_generate(tmp_path, monkeypatch):
     priv = tmp_path / "id_rsa"
     pub = tmp_path / "id_rsa.pub"
 
-    # Patch click.confirm in login_command
     monkeypatch.setattr(
         "ewccli.commands.login_command.click.confirm",
         lambda *args, **kwargs: True,
     )
 
-    # Fake generate now only takes resolved_profile
-    def fake_generate(resolved_profile):
+    def fake_generate(self, resolved_profile):
         priv.write_text("generated private")
         pub.write_text("generated public")
-        return priv, pub
+        return str(priv), str(pub)
 
     monkeypatch.setattr(
-        "ewccli.commands.login_command.generate_ssh_keypair",
+        "ewccli.ssh_keys_manager.SSHKeyManager.generate_keypair",
         fake_generate,
     )
 
