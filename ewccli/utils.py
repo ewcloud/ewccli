@@ -28,6 +28,7 @@ from configparser import ConfigParser
 import rich_click as click
 from click import ClickException
 
+from ewccli.enums import Federee
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.logger import get_logger
 
@@ -37,31 +38,34 @@ _LOGGER = get_logger(__name__)
 def _resolve_profile(
     profile: Optional[str] = None,
     federee: Optional[str] = None,
+    region: Optional[str] = None,
     tenant_name: Optional[str] = None,
 ) -> str:
     """Return explicit profile or auto-generate one using federee-tenant."""
     if profile is not None:
         return profile
 
-    if not federee or not tenant_name:
+    # Validate required components
+    if not federee or not region or not tenant_name:
         click.secho(
-            "❌ Either 'profile' must be provided or both 'federee' and 'tenant_name'.",
+            "❌ Either 'profile' must be provided or all of 'federee', 'region', and 'tenant_name'.",
             fg="red",
             bold=True,
         )
         raise click.Abort()
 
-    return f"{federee.lower()}-{tenant_name.lower()}"
+    # Auto-generate profile name
+    return f"{federee.lower()}-{region.lower()}-{tenant_name.lower()}"
 
 
 def save_default_login_profile(
     federee: str,
+    region: str,
     tenant_name: str,
     ssh_private_key_path_to_save: str,
     ssh_public_key_path_to_save: str,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
-    region: Optional[str] = None,
     token: Optional[str] = None,
     profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
@@ -86,6 +90,7 @@ def save_default_login_profile(
 
     save_cli_profile(
         federee=federee,
+        region=region,
         tenant_name=tenant_name,
         ssh_private_key_path_to_save=ssh_private_key_path_to_save,
         ssh_public_key_path_to_save=ssh_public_key_path_to_save,
@@ -93,12 +98,12 @@ def save_default_login_profile(
         token=token,
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
-        region=region,
     )
 
 
 def save_cli_profile(
     federee: str,
+    region: str,
     tenant_name: str,
     ssh_private_key_path_to_save: str,
     ssh_public_key_path_to_save: str,
@@ -106,7 +111,6 @@ def save_cli_profile(
     token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
-    region: Optional[str] = None,
     profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
     """
@@ -116,6 +120,8 @@ def save_cli_profile(
     ----------
     federee : str
         Federee name.
+    region : str
+        Region in the specific federee.
     tenant_name : str
         Tenant name.
     ssh_private_key_path_to_save: str
@@ -130,10 +136,8 @@ def save_cli_profile(
         Application credential ID.
     application_credential_secret : str, optional
         Application credential secret.
-    region : str, optional
-        Region for the profile.
     """
-    resolved_profile = _resolve_profile(profile, federee, tenant_name)
+    resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
     cfg = ConfigParser()
     cfg.read(profiles_file_path)
 
@@ -155,12 +159,10 @@ def save_cli_profile(
 
     # Non-sensitive
     cfg[resolved_profile]["federee"] = federee
+    cfg[resolved_profile]["region"] = region
     cfg[resolved_profile]["tenant_name"] = tenant_name
     cfg[resolved_profile]["ssh_public_key_path"] = ssh_public_key_path_to_save
     cfg[resolved_profile]["ssh_private_key_path"] = ssh_private_key_path_to_save
-
-    if region:
-        cfg[resolved_profile]["region"] = region
 
     # Sensitive
     if token:
@@ -211,7 +213,17 @@ def load_cli_profile(
         If the profile cannot be found or cannot be resolved.
     """
     if dry_run:
-        return {}
+        return {
+            "profile": "dry-run",
+            "federee": "EUMETSAT",
+            "region": "ECIS-R1",
+            "tenant_name": "internal-ewc-admins",
+            "ssh_public_key_path": "/tmp/id_rsa.pub",
+            "ssh_private_key_path": "/tmp/id_rsa",
+            "token": None,
+            "application_credential_id": "",
+            "application_credential_secret": "",
+        }
 
     if profile is None:
         if not federee or not tenant_name:
@@ -310,10 +322,19 @@ def load_cli_profile(
 
     federee = section.get("federee")
 
-    allowed_federees = [f for f in ewc_hub_config.EWC_CLI_SITE_MAP]
+    allowed_federees = [r.value for r in Federee]
     if federee not in allowed_federees:
         raise ClickException(
             f"`{federee}` federee not supported. Check your profiles in ~/.ewccli/profiles. Please use one from the following: {allowed_federees}"
+        )
+
+    region = section.get("region")
+    allowed_regions = ewc_hub_config.allowed_regions(federee)
+    if not region:
+        raise ClickException(
+            "Since ewccli v0.4.0 `region` is mandatory into a profile. "
+            f"Check your profiles in ~/.ewccli/profiles and add region key with allowed values: {allowed_regions} for {federee}."
+            "Or simply create a new profile using ewc login command."
         )
 
     # Check if SSH keys path exist
@@ -321,24 +342,30 @@ def load_cli_profile(
 
     if not ssh_public_key_path:
         raise ClickException(
-            f"`ssh_public_key_path` key is missing from your profile {profile}, please rerun ewc login."
+            "Since ewccli v0.3.0 `ssh_public_key_path` is mandatory into a profile. "
+            f"`ssh_public_key_path` key is missing from your profile {profile}. "
+            f"Check your profile in ~/.ewccli/profiles and add ssh_public_key_path with a path to your SSH public key."
+            "Or simply create a new profile using ewc login command."
         )
         
     ssh_private_key_path = section.get("ssh_private_key_path")
 
     if not ssh_private_key_path:
         raise ClickException(
-            f"`ssh_private_key_path` key is missing from your profile {profile}, please rerun ewc login."
+            "Since ewccli v0.3.0 `ssh_private_key_path` is mandatory into a profile. "
+            f"`ssh_private_key_path` key is missing from your profile {profile}. "
+            f"Check your profile in ~/.ewccli/profiles and add ssh_public_key_path with a path to your SSH private key."
+            "Or simply create a new profile using ewc login command."
         )
 
 
     return {
         "profile": profile,
         "federee": federee,
+        "region": section.get("region"),
         "tenant_name": section.get("tenant_name"),
         "ssh_public_key_path": ssh_public_key_path,
         "ssh_private_key_path": ssh_private_key_path,
-        "region": section.get("region"),
         "token": section.get("token"),
         "application_credential_id": section.get("application_credential_id"),
         "application_credential_secret": section.get("application_credential_secret"),

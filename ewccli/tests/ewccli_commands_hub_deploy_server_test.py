@@ -63,7 +63,7 @@ def test_find_latest_rocky8_cpu(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    result = finder(None, conn, "Rocky-8")
+    result = finder(None, conn, "Rocky-8", "EUMETSAT", "WAW3-1")
     assert result == img_new
 
 
@@ -83,7 +83,7 @@ def test_find_latest_ubuntu_2204_cpu(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    result = finder(None, conn, "Ubuntu-22.04")
+    result = finder(None, conn, "Ubuntu-22.04", "EUMETSAT", "WAW3-1")
     assert result == img2
 
 
@@ -103,7 +103,7 @@ def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    result = finder(None, conn, "Rocky-9.6-GPU")
+    result = finder(None, conn, "Rocky-9.6-GPU", "ECMWF", "CC1")
     assert result == img2
 
 
@@ -118,10 +118,14 @@ def test_find_latest_ubuntu_gpu(finder, conn, monkeypatch):
 
     conn.compute.images.return_value = [img1, img2]
 
-    # GPU mapping
+    # Correct GPU mapping shape
     monkeypatch.setattr(
         "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {"EUMETSAT": "Ubuntu 22.04 NVIDIA_AI"},
+        {
+            "EUMETSAT": {
+                "WAW3-1": "Ubuntu 22.04 NVIDIA_AI"
+            }
+        },
     )
 
     monkeypatch.setattr(
@@ -129,9 +133,15 @@ def test_find_latest_ubuntu_gpu(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    result = finder(None, conn, "Ubuntu 22.04 NVIDIA_AI")
-    assert result == img2
+    result = finder(
+        None,
+        conn,
+        prefix="Ubuntu 22.04 NVIDIA_AI",
+        federee="EUMETSAT",
+        region="WAW3-1",
+    )
 
+    assert result == img2
 
 # ---------------------------------------------------------------------------
 # No match
@@ -147,7 +157,7 @@ def test_no_matching_images(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    assert finder(None, conn, "Rocky-8") is None
+    assert finder(None, conn, "Rocky-8", "EUMETSAT", "WAW3-1") is None
 
 
 # Pydantic models
@@ -304,51 +314,91 @@ def clean_config(monkeypatch):
 # ----------------------- CPU Tests -----------------------
 
 def test_exact_cpu_match(monkeypatch):
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Rocky-8", "Ubuntu-22.04"})
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_CPU_IMAGES",
+        {
+            "ECMWF": {
+                "CC1": "Rocky-8"
+            }
+        }
+    )
 
-    normalized, exact = normalize_os_image("Rocky-8", "ECMWF")
+    # Patch GPU map too (required for ECMWF/EUMETSAT tests)
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {
+            "ECMWF": {
+                "CC1": "Rocky-9-GPU"
+            }
+        }
+    )
+
+    normalized, exact = normalize_os_image("Rocky-8", "ECMWF", "CC1")
     assert normalized == "Rocky-8"
     assert exact is True
 
 
-def test_normalize_rocky_timestamp(monkeypatch):
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Rocky-9"})
+def test_exact_cpu_match(monkeypatch):
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_CPU_IMAGES",
+        ["Rocky-8", "Ubuntu-22.04"]
+    )
 
-    normalized, exact = normalize_os_image("Rocky-9.6-20251107141503", "ECMWF")
-    assert normalized == "Rocky-9"
-    assert exact is False
+    normalized, exact = normalize_os_image("Rocky-8", "ECMWF", "CC1")
+    assert normalized == "Rocky-8"
+    assert exact is True
 
 
 def test_normalize_ubuntu_timestamp(monkeypatch):
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Ubuntu-24.04"})
+    # Patch CPU map
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_CPU_IMAGES",
+        {
+            "EUMETSAT": {
+                "WAW3-1": "Ubuntu-24.04"
+            }
+        }
+    )
 
-    normalized, exact = normalize_os_image("Ubuntu-24.04-20251107141503", "EUMETSAT")
+    # Patch GPU map (required!)
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {
+            "EUMETSAT": {
+                "WAW3-1": "Ubuntu-22.04-NVIDIA_AI"
+            }
+        }
+    )
+
+    normalized, exact = normalize_os_image(
+        "Ubuntu-24.04-20251107141503",
+        "EUMETSAT",
+        "WAW3-1"
+    )
+
     assert normalized == "Ubuntu-24.04"
     assert exact is False
 
 
 # ----------------------- EUMETSAT GPU -----------------------
 
-def test_eumetsat_exact_gpu(monkeypatch):
-    monkeypatch.setattr(
-        ewc_hub_config,
-        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {"EUMETSAT": "Ubuntu-22.04-NVIDIA_AI"}
-    )
-
-    normalized, exact = normalize_os_image("Ubuntu-22.04-NVIDIA_AI", "EUMETSAT")
-    assert normalized == "Ubuntu-22.04-NVIDIA_AI"
-    assert exact is False
-
-
 def test_eumetsat_translate_generic_gpu(monkeypatch):
     monkeypatch.setattr(
         ewc_hub_config,
         "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {"EUMETSAT": "Ubuntu-22.04-NVIDIA_AI"}
+        {
+            "EUMETSAT": {
+                "WAW3-1": "Ubuntu-22.04-NVIDIA_AI"
+            }
+        }
     )
 
-    normalized, exact = normalize_os_image("Ubuntu-22.04-GPU", "EUMETSAT")
+    normalized, exact = normalize_os_image("Ubuntu-22.04-GPU", "EUMETSAT", "WAW3-1")
     assert normalized == "Ubuntu-22.04-NVIDIA_AI"
     assert exact is True
 
@@ -359,22 +409,25 @@ def test_ecmwf_exact_gpu(monkeypatch):
     monkeypatch.setattr(
         ewc_hub_config,
         "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {"ECMWF": "Rocky-9-GPU"}
+        {
+            "ECMWF": {
+                "CC1": "Rocky-9-GPU"
+            }
+        }
     )
 
-    normalized, exact = normalize_os_image("Rocky-9-GPU", "ECMWF")
+    normalized, exact = normalize_os_image("Rocky-9-GPU", "ECMWF", "CC1")
     assert normalized == "Rocky-9-GPU"
     assert exact is True
-
 
 def test_ecmwf_timestamp_gpu(monkeypatch):
     monkeypatch.setattr(
         ewc_hub_config,
         "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {"ECMWF": "Rocky-9-GPU"}
+        {"ECMWF": {"CC1": "Rocky-9-GPU"}}
     )
 
-    normalized, exact = normalize_os_image("Rocky-9.6-GPU-20250101010101", "ECMWF")
+    normalized, exact = normalize_os_image("Rocky-9.6-GPU-20250101010101", "ECMWF", "CC1")
     assert normalized == "Rocky-9-GPU"
     assert exact is False
 
@@ -382,9 +435,16 @@ def test_ecmwf_timestamp_gpu(monkeypatch):
 # ----------------------- Unknown -----------------------
 
 def test_unknown_image(monkeypatch):
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", {"Rocky-8"})
-
-    normalized, exact = normalize_os_image("NotAnImage", "EUMETSAT")
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {
+            "EUMETSAT": {
+                "WAW3-1": "Ubuntu-22.04-NVIDIA_AI"
+            }
+        }
+    )
+    normalized, exact = normalize_os_image("NotAnImage", "EUMETSAT", "WAW3-1")
     assert normalized is None
     assert exact is False
 

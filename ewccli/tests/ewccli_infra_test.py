@@ -9,10 +9,20 @@
 """Tests for EWC infra command."""
 
 import pytest
+from click.testing import CliRunner
 from unittest.mock import MagicMock
 from types import SimpleNamespace
+
+from ewccli.ewccli import cli
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 
+
+# -----------------------------
+# CLI runner
+# -----------------------------
+@pytest.fixture
+def runner():
+    return CliRunner()
 
 # -------------------------
 # Fixtures

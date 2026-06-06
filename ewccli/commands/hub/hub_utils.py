@@ -40,7 +40,11 @@ def verify_item_is_deployable(item_info: dict):
                 break
 
     if not check_deployable:
-        _LOGGER.warning("You selected an item that cannot be deployed. Exiting.")
+        _LOGGER.warning(
+            "You selected an item that cannot be deployed. "
+            f"Only with the following technology annotations are allowed into the EWCCLI: {[item.value for item in HubItemTechnologyAnnotation]}"
+            "Exiting."
+        )
         return False
 
     return True

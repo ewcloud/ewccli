@@ -318,7 +318,6 @@ def _validate_item(ctx, param, value):
     "--profile",
     envvar="EWC_CLI_LOGIN_PROFILE",
     required=False,
-    default=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
     help="EWC CLI profile name",
 )
 @click.option(
@@ -379,8 +378,15 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     _LOGGER.info(f"Using `{cli_profile.get('profile')}` profile.")
 
-    tenancy_name: str = cli_profile["tenant_name"]
-    federee: str = cli_profile["federee"]
+    tenancy_name: str = cli_profile.get("tenant_name")
+    federee: str = cli_profile.get("federee")
+    region: str = cli_profile.get("region")
+
+    allowed_regions = ewc_hub_config.allowed_regions(federee)
+    if region not in allowed_regions:
+        raise ClickException(
+            f"Region {region} is not available on {federee} side. The following regions are available: {allowed_regions}"
+        )
 
     # Try to fill from CLI profile if not provided
     if not ssh_public_key_path:
@@ -531,7 +537,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             or application_credential_secret
         )
         if not auth_url:
-            auth_url = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee)
+            auth_url = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee).get(region)
 
         if dry_run:
             console.print(Panel(f"Dry run: skipping OpenStack connection and exiting.", title="Info", style="green"))
@@ -629,6 +635,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             openstack_backend=openstack_backend,
             openstack_api=openstack_api,
             federee=federee,
+            region=region,
             server_inputs=server_inputs,
             ssh_private_encoded=ssh_private_encoded,
             ssh_public_encoded=ssh_public_encoded,
