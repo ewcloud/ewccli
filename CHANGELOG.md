@@ -15,11 +15,6 @@ All notable changes to this project are documented in this file. See
 
 * Introduce region parameter ([#116](https://github.com/ewcloud/ewccli/issues/116)) ([70d2920](https://github.com/ewcloud/ewccli/commit/70d29204ce78c3c945063b7a93d5246ea60fc938))
 
-# Changelog
-
-All notable changes to this project are documented in this file.
-
-
 # 0.3.2
 
 ### Bug Fixes
