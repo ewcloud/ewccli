@@ -1,5 +1,22 @@
 # Changelog
 
+All notable changes to this project are documented in this file. See
+[Conventional Commits](https://conventionalcommits.org) for commit guidelines.
+
+# [0.4.0](https://github.com/ewcloud/ewccli/compare/0.3.2...0.4.0) (2026-06-08)
+
+
+### Bug Fixes
+
+* Python 3.10 version support and matrix version unittesting ([#111](https://github.com/ewcloud/ewccli/issues/111)) ([c09ed2c](https://github.com/ewcloud/ewccli/commit/c09ed2cc4649a5bbab52de1a08102bbe90c2991b))
+
+
+### Features
+
+* Introduce region parameter ([#116](https://github.com/ewcloud/ewccli/issues/116)) ([70d2920](https://github.com/ewcloud/ewccli/commit/70d29204ce78c3c945063b7a93d5246ea60fc938))
+
+# Changelog
+
 All notable changes to this project are documented in this file.
 
 
