@@ -42,27 +42,60 @@ class FakeOpenstackBackend:
     def __init__(self, *args, **kwargs):
         pass  # skip real OpenStack connection
 
-    def find_latest_image(self, conn, image_prefix: str):
-        # Return a fake "latest image" object
+    def find_latest_image(self, conn, prefix: str, federee: str, region: str):
+        """
+        Fake backend implementation that simulates the real find_latest_image()
+        but without calling OpenStack.
+        """
+
         class FakeImage:
             def __init__(self, name):
                 self.name = name
+                self.created_at = "20250202020202"
 
-        # simulate the "latest image" based on prefix
-        if image_prefix.startswith("Ubuntu-22.04"):
+        # -------------------------
+        # CPU short names
+        # -------------------------
+        if prefix.startswith("Ubuntu-22.04"):
             return FakeImage("Ubuntu-22.04-20250202020202")
-        elif image_prefix.startswith("Ubuntu-24.04"):
+
+        if prefix.startswith("Ubuntu-24.04"):
             return FakeImage("Ubuntu-24.04-20250202020202")
-        elif image_prefix.startswith("Rocky-9"):
+
+        if prefix.startswith("Rocky-9"):
             return FakeImage("Rocky-9-20250202020202")
-        elif image_prefix.startswith("Rocky-8"):
+
+        if prefix.startswith("Rocky-8"):
             return FakeImage("Rocky-8-20250202020202")
-        elif image_prefix.startswith("Rocky-9-GPU"):
+
+        # -------------------------
+        # GPU short names
+        # -------------------------
+        if prefix.startswith("Rocky-9-GGPU") or prefix.startswith("Rocky-9-GPU"):
             return FakeImage("Rocky-9.6-GPU-20250202020202")
-        elif image_prefix.startswith("Ubuntu 22.04 NVIDIA_AI"):
+
+        if prefix.startswith("Ubuntu-22.04-GPU"):
             return FakeImage("Ubuntu 22.04 NVIDIA_AI")
-        else:
-            return None
+
+        if prefix.startswith("Ubuntu-24.04-GPU"):
+            return FakeImage("Ubuntu 24.04 NV_GRID_Open")
+
+        # -------------------------
+        # GPU long names (OpenStack)
+        # -------------------------
+        if prefix == "Ubuntu 22.04 NVIDIA_AI":
+            return FakeImage("Ubuntu 22.04 NVIDIA_AI")
+
+        if prefix == "Ubuntu 24.04 NV_GRID_Open":
+            return FakeImage("Ubuntu 24.04 NV_GRID_Open")
+
+        if prefix == "Rocky-9.6-GPU":
+            return FakeImage("Rocky-9.6-GPU-20250202020202")
+
+        # -------------------------
+        # No match
+        # -------------------------
+        return None
 
 # --- Fixtures ---------------------------------------------------------------
 @pytest.fixture
@@ -75,45 +108,92 @@ def conn():
 
 # --- Tests -----------------------------------------------------------------
 def test_resolve_cpu_defaults(conn, backend):
-    code, msg, result = resolve_image_and_flavor(conn, backend, federee="EUMETSAT", is_gpu=False)
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="EUMETSAT",
+        region="WAW3-1",
+        is_gpu=False,
+    )
     assert code == 0
+    # normalized image must be one of the supported CPU images (flat list)
     assert result["normalized_image_name"] in ewc_hub_config.EWC_CLI_CPU_IMAGES
-    assert result["flavour_name"] == ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]
+    # default CPU flavour is region-aware
+    assert (
+        result["flavour_name"]
+        == ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"]
+    )
 
 def test_resolve_eumetsat_gpu_defaults(conn, backend):
-    code, msg, result = resolve_image_and_flavor(conn, backend, federee="EUMETSAT", is_gpu=True)
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="EUMETSAT",
+        region="WAW3-1",
+        is_gpu=True,
+    )
     assert code == 0
-    assert result["normalized_image_name"] == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]
-    assert result["flavour_name"] == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]
+    assert (
+        result["normalized_image_name"]
+        == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"]
+    )
+    assert (
+        result["flavour_name"]
+        == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"]
+    )
 
 def test_resolve_ecmwf_gpu_defaults(conn, backend):
-    code, msg, result = resolve_image_and_flavor(conn, backend, federee="ECMWF", is_gpu=True)
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="ECMWF",
+        region="CC1",
+        is_gpu=True,
+    )
     assert code == 0
-    assert result["normalized_image_name"] == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]
-    assert result["flavour_name"] == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]
+    assert (
+        result["normalized_image_name"]
+        == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CC1"]
+    )
+    assert (
+        result["flavour_name"]
+        == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CC1"]
+    )
 
 def test_resolve_specific_image(conn, backend):
     code, msg, result = resolve_image_and_flavor(
         conn,
         backend,
         federee="EUMETSAT",
+        region="WAW3-1",
         image_name="Ubuntu-22.04-20250202020202",
-        flavour_name="vm.a6000.1"
+        flavour_name="vm.a6000.1",
+        is_gpu=True,
     )
+    print(msg)
     assert code == 0
 
-    # normalized image name is short version
-    normalized, _ = normalize_os_image("Ubuntu-22.04-20250202020202", "EUMETSAT")
+    from ewccli.commands.commons_infra import normalize_os_image
+
+    normalized, _ = normalize_os_image(
+        image_name="Ubuntu-22.04-20250202020202",
+        federee="EUMETSAT",
+        region="WAW3-1",
+    )
     assert result["normalized_image_name"] == normalized
     assert result["flavour_name"] == "vm.a6000.1"
 
+
 def test_resolve_unknown_image(conn, backend):
     code, msg, result = resolve_image_and_flavor(
-        conn,
-        backend,
+        conn=conn,
+        openstack_backend=backend,
         federee="EUMETSAT",
-        image_name="Unknown-OS-1234"
+        region="WAW3-1",
+        image_name="Unknown-OS-1234",
+        is_gpu=False,
     )
+
     assert code == 1
     assert "Unsupported OS image" in msg
 
@@ -216,7 +296,11 @@ def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
                return_value=(False, False)):
 
         code, msg, outputs = pre_deploy_server_setup(
-            backend, conn, "EUMETSAT", server_inputs,
+            openstack_backend=backend,
+            openstack_api=conn,
+            federee="EUMETSAT",
+            region="WAW3-1",
+            server_inputs=server_inputs,
             ssh_public_key_path="/tmp/id.pub",
             ssh_private_key_path="/tmp/id",
             ssh_private_encoded="AAA",
@@ -251,7 +335,11 @@ def test_pre_deploy_server_setup_success(conn):
                })):
 
         code, msg, outputs = pre_deploy_server_setup(
-            backend, conn, "EUMETSAT", server_inputs,
+            openstack_backend=backend,
+            openstack_api=conn,
+            federee="EUMETSAT",
+            region="WAW3-1",
+            server_inputs=server_inputs,
             ssh_public_key_path="/tmp/id.pub",
             ssh_private_key_path="/tmp/id"
         )
@@ -285,7 +373,11 @@ def test_pre_deploy_server_setup_invalid_inputs(conn):
                })):
 
         code, msg, outputs = pre_deploy_server_setup(
-            backend, conn, "EUMETSAT", server_inputs,
+            openstack_backend=backend,
+            openstack_api=conn,
+            federee="EUMETSAT",
+            region="WAW3-1",
+            server_inputs=server_inputs,
             ssh_public_key_path="/tmp/id.pub",
             ssh_private_key_path="/tmp/id"
         )
@@ -329,8 +421,6 @@ def test_identify_server_reconfiguration_existing_server(conn):
     assert msg == "No reconfiguration needed"
     assert outputs == {}
 
-
-
 def test_identify_server_reconfiguration_wrong_origin(conn):
     server_inputs = {
         "server_name": "vm1",
@@ -359,8 +449,6 @@ def test_identify_server_reconfiguration_wrong_origin(conn):
     assert code == 1
     assert "not been deployed with the EWC CLI" in msg
     assert outputs == {}
-
-
 
 def test_deploy_server_success(conn):
     backend = MagicMock()
@@ -434,24 +522,28 @@ def test_post_deploy_server_setup_success(conn):
     with patch(
         "ewccli.commands.commons_infra.resolve_machine_ip",
         side_effect=[
-            # first call (before adding IP)
+            # first call (before refresh)
             (0, "ok", {"internal_ip_machine": "10.0.0.5"}),
             # second call (after refresh)
-            (0, "ok", {"internal_ip_machine": "10.0.0.5",
-                       "external_ip_machine": "1.2.3.4"})
-        ]
+            (0, "ok", {
+                "internal_ip_machine": "10.0.0.5",
+                "external_ip_machine": "1.2.3.4"
+            }),
+        ],
     ):
         server_inputs = {
             "server_name": "vm1",
             "external_ip": False,
         }
 
+        from ewccli.commands.commons_infra import post_deploy_server_setup
+
         code, msg, outputs = post_deploy_server_setup(
-            backend,
-            conn,
-            "EUMETSAT",
-            server_inputs,
-            initial_server_info,   # <-- NEW ARGUMENT
+            openstack_backend=backend,
+            openstack_api=conn,
+            federee="EUMETSAT",
+            server_inputs=server_inputs,
+            server_info=initial_server_info,
         )
 
     assert code == 0
@@ -461,31 +553,29 @@ def test_post_deploy_server_setup_success(conn):
 
 def test_post_deploy_server_setup_missing_ip(conn):
     backend = MagicMock()
-
     initial_server_info = MagicMock()
 
     with patch(
         "ewccli.commands.commons_infra.resolve_machine_ip",
-        return_value=(0, "ok", None)
+        return_value=(0, "ok", None),
     ):
         server_inputs = {
             "server_name": "vm1",
+            "internal_ip": "10.0.0.56",
             "external_ip": False,
         }
 
         code, msg, outputs = post_deploy_server_setup(
-            backend,
-            conn,
-            "EUMETSAT",
-            server_inputs,
-            initial_server_info,   # <-- NEW ARGUMENT
+            openstack_backend=backend,
+            openstack_api=conn,
+            federee="EUMETSAT",
+            server_inputs=server_inputs,
+            server_info=initial_server_info,
         )
 
     assert code == 1
     assert "No IPs identified" in msg
 
-
-from unittest.mock import MagicMock, patch
 
 def test_create_server_command_success(conn):
     backend = MagicMock()
@@ -498,7 +588,6 @@ def test_create_server_command_success(conn):
         "security_groups": ("ssh",),
     }
 
-    # --- Mock outputs for each internal step ---
     pre_deploy_outputs = {
         "normalized_image_name": "Ubuntu-22.04",
         "networks": ("private",),
@@ -506,7 +595,7 @@ def test_create_server_command_success(conn):
     }
 
     deploy_outputs = {
-        "server_info": {"id": "123", "name": "vm1"}
+        "server_info": {"id": "123", "name": "vm1"},
     }
 
     post_deploy_outputs = {
@@ -514,13 +603,18 @@ def test_create_server_command_success(conn):
         "external_ip_machine": "1.2.3.4",
     }
 
-    with patch("ewccli.commands.commons_infra.pre_deploy_server_setup",
-               return_value=(0, "ok", pre_deploy_outputs)) as mock_pre, \
-         patch("ewccli.commands.commons_infra.identify_server_reconfiguration") as mock_identify, \
-         patch("ewccli.commands.commons_infra.deploy_server",
-               return_value=(0, "ok", deploy_outputs)) as mock_deploy, \
-         patch("ewccli.commands.commons_infra.post_deploy_server_setup",
-               return_value=(0, "ok", post_deploy_outputs)) as mock_post:
+    with patch(
+        "ewccli.commands.commons_infra.pre_deploy_server_setup",
+        return_value=(0, "ok", pre_deploy_outputs),
+    ) as mock_pre, patch(
+        "ewccli.commands.commons_infra.identify_server_reconfiguration"
+    ) as mock_identify, patch(
+        "ewccli.commands.commons_infra.deploy_server",
+        return_value=(0, "ok", deploy_outputs),
+    ) as mock_deploy, patch(
+        "ewccli.commands.commons_infra.post_deploy_server_setup",
+        return_value=(0, "ok", post_deploy_outputs),
+    ) as mock_post:
 
         from ewccli.commands.commons_infra import create_server_command
 
@@ -528,19 +622,18 @@ def test_create_server_command_success(conn):
             backend,
             conn,
             "EUMETSAT",
+            "WAW3-1",
             server_inputs,
             ssh_public_key_path="/tmp/id.pub",
             ssh_private_key_path="/tmp/id",
         )
 
-    # --- Assertions ---
     assert code == 0
     assert outputs["normalized_image_name"] == "Ubuntu-22.04"
     assert outputs["internal_ip_machine"] == "10.0.0.5"
     assert outputs["external_ip_machine"] == "1.2.3.4"
 
-    # --- Verify calls ---
     mock_pre.assert_called_once()
     mock_identify.assert_called_once()
     mock_deploy.assert_called_once()
-    mock_post.assert_called_once()
+    

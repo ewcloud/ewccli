@@ -392,7 +392,9 @@ class OpenstackBackend:
     def find_latest_image(
         self,
         conn: openstack.connection.Connection,
-        prefix: str
+        prefix: str,
+        federee: str,
+        region: str
     ):
         """
         Select the latest image for CPU or GPU families with special rules.
@@ -429,7 +431,7 @@ class OpenstackBackend:
         def is_gpu_ubuntu(name: str):
             # Prefix: Ubuntu 22.04 NVIDIA_AI
             # Match: Ubuntu 22.04 NVIDIA_AI
-            if name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]:
+            if name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
                 return True
 
         def image_matches(name: str, prefix: str):
@@ -444,13 +446,16 @@ class OpenstackBackend:
             if prefix == "Ubuntu 22.04 NVIDIA_AI":
                 return is_gpu_ubuntu(name)
 
+            # Ubuntu 24.04 NV_GRID_Open (EUMETSAT)
+            if prefix == "Ubuntu 24.04 NV_GRID_Open":
+                return is_gpu_ubuntu(name)
+
             # CPU images
             if prefix in ewc_hub_config.EWC_CLI_CPU_IMAGES:
                 return is_cpu_image(prefix=prefix, name=name)
 
             return False
 
-        # Filter matching images
         matches = [img for img in conn.compute.images() if image_matches(name=img.name, prefix=prefix)]
 
         if not matches:

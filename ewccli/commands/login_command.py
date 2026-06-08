@@ -34,10 +34,10 @@ from openstack.exceptions import (  # noqa: N813
 )
 
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import save_cli_profile, _resolve_profile, load_cli_profile
+from ewccli.utils import save_cli_profile, _resolve_profile
 from ewccli.utils import generate_ssh_keypair, check_ssh_keys_match
 from ewccli.utils import save_default_login_profile
-from ewccli.enums import Federee
+from ewccli.enums import Federee, Region
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -107,6 +107,22 @@ def validate_tenant_name(ctx, param, value):
     return value
 
 
+def validate_region(ctx, param, value):
+    federee = ctx.params.get("federee")
+    if federee is None or value is None:
+        return value
+
+    allowed = ewc_hub_config.allowed_regions(Federee(federee))
+
+    if value not in allowed:
+        raise click.BadParameter(
+            f"Region '{value}' is not valid for federee '{federee}'. "
+            f"Allowed: {', '.join(allowed)}"
+        )
+
+    return value
+
+
 def init_options(func):
     """Login options for the CLI login command."""
     func = click.option(
@@ -124,12 +140,23 @@ def init_options(func):
     )(func)
     func = click.option(
         "--federee",
-        type=click.Choice(
-            [Federee.ECMWF.value, Federee.EUMETSAT.value], case_sensitive=True
-        ),
-        envvar="EWC_CLI_LOGIN_REGION",
+        type=click.Choice([r.value for r in Federee], case_sensitive=True),
+        required=False,
+        envvar="EWC_CLI_LOGIN_FEDEREE",
         help=(
             "Cloud federee where the resources will be deployed. "
+            "You can also set this using the EWC_CLI_LOGIN_FEDEREE environment variable. "
+            "If not provided, you'll be prompted to choose."
+        ),
+    )(func)
+    func = click.option(
+        "--region",
+        type=click.Choice([r.value for r in Region], case_sensitive=True),
+        required=False,
+        callback=validate_region,
+        envvar="EWC_CLI_LOGIN_REGION",
+        help=(
+            "Region to deploy resources. Allowed values depend on the federee."
             "You can also set this using the EWC_CLI_LOGIN_REGION environment variable. "
             "If not provided, you'll be prompted to choose."
         ),
@@ -193,7 +220,7 @@ def init_options(func):
     return func
 
 
-def select_provider():
+def select_federee():
     """Select provider."""
     choices = [
         ("EUMETSAT", "EUMETSAT"),
@@ -232,6 +259,44 @@ def select_provider():
                 "frame.label": "bold",
             }
         ),
+    )
+
+    selected = app.run()
+    return selected
+
+
+def select_region(federee: str):
+    """Select region based on the chosen federee."""
+
+    # Load allowed regions from your config
+    allowed = ewc_hub_config.allowed_regions(federee)
+
+    # Convert to RadioList format: (display, value)
+    choices = [(r, r) for r in allowed]
+
+    radio_list = RadioList(choices)
+    kb = radio_list.control.key_bindings
+
+    @kb.add("enter")
+    def _(event):
+        index = radio_list._selected_index
+        selected_value = radio_list.values[index][1]
+        event.app.exit(result=selected_value)
+
+    @kb.add("c-c")
+    @kb.add("c-q")
+    def _(event):
+        event.app.exit(None)
+
+    root_container = Box(Frame(radio_list, title=f"Select Region for {federee}"), padding=1)
+    layout = Layout(root_container)
+
+    app = Application(
+        layout=layout,
+        key_bindings=kb,
+        full_screen=False,
+        mouse_support=True,
+        style=Style.from_dict({"frame.label": "bold"}),
     )
 
     selected = app.run()
@@ -325,20 +390,36 @@ def init_command(
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
+    region: str,
     profile: str = None
     # token: str,
 ):
     """EWC CLI Login."""
     if not federee:
         # If --federee is not passed, ask interactively
-        federee = select_provider()
+        federee = select_federee()
         if not federee:
-            console.print("No selection made. Exiting.")
+            console.print("No federee selection made. Exiting.")
             return
 
     console.print(f"Considering federee: {federee}")
 
-    resolved_profile = _resolve_profile(profile, federee, tenant_name)
+    if not region:
+        # If --federee is not passed, ask interactively
+        region = select_region(federee=federee)
+        if not region:
+            console.print("No region selection made. Exiting.")
+            return
+
+    allowed_regions = ewc_hub_config.allowed_regions(federee)
+
+    if region not in allowed_regions:
+        raise click.BadParameter(
+            f"Region '{region}' is not valid for federee '{federee}'. "
+            f"Allowed: {', '.join(allowed_regions)}"
+        )
+
+    resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
 
     profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
     cfg = ConfigParser()
@@ -413,6 +494,7 @@ def init_command(
     #
     save_default_login_profile(
         federee=federee,
+        region=region,
         tenant_name=tenant_name,
         ssh_private_key_path_to_save=ssh_private_key_path_to_save,
         ssh_public_key_path_to_save=ssh_public_key_path_to_save,
@@ -424,6 +506,7 @@ def init_command(
     # Save config
     save_cli_profile(
         federee=federee,
+        region=region,
         tenant_name=tenant_name,
         ssh_private_key_path_to_save=ssh_private_key_path_to_save,
         ssh_public_key_path_to_save=ssh_public_key_path_to_save,

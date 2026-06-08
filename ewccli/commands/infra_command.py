@@ -56,12 +56,13 @@ def ewc_infra_command(ctx, profile):
         _LOGGER.info(f"Using `{ctx.cli_profile.get('profile')}` profile.")
 
     federee = ctx.cli_profile.get("federee")
+    region = ctx.cli_profile.get("region")
     application_credential_id = ctx.cli_profile.get("application_credential_id")
     application_credential_secret = ctx.cli_profile.get("application_credential_secret")
     ctx.openstack_backend = OpenstackBackend(
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
-        auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(federee),
+        auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(federee).get(region),
     )
 
 
@@ -121,6 +122,7 @@ def create_cmd(
     ssh_public_key_path: Optional[str] = None,
     ssh_private_key_path: Optional[str] = None,
     federee: Optional[str] = None,
+    region: Optional[str] = None,
     auth_url: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
@@ -137,7 +139,14 @@ def create_cmd(
         _LOGGER.info("Dry run enabled...")
 
     cli_profile = ctx.cli_profile
-    federee = federee or cli_profile["federee"]
+    federee = federee or cli_profile.federee
+    region = region or cli_profile.region
+
+    allowed_regions = ewc_hub_config.allowed_regions(federee)
+    if region not in allowed_regions:
+        raise ClickException(
+            f"Region {region} is not available on {federee} side. The following regions are available: {allowed_regions}"
+        )
 
     # Try to fill from CLI profile if not provided
     if not ssh_public_key_path:
@@ -177,13 +186,15 @@ def create_cmd(
         "flavour_name": flavour_name,
         "external_ip": external_ip,
         "networks": networks,
-        "security_groups": security_groups
+        "security_groups": security_groups,
+        "item_default_security_groups": ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee]
     }
 
     os_status_code, os_message, outputs = create_server_command(
         openstack_backend=ctx.openstack_backend,
         openstack_api=openstack_api,
         federee=federee,
+        region=region,
         server_inputs=server_inputs,
         ssh_private_encoded=ssh_private_encoded,
         ssh_public_encoded=ssh_public_encoded,
@@ -316,6 +327,7 @@ def list_cmd(
 ):
     """List Servers from Openstack."""
     federee = federee or ctx.cli_profile["federee"]
+
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection

@@ -39,6 +39,7 @@ def ssh_paths(tmp_path):
 
 def test_save_and_load_profile(profile_file_path, ssh_paths):
     federee = "EUMETSAT"
+    region = "WAW3-1"
     tenant_name = "TeamA"
     token = "tok1"
     app_id = "ID1"
@@ -49,17 +50,17 @@ def test_save_and_load_profile(profile_file_path, ssh_paths):
 
     save_cli_profile(
         federee=federee,
+        region=region,
         tenant_name=tenant_name,
         ssh_private_key_path_to_save=ssh_private,
         ssh_public_key_path_to_save=ssh_public,
         token=token,
         application_credential_id=app_id,
         application_credential_secret=app_secret,
-        region=region,
         profiles_file_path=str(profile_file_path),
     )
 
-    profile_name = _resolve_profile(None, federee, tenant_name)
+    profile_name = _resolve_profile(None, federee, region, tenant_name)
 
     data = load_cli_profile(
         profile=profile_name,
@@ -80,22 +81,25 @@ def test_save_and_load_profile(profile_file_path, ssh_paths):
 def test_save_existing_profile_fails(profile_file_path, ssh_paths):
     federee = "EWC2"
     tenant_name = "TeamB"
+    region = "reg"
     ssh_private, ssh_public = ssh_paths
 
     save_cli_profile(
-        federee,
-        tenant_name,
-        ssh_private,
-        ssh_public,
+        federee=federee,
+        region=region,
+        tenant_name=tenant_name,
+        ssh_private_key_path_to_save=ssh_private,
+        ssh_public_key_path_to_save=ssh_public,
         profiles_file_path=str(profile_file_path),
     )
 
     with pytest.raises(click.Abort):
         save_cli_profile(
-            federee,
-            tenant_name,
-            ssh_private,
-            ssh_public,
+            federee=federee,
+            region=region,
+            tenant_name=tenant_name,
+            ssh_private_key_path_to_save=ssh_private,
+            ssh_public_key_path_to_save=ssh_public,
             profiles_file_path=str(profile_file_path),
         )
 
@@ -116,21 +120,24 @@ def test_load_missing_profile_raises(profile_file_path):
 def test_overwrite_profile_not_allowed(profile_file_path, ssh_paths):
     federee = "EWC5"
     tenant_name = "TeamE"
+    region = "reg"
     ssh_private, ssh_public = ssh_paths
 
     save_cli_profile(
-        federee,
-        tenant_name,
-        ssh_private,
-        ssh_public,
+        federee=federee,
+        region=region,
+        tenant_name=tenant_name,
+        ssh_private_key_path_to_save=ssh_private,
+        ssh_public_key_path_to_save=ssh_public,
         profiles_file_path=str(profile_file_path),
     )
 
     with pytest.raises(click.Abort):
         save_cli_profile(
-            federee,
-            tenant_name,
-            ssh_private,
-            ssh_public,
+            federee=federee,
+            region=region,
+            tenant_name=tenant_name,
+            ssh_private_key_path_to_save=ssh_private,
+            ssh_public_key_path_to_save=ssh_public,
             profiles_file_path=str(profile_file_path),
         )

@@ -47,6 +47,7 @@ def init(
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
+    region: str,
     profile: Optional[str] = None,
     # token: str,
 ):
@@ -59,6 +60,7 @@ def init(
         tenant_name=tenant_name,
         federee=federee,
         profile=profile,
+        region=region,
         # token=token,
     )
 

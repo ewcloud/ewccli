@@ -237,7 +237,11 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
     return True
 
 
-def normalize_os_image(image_name: str, federee: str) -> tuple[str | None, bool]:
+def normalize_os_image(
+    image_name: str,
+    federee: str,
+    region: str
+) -> tuple[str | None, bool]:
     """
     Normalize OS image names provided.
 
@@ -262,25 +266,28 @@ def normalize_os_image(image_name: str, federee: str) -> tuple[str | None, bool]
     if image_name in total_cpu_images:
         return image_name, True
 
-    if federee == "EUMETSAT":
+    if federee == Federee.EUMETSAT.value:
         # -------------------------------
         # 1. EUMETSAT GPU SPECIAL CASE:
         #    Ubuntu 22.04 NVIDIA_AI
         # -------------------------------
-        if image_name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee]:
+        if image_name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
             return image_name, False
 
         if image_name == "Ubuntu-22.04-GPU":
-            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee], True
+            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region], True
+
+        if image_name == "Ubuntu-24.04-GPU":
+            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region], True
 
     if federee == "ECMWF":
         if image_name == "Rocky-9-GPU":
-            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee], True
+            return ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region], True
 
         # 2. ECMWF GPU CASE: Rocky-9.6-GPU-<timestamp> → Rocky-9-GPU
         m = re.match(r"^Rocky-(\d+)(?:\.\d+)?-GPU(?:-.+)?$", image_name)
         if m:
-            normalized = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee]
+            normalized = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]
             return normalized, (normalized == value_original)
 
     # ----------------------------------------
@@ -310,6 +317,7 @@ def resolve_image_and_flavor(
     conn: connection.Connection,
     openstack_backend: OpenstackBackend,
     federee: str,
+    region: str,
     flavour_name: Optional[str] = None,
     image_name: Optional[str] = None,
     is_gpu: bool = False,
@@ -320,6 +328,7 @@ def resolve_image_and_flavor(
     Args:
         conn: Connection to Openstck API
         federee (str): Target federee ewccli.enums.Federee.
+        region (str): Target region ewccli.enums.Region.
         flavour_name (Optional[str]): Name of the desired flavor.
         image_name (Optional[str]): Name of the desired OS image.
         is_gpu (bool): Whether a GPU-enabled flavor is required.
@@ -343,14 +352,14 @@ def resolve_image_and_flavor(
 
             # Assign Default GPU short name
             if not image_name:
-                image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee)
+                image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
 
             # Assign Default GPU flavour (federee dependennt)
             if not flavour_name:
-                flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee)
+                flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee).get(region)
             else:
                 # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
-                gpu_flavours = ewc_hub_config.GPU_FLAVOURS_MAP.get(federee, [])
+                gpu_flavours = ewc_hub_config.GPU_FLAVOURS_MAP.get(federee).get(region)
 
                 if flavour_name not in gpu_flavours:
                     gpu_list = ", ".join(gpu_flavours)
@@ -370,14 +379,19 @@ def resolve_image_and_flavor(
             # Assign Default CPU flavour (federee dependennt)
             # TODO: Change once we have the same flavours
             if not flavour_name:
-                flavour_name = ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee)
+                flavour_name = ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee).get(region)
 
         # Normalize the image name
-        normalized_image_name, is_short_name = normalize_os_image(image_name=image_name, federee=federee)
+        normalized_image_name, is_short_name = normalize_os_image(
+            image_name=image_name,
+            federee=federee,
+            region=region
+        )
 
         # Now check the image provided and verify is supported.
         if not normalized_image_name:
-            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]]
+
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]]
             error_message = (
                 f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
                 f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
@@ -385,13 +399,18 @@ def resolve_image_and_flavor(
                 "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]\n"
             )
 
-            return 1, f"Unexpected error: {error_message}", result
-        
+            return 1, f"Error [resolve_image_and_flavor]: {error_message}", result
+
         # Retrieve the latest image
-        latest_image = openstack_backend.find_latest_image(conn, normalized_image_name)
- 
+        latest_image = openstack_backend.find_latest_image(
+            conn=conn,
+            prefix=normalized_image_name,
+            federee=federee,
+            region=region
+        )
+
         # if users use long names, let's check if they are using the latest known image and give them a warning in case.
-        if image_name not in [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]] and not is_short_name and latest_image:
+        if image_name not in [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]] and not is_short_name and latest_image:
             if latest_image.name != image_name:
                 _LOGGER.warning(
                     f"You are not using latest image for {image_name}."
@@ -590,6 +609,7 @@ def pre_deploy_server_setup(
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
+    region: str,
     server_inputs: dict,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
@@ -660,7 +680,6 @@ def pre_deploy_server_setup(
 
     if not keys_exist:
         return 1, f"\n[Pre deploy server setup] Exiting.", outputs
-
     ##################################################################################
     # Flavour and Image
     ##################################################################################
@@ -668,6 +687,7 @@ def pre_deploy_server_setup(
         conn=openstack_api,
         openstack_backend=openstack_backend,
         federee=federee,
+        region=region,
         flavour_name=flavour_name,
         image_name=image_name,
         is_gpu=is_gpu
@@ -694,6 +714,7 @@ def pre_deploy_server_setup(
         security_groups_inputs += security_groups
 
     if item_default_security_groups:
+        _LOGGER.debug(f"Adding default security group: {item_default_security_groups}")
         security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
 
     if not networks:
@@ -897,7 +918,6 @@ def deploy_server(
             keypair_name=keypair_name,
         )
     )
-
     if not openstack_server_status[0]:
         return 1, create_server_message, outputs
     else:
@@ -965,15 +985,21 @@ def post_deploy_server_setup(
     # Add external IP
     ###########################################################
 
+    # Get the IPs of the machine
     sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
         federee=federee, server_info=server_info
     )
+    if sc_resolve_ip != 0:
+        return 1, resolve_ip_message, outputs
 
-    if not resolve_ip_outputs:
-        external_ip_machine = None
-    else:
-        external_ip_machine = resolve_ip_outputs.get("external_ip_machine")
+    # make sure it's not None if it was added
+    if resolve_ip_outputs is None:
+        return 1, "[Post deploy server setup] No IPs identified.", outputs
 
+    # Get external IP if existing
+    external_ip_machine = resolve_ip_outputs.get("external_ip_machine") if resolve_ip_outputs else None
+
+    # Add external IP if requested and not already present
     if external_ip and not external_ip_machine:
         openstack_floatingip_status, message, _ = openstack_backend.add_external_ip(
             conn=openstack_api, server=server_info, federee=federee
@@ -985,6 +1011,7 @@ def post_deploy_server_setup(
         else:
             _LOGGER.info(message)
 
+    # Get info of the server again, because the object changed.
     server_info = openstack_api.get_server(name_or_id=server_name)
 
     sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
@@ -993,11 +1020,11 @@ def post_deploy_server_setup(
     if sc_resolve_ip != 0:
         return 1, resolve_ip_message, outputs
 
-    # make sure it's not None
+    # make sure it's not None if it was added
     if resolve_ip_outputs is None:
         return 1, "[Post deploy server setup] No IPs identified.", outputs
 
-    internal_ip_machine = resolve_ip_outputs["internal_ip_machine"]
+    internal_ip_machine = resolve_ip_outputs.get("internal_ip_machine")
     # enforce internal must not be empty
     if not internal_ip_machine:
         return (
@@ -1021,6 +1048,7 @@ def create_server_command(
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
+    region: str,
     server_inputs: dict,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
@@ -1035,6 +1063,7 @@ def create_server_command(
         openstack_backend=openstack_backend,
         openstack_api=openstack_api,
         federee=federee,
+        region=region,
         server_inputs=server_inputs,
         ssh_private_encoded=ssh_private_encoded,
         ssh_public_encoded=ssh_public_encoded,

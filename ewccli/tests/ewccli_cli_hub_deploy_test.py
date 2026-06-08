@@ -7,7 +7,7 @@
 
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from ewccli.ewccli import cli
 
@@ -59,7 +59,7 @@ def mock_profile_loader(tmp_path, valid_private_key_pem, valid_public_key_openss
     pub_key.write_text(valid_public_key_openssh)
     priv_key.write_text(valid_private_key_pem)
 
-    with patch("ewccli.commands.hub.hub_command.load_cli_profile") as mock_load:
+    with patch("ewccli.utils.load_cli_profile") as mock_load:
         mock_load.return_value = {
             "profile": "test-profile",
             "auth_url": "http://fake-auth-url",
@@ -112,8 +112,6 @@ def test_deploy_dry_run_minimal(runner):
             }
         },
     )
-    print(result.output)
-    print(result.exception)
 
     assert result.exit_code == 0
 
@@ -149,13 +147,38 @@ def test_deploy_with_ssh_paths(runner, tmp_path, valid_private_key_pem, valid_pu
     assert result.exit_code == 0
 
 
-def test_deploy_with_env_vars(runner, tmp_path, valid_private_key_pem, valid_public_key_openssh):
+def test_deploy_with_env_vars(
+    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh, monkeypatch
+):
+    # Create fake SSH keys
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
-
     pub_key.write_text(valid_public_key_openssh)
     priv_key.write_text(valid_private_key_pem)
 
+    # Create a fake profiles file
+    profiles_file = tmp_path / "profiles"
+    profiles_file.write_text(
+        """
+[EWC_DEFAULT]
+federee = EUMETSAT
+region = WAW3-1
+tenant_name = internal-ewc-admins
+ssh_public_key_path = {pub}
+ssh_private_key_path = {priv}
+token =
+application_credential_id = dummy
+application_credential_secret = dummy
+""".format(pub=str(pub_key), priv=str(priv_key))
+    )
+
+    # Monkeypatch the path used by load_cli_profile
+    monkeypatch.setattr(
+        "ewccli.configuration.EWCCLIConfiguration.EWC_CLI_PROFILES_PATH",
+        profiles_file
+    )
+
+    # Run the CLI
     result = runner.invoke(
         cli,
         ["hub", "deploy", "ssh-bastion-flavour", "--dry-run"],
@@ -172,4 +195,5 @@ def test_deploy_with_env_vars(runner, tmp_path, valid_private_key_pem, valid_pub
         },
     )
 
+    print(result.output)
     assert result.exit_code == 0
