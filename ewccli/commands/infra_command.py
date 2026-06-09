@@ -141,8 +141,8 @@ def create_cmd(
         _LOGGER.info("Dry run enabled...")
 
     cli_profile = ctx.cli_profile
-    federee = federee or cli_profile.federee
-    region = region or cli_profile.region
+    federee = federee or cli_profile["federee"]
+    region = region or cli_profile["region"]
 
     allowed_regions = ewc_hub_config.allowed_regions(federee)
     if region not in allowed_regions:
