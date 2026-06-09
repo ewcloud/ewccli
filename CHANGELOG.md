@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.5.0](https://github.com/ewcloud/ewccli/compare/0.4.0...0.5.0) (2026-06-09)
+
+
+### Features
+
+* ewc infra list show also  flavor ([#118](https://github.com/ewcloud/ewccli/issues/118)) ([287989c](https://github.com/ewcloud/ewccli/commit/287989cb29afc45861d064059e9e66f7f5d96201))
+
 # [0.4.0](https://github.com/ewcloud/ewccli/compare/0.3.2...0.4.0) (2026-06-08)
 
 
