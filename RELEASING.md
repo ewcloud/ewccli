@@ -1,7 +1,17 @@
 # Releasing ewccli
 
 ## Before you begin
-Make sure to pull the latest code and checkout the correct tag (in semantic version format `x.y.x`):
+
+### 1. Trigger the CI to update of CHANGELOG.md and git tags
+> 💡 The CI only makes changes only if new [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) of type `feat` and `fix` added to the main branch since the last `git tag` was created.
+
+Ensure that all pull requests relevant for the next release have been merged before triggering the [Semantic Release GitHub Action](https://github.com/ewcloud/ewccli/actions/workflows/release.yml).
+
+
+After CI completion, verify a new tag (in semantic version format `x.y.z`) is created on the main branch, and the [CHANGELOG.md](./CHANGELOG.md) reflects the relevant features/fixes as they appear in the commit history.
+
+### 2. Pull the latest code chances
+Make sure to pull the latest code and checkout the correct tag (in semantic version format `x.y.z`):
 
 ```bash
 git checkout main

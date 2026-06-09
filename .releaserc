@@ -37,7 +37,7 @@
         [
             "@semantic-release/git",
             {
-                "assets": ["CHANGELOG.md"],
+                "assets": ["CHANGELOG.md", "pyproject.toml", "ewccli/__init__.py"],
                 "message": "chore: ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
             }
         ]
