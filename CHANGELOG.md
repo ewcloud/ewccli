@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.5.1](https://github.com/ewcloud/ewccli/compare/0.5.0...0.5.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* AttributeError: 'dict' object has no attribute 'federee' ([#119](https://github.com/ewcloud/ewccli/issues/119)) ([f9901d7](https://github.com/ewcloud/ewccli/commit/f9901d744b1d6ef110854d1973b60992aae7f94c))
+
 # [0.5.0](https://github.com/ewcloud/ewccli/compare/0.4.0...0.5.0) (2026-06-09)
 
 
