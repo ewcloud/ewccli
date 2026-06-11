@@ -139,6 +139,7 @@ class OpenstackBackend:
         attempts: int = 1,
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
+        boot_from_volume: bool = False,
         dry_run: bool = False,
     ) -> Tuple[ServerResult, Optional[str], dict[Any, Any]]:
         """Create an OpenStack server.
@@ -162,6 +163,7 @@ class OpenstackBackend:
                         ans create it.
         :param retry_delay_s: The delay between creation attempts.
         :param wait_time_s: The maximum period to wait (for creation or deletion).
+        :boot_from_volume: If root disk is required and flavour doesn't set one.
         :param dry_run: Dry run.
         """
         if len(server_name) > _MAX_CHARACTERS_SERVER_NAME_OPENSTACK:
@@ -317,15 +319,38 @@ class OpenstackBackend:
                 #   If a group is provided in both scheduler_hints and in the group param,
                 #   the group param will win.
                 #   (Optional, defaults to None)
-                server = conn.compute.create_server(
-                    name=server_name,
-                    image_id=image.id,
-                    flavor_id=flavour.id,
-                    security_groups=security_group_names,
-                    key_name=keypair_name,
-                    networks=network_info,
-                    metadata={"deployed": "ewccli"},
-                )
+
+                if boot_from_volume:
+                    server = conn.compute.create_server(
+                        name=server_name,
+                        image_id=image.id,
+                        flavor_id=flavour.id,
+                        security_groups=security_group_names,
+                        key_name=keypair_name,
+                        networks=network_info,
+                        # This is the key part for disk=0 flavors
+                        block_device_mapping_v2=[
+                            {
+                                "boot_index": 0,
+                                "uuid": image.id,
+                                "source_type": "image",
+                                "destination_type": "volume",
+                                "volume_size": 30,  #TODO: max(image.min_disk, 30)
+                                "delete_on_termination": True,
+                            }
+                        ],
+                        metadata={"deployed": "ewccli"},
+                    )
+                else:
+                    server = conn.compute.create_server(
+                        name=server_name,
+                        image_id=image.id,
+                        flavor_id=flavour.id,
+                        security_groups=security_group_names,
+                        key_name=keypair_name,
+                        networks=network_info,
+                        metadata={"deployed": "ewccli"},
+                    )
 
                 time.sleep(5)
 
