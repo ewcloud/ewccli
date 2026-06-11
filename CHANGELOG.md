@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.6.0](https://github.com/ewcloud/ewccli/compare/0.5.1...0.6.0) (2026-06-11)
+
+
+### Features
+
+* boot from volume by default for R1 and R2 regions ([#120](https://github.com/ewcloud/ewccli/issues/120)) ([a56f569](https://github.com/ewcloud/ewccli/commit/a56f5692d5ff65087e6ca3848d2cadb78f2fa627))
+
 ## [0.5.1](https://github.com/ewcloud/ewccli/compare/0.5.0...0.5.1) (2026-06-09)
 
 
