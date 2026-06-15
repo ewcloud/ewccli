@@ -199,9 +199,12 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
             return ", ".join(info.addresses.keys())
         return ""
 
-    def _get_security_groups_string(info: Any) -> str:
+    def _get_security_group_names(info: Any) -> list[str]:
         groups = getattr(info, "security_groups", [])
-        return ",".join(str(sg.get("name")) for sg in groups)
+        return [
+            str(sg.get("name") if hasattr(sg, "get") else getattr(sg, "name", None))
+            for sg in groups
+        ]
 
     # Image
     if image_name and server_info_image:
@@ -225,11 +228,15 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
 
     # Security groups
     if security_groups:
-        compare(
-            "Security Groups",
-            ",".join(security_groups),
-            _get_security_groups_string(server_info),
-        )
+        actual_security_groups = _get_security_group_names(server_info)
+        if sorted(actual_security_groups) != sorted(security_groups):
+            diffs.append(
+                (
+                    "Security Groups",
+                    ",".join(actual_security_groups),
+                    ",".join(security_groups),
+                )
+            )
 
     return diffs
 
