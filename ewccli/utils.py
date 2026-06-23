@@ -111,6 +111,10 @@ def save_cli_profile(
     token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
+    keycloak_access_token: Optional[str] = None,
+    keycloak_refresh_token: Optional[str] = None,
+    keycloak_id_token: Optional[str] = None,
+    keycloak_token_expires_at: Optional[str] = None,
     profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
     """
@@ -175,6 +179,18 @@ def save_cli_profile(
         cfg[resolved_profile][
             "application_credential_secret"
         ] = application_credential_secret
+
+    if keycloak_access_token:
+        cfg[resolved_profile]["keycloak_access_token"] = keycloak_access_token
+
+    if keycloak_refresh_token:
+        cfg[resolved_profile]["keycloak_refresh_token"] = keycloak_refresh_token
+
+    if keycloak_id_token:
+        cfg[resolved_profile]["keycloak_id_token"] = keycloak_id_token
+
+    if keycloak_token_expires_at:
+        cfg[resolved_profile]["keycloak_token_expires_at"] = keycloak_token_expires_at
 
     os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
     with open(profiles_file_path, "w") as f:
@@ -369,6 +385,10 @@ def load_cli_profile(
         "token": section.get("token"),
         "application_credential_id": section.get("application_credential_id"),
         "application_credential_secret": section.get("application_credential_secret"),
+        "keycloak_access_token": section.get("keycloak_access_token"),
+        "keycloak_refresh_token": section.get("keycloak_refresh_token"),
+        "keycloak_id_token": section.get("keycloak_id_token"),
+        "keycloak_token_expires_at": section.get("keycloak_token_expires_at"),
     }
 
 

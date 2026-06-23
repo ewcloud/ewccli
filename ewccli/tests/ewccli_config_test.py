@@ -141,3 +141,57 @@ def test_overwrite_profile_not_allowed(profile_file_path, ssh_paths):
             ssh_public_key_path_to_save=ssh_public,
             profiles_file_path=str(profile_file_path),
         )
+
+
+def test_save_and_load_profile_with_oidc_tokens(profile_file_path, ssh_paths):
+    ssh_private, ssh_public = ssh_paths
+
+    save_cli_profile(
+        federee="EUMETSAT",
+        region="ECIS-R1",
+        tenant_name="TeamA",
+        ssh_private_key_path_to_save=ssh_private,
+        ssh_public_key_path_to_save=ssh_public,
+        application_credential_id="app-id",
+        application_credential_secret="app-secret",
+        keycloak_access_token="access123",
+        keycloak_refresh_token="refresh456",
+        keycloak_id_token="id789",
+        keycloak_token_expires_at="2026-06-23T12:00:00+00:00",
+        profiles_file_path=str(profile_file_path),
+    )
+
+    data = load_cli_profile(
+        profile="eumetsat-ecis-r1-teama",
+        profiles_file_path=str(profile_file_path),
+    )
+
+    assert data["keycloak_access_token"] == "access123"
+    assert data["keycloak_refresh_token"] == "refresh456"
+    assert data["keycloak_id_token"] == "id789"
+    assert data["keycloak_token_expires_at"] == "2026-06-23T12:00:00+00:00"
+
+
+def test_load_profile_without_oidc_tokens_returns_none(profile_file_path, ssh_paths):
+    """Profiles saved without OIDC tokens should load fine with None."""
+    ssh_private, ssh_public = ssh_paths
+
+    save_cli_profile(
+        federee="EUMETSAT",
+        region="ECIS-R1",
+        tenant_name="TeamA",
+        ssh_private_key_path_to_save=ssh_private,
+        ssh_public_key_path_to_save=ssh_public,
+        application_credential_id="app-id",
+        application_credential_secret="app-secret",
+        profiles_file_path=str(profile_file_path),
+    )
+
+    data = load_cli_profile(
+        profile="eumetsat-ecis-r1-teama",
+        profiles_file_path=str(profile_file_path),
+    )
+
+    assert data.get("keycloak_access_token") is None
+    assert data.get("keycloak_refresh_token") is None
+    assert data.get("keycloak_token_expires_at") is None

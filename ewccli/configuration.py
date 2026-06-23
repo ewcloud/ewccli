@@ -31,6 +31,20 @@ class EWCCLIConfiguration:
     EWC_CLI_DEFAULT_FEDEREE = "default"
     EWC_CLI_DEFAULT_KEYPAIR_NAME = "ewc-hub-key"
 
+    # Keycloak / OIDC configuration
+    EWC_CLI_KEYCLOAK_URL = os.getenv(
+        "EWC_CLI_KEYCLOAK_URL", "https://auth.europeanweather.cloud"
+    )
+    EWC_CLI_KEYCLOAK_REALM = os.getenv("EWC_CLI_KEYCLOAK_REALM", "ewc")
+    EWC_CLI_KEYCLOAK_CLIENT_ID = os.getenv("EWC_CLI_KEYCLOAK_CLIENT_ID", "ewccli")
+    EWC_CLI_KEYCLOAK_SCOPE = os.getenv("EWC_CLI_KEYCLOAK_SCOPE", "openid profile email")
+    EWC_CLI_PORTAL_API_URL = os.getenv(
+        "EWC_CLI_PORTAL_API_URL", "https://europeanweather.cloud"
+    )
+    EWC_CLI_OIDC_CALLBACK_TIMEOUT = int(
+        os.getenv("EWC_CLI_OIDC_CALLBACK_TIMEOUT", "300")
+    )
+
     # EWC_CLI_HUB_ITEMS_PATH = files("ewccli.data").joinpath("items.yaml")
     EWC_CLI_HUB_ITEMS_PATH = EWC_CLI_BASE_PATH / "items.yaml"
     EWC_CLI_HUB_SSH_REPO_PATH = EWC_CLI_BASE_PATH / ".ssh"
