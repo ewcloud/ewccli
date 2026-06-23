@@ -34,9 +34,9 @@ console = Console()
 
 
 def check_user_ssh_keys(
-        ssh_public_key_path: Optional[str] = None,
-        ssh_private_key_path: Optional[str] = None,
-        dry_run: bool = False
+    ssh_public_key_path: Optional[str] = None,
+    ssh_private_key_path: Optional[str] = None,
+    dry_run: bool = False
 ):
     """Check if SSH keys are compatible or missing."""
     if dry_run:
@@ -72,13 +72,13 @@ def check_user_ssh_keys(
 
 
 def check_server_conflict_with_inputs(
-        server_info: dict,
-        server_info_image: Optional[str] = None,
-        image_name: Optional[str] = None,
-        keypair_name: Optional[str] = None,
-        flavour_name: Optional[str] = None,
-        networks: Optional[tuple] = None,
-        security_groups: Optional[tuple] = None,
+    server_info: dict,
+    server_info_image: Optional[str] = None,
+    image_name: Optional[str] = None,
+    keypair_name: Optional[str] = None,
+    flavour_name: Optional[str] = None,
+    networks: Optional[tuple] = None,
+    security_groups: Optional[tuple] = None,
 ):
     """Check if user-provided values conflict with an existing server."""
     if not server_info:
@@ -138,11 +138,11 @@ def check_server_conflict_with_inputs(
 
 
 def show_server_input_requested_summary(
-        security_groups: tuple,
-        networks: tuple,
-        image_name: Optional[str] = None,
-        flavour_name: Optional[str] = None,
-        keypair_name: Optional[str] = None,
+    security_groups: tuple,
+    networks: tuple,
+    image_name: Optional[str] = None,
+    flavour_name: Optional[str] = None,
+    keypair_name: Optional[str] = None,
 ):
     """Print table with inputs for the server."""
     table = Table(
@@ -219,12 +219,12 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
 
     if missing_msgs:
         panel_content = (
-                "\n".join(missing_msgs)
-                + "\n\n"
-                + "[bold yellow]Tip:[/bold yellow] You can run ewc login and create them.\n"
-                + "[bold yellow]Tip:[/bold yellow] You can specify custom paths with:\n"
-                + '[green]export EWC_CLI_SSH_PRIVATE_KEY_PATH="/path/to/id_rsa"[/green]\n'
-                + '[green]export EWC_CLI_SSH_PUBLIC_KEY_PATH="/path/to/id_rsa.pub"[/green]'
+            "\n".join(missing_msgs)
+            + "\n\n"
+            + "[bold yellow]Tip:[/bold yellow] You can run ewc login and create them.\n"
+            + "[bold yellow]Tip:[/bold yellow] You can specify custom paths with:\n"
+            + '[green]export EWC_CLI_SSH_PRIVATE_KEY_PATH="/path/to/id_rsa"[/green]\n'
+            + '[green]export EWC_CLI_SSH_PUBLIC_KEY_PATH="/path/to/id_rsa.pub"[/green]'
         )
 
         console.print(
@@ -238,9 +238,9 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
 
 
 def normalize_os_image(
-        image_name: str,
-        federee: str,
-        region: str
+    image_name: str,
+    federee: str,
+    region: str
 ) -> tuple[str | None, bool]:
     """
     Normalize OS image names provided.
@@ -314,13 +314,13 @@ def normalize_os_image(
 
 
 def resolve_image_and_flavor(
-        conn: connection.Connection,
-        openstack_backend: OpenstackBackend,
-        federee: str,
-        region: str,
-        flavour_name: Optional[str] = None,
-        image_name: Optional[str] = None,
-        is_gpu: bool = False,
+    conn: connection.Connection,
+    openstack_backend: OpenstackBackend,
+    federee: str,
+    region: str,
+    flavour_name: Optional[str] = None,
+    image_name: Optional[str] = None,
+    is_gpu: bool = False,
 ) -> Tuple[int, str, Dict[str, str]]:
     """
     Resolve both the image and flavor for the given federee.
@@ -390,8 +390,8 @@ def resolve_image_and_flavor(
 
         # Now check the image provided and verify is supported.
         if not normalized_image_name:
-            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [
-                ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]]
+
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]]
             error_message = (
                 f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
                 f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
@@ -410,8 +410,7 @@ def resolve_image_and_flavor(
         )
 
         # if users use long names, let's check if they are using the latest known image and give them a warning in case.
-        if image_name not in [
-            ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]] and not is_short_name and latest_image:
+        if image_name not in [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]] and not is_short_name and latest_image:
             if latest_image.name != image_name:
                 _LOGGER.warning(
                     f"You are not using latest image for {image_name}."
@@ -450,8 +449,8 @@ def resolve_image_and_flavor(
 
 
 def resolve_machine_ip(
-        federee: str,
-        server_info: dict,
+    federee: str,
+    server_info: dict,
 ) -> Tuple[int, str, Optional[Dict[str, Optional[str]]]]:
     """
     Resolve the internal and external IPs of a machine.
@@ -521,9 +520,9 @@ def resolve_machine_ip(
 
 
 def get_deployed_server_info(
-        federee: str,
-        server_info: dict,
-        image_name: Optional[str] = None,
+    federee: str,
+    server_info: dict,
+    image_name: Optional[str] = None,
 ):
     """Get deployed server info."""
     _LOGGER.debug(server_info)
@@ -572,7 +571,7 @@ def get_deployed_server_info(
 
 
 def list_server_details(
-        vm_info: dict,
+    vm_info: dict,
 ):
     """Print detailed info of a single server in a two-column table."""
     console = Console()
@@ -607,17 +606,17 @@ def list_server_details(
 
 
 def pre_deploy_server_setup(
-        openstack_backend: OpenstackBackend,
-        openstack_api: connection.Connection,
-        federee: str,
-        region: str,
-        server_inputs: dict,
-        ssh_public_key_path: str,
-        ssh_private_key_path: str,
-        ssh_private_encoded: Optional[str] = None,
-        ssh_public_encoded: Optional[str] = None,
-        dry_run: bool = False,
-        force: bool = False,
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    region: str,
+    server_inputs: dict,
+    ssh_public_key_path: str,
+    ssh_private_key_path: str,
+    ssh_private_encoded: Optional[str] = None,
+    ssh_public_encoded: Optional[str] = None,
+    dry_run: bool = False,
+    force: bool = False,       
 ):
     """Pre deploy server setup steps:
 
@@ -787,9 +786,9 @@ def pre_deploy_server_setup(
 
 
 def identify_server_reconfiguration(
-        openstack_api: connection.Connection,
-        server_inputs: dict,
-        pre_deploy_server_outputs: dict
+    openstack_api: connection.Connection,
+    server_inputs: dict,
+    pre_deploy_server_outputs: dict
 ):
     """Identify resources to be reconfigured."""
     outputs: dict[str, Optional[str]] = {}
@@ -814,8 +813,8 @@ def identify_server_reconfiguration(
 
     if existing_server_info:
         if not (
-                existing_server_info.metadata.get("deployed")
-                and existing_server_info.metadata.get("deployed") == "ewccli"
+            existing_server_info.metadata.get("deployed")
+            and existing_server_info.metadata.get("deployed") == "ewccli"
         ):
             return (
                 1,
@@ -859,14 +858,14 @@ def identify_server_reconfiguration(
 
 
 def deploy_server(
-        openstack_backend: OpenstackBackend,
-        openstack_api: connection.Connection,
-        federee: str,
-        server_inputs: dict,
-        pre_deploy_server_outputs: dict,
-        boot_from_volume: bool = False,
-        dry_run: bool = False,
-        force: bool = False,
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    server_inputs: dict,
+    pre_deploy_server_outputs: dict,
+    boot_from_volume: bool = False,
+    dry_run: bool = False,
+    force: bool = False,
 ):
     """Deploy Server in Openstack."""
     outputs: dict[str, Optional[str]] = {}
@@ -959,12 +958,12 @@ def deploy_server(
 
 
 def post_deploy_server_setup(
-        openstack_backend: OpenstackBackend,
-        openstack_api: connection.Connection,
-        federee: str,
-        server_inputs: dict,
-        server_info: dict,
-        dry_run: bool = False,
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    server_inputs: dict,
+    server_info: dict,
+    dry_run: bool = False,
 ):
     """Post deploy server setup steps:
 
@@ -1048,17 +1047,17 @@ def post_deploy_server_setup(
 
 
 def create_server_command(
-        openstack_backend: OpenstackBackend,
-        openstack_api: connection.Connection,
-        federee: str,
-        region: str,
-        server_inputs: dict,
-        ssh_public_key_path: str,
-        ssh_private_key_path: str,
-        ssh_private_encoded: Optional[str] = None,
-        ssh_public_encoded: Optional[str] = None,
-        dry_run: bool = False,
-        force: bool = False,
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    region: str,
+    server_inputs: dict,
+    ssh_public_key_path: str,
+    ssh_private_key_path: str,
+    ssh_private_encoded: Optional[str] = None,
+    ssh_public_encoded: Optional[str] = None,
+    dry_run: bool = False,
+    force: bool = False, 
 ):
     """Create Server command."""
     #### PRE DEPLOY SERVER ACTION
@@ -1073,7 +1072,7 @@ def create_server_command(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         dry_run=dry_run,
-        force=force,
+        force=force,  
     )
 
     boot_from_volume = False
@@ -1098,7 +1097,7 @@ def create_server_command(
         identify_server_reconfiguration(
             openstack_api=openstack_api,
             server_inputs=server_inputs,
-            pre_deploy_server_outputs=pre_deploy_server_outputs
+            pre_deploy_server_outputs=pre_deploy_server_outputs  
         )
 
     #### DEPLOY SERVER ACTION
@@ -1141,14 +1140,12 @@ def create_server_command(
 
 
 def connect_to_openstack_backend(
-        ctx,
-        auth_url: Optional[str] = None,
-        application_credential_id: Optional[str] = None,
-        application_credential_secret: Optional[str] = None):
-
-    # Step 1: Authenticate and initialize the OpenStack connection
+    ctx,
+    auth_url: Optional[str] = None,
+    application_credential_id: Optional[str] = None,
+    application_credential_secret: Optional[str] = None,
+):
     try:
-        # Step 1: Authenticate and initialize the OpenStack connection
         openstack_api = ctx.openstack_backend.connect(
             auth_url=auth_url,
             application_credential_id=application_credential_id,

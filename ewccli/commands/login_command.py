@@ -420,75 +420,7 @@ def init_command(
     # token: str,
 ):
     """EWC CLI Login."""
-    if keycloak and not federee:
-        # When using keycloak without an explicit federee, defer selection
-        # until after the portal returns federee/region.
-        pass
-    elif not federee:
-        # If --federee is not passed, ask interactively
-        federee = select_federee()
-        if not federee:
-            console.print("No federee selection made. Exiting.")
-            return
-
-    if federee:
-        console.print(f"Considering federee: {federee}")
-
-    if keycloak and not region:
-        pass
-    elif not region:
-        # If --federee is not passed, ask interactively
-        region = select_region(federee=federee)
-        if not region:
-            console.print("No region selection made. Exiting.")
-            return
-
-    if federee and region:
-        allowed_regions = ewc_hub_config.allowed_regions(federee)
-
-        if region not in allowed_regions:
-            raise click.BadParameter(
-                f"Region '{region}' is not valid for federee '{federee}'. "
-                f"Allowed: {', '.join(allowed_regions)}"
-            )
-
-    # When using keycloak without explicit profile/federee/region, defer
-    # profile resolution until after the OIDC flow (which may fill them in).
-    if keycloak and not profile and not (federee and region and tenant_name):
-        resolved_profile = None
-    else:
-        resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
-
-    profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
-    cfg = ConfigParser()
-    cfg.read(profiles_file_path)
-
-    if not os.path.exists(profiles_file_path) or not cfg.sections():
-        pass
-    else:
-        # Check only when the profile path exist
-        if resolved_profile and resolved_profile in cfg:
-            click.secho(
-                f"❌ Profile '{resolved_profile}' already exists in {ewc_hub_config.EWC_CLI_PROFILES_PATH}",
-                fg="red",
-                bold=True,
-            )
-            click.secho(
-                "Use a different profile name or delete the existing profile first.",
-                fg="yellow",
-            )
-            raise click.Abort()
-
-    # If tenant_name is missing and not using keycloak, prompt for it
-    if not keycloak and not tenant_name:
-        tenant_name = click.prompt("Tenant name")
-
-    # --- Keycloak OIDC login path ---
-    keycloak_access_token = None
-    keycloak_refresh_token = None
-    keycloak_id_token = None
-    keycloak_token_expires_at = None
-
+    # --- Keycloak OIDC login path (run first; may fill federee/region/tenant_name) ---
     if keycloak:
         from ewccli.backends.keycloak.keycloak_backend import keycloak_login
 
@@ -499,12 +431,10 @@ def init_command(
             region=region,
         )
 
-        # If the portal returned credentials, use them
         if kc_result.application_credential_id:
             application_credential_id = kc_result.application_credential_id
             application_credential_secret = kc_result.application_credential_secret
 
-        # If the portal returned federee/region/tenant_name, use them
         if kc_result.federee:
             federee = kc_result.federee
         if kc_result.region:
@@ -512,40 +442,51 @@ def init_command(
         if kc_result.tenant_name:
             tenant_name = kc_result.tenant_name
 
-        # Store OIDC tokens for future refresh
-        keycloak_access_token = kc_result.access_token
-        keycloak_refresh_token = kc_result.refresh_token
-        keycloak_id_token = kc_result.id_token
-        keycloak_token_expires_at = kc_result.token_expires_at
-
-    # Re-resolve profile now that keycloak may have filled in
-    # federee/region/tenant_name.
-    if keycloak and not profile and not (federee and region and tenant_name):
-        # Still missing values — prompt interactively for the ones we don't have
+    # --- Interactive prompts for whatever is still missing ---
+    if not federee:
+        federee = select_federee()
         if not federee:
-            federee = select_federee()
-            if not federee:
-                console.print("No federee selection made. Exiting.")
-                return
-        console.print(f"Considering federee: {federee}")
+            console.print("No federee selection made. Exiting.")
+            return
 
+    console.print(f"Considering federee: {federee}")
+
+    if not region:
+        region = select_region(federee=federee)
         if not region:
-            region = select_region(federee=federee)
-            if not region:
-                console.print("No region selection made. Exiting.")
-                return
+            console.print("No region selection made. Exiting.")
+            return
 
-        if not tenant_name:
-            tenant_name = click.prompt("Tenant name")
+    allowed_regions = ewc_hub_config.allowed_regions(federee)
+    if region not in allowed_regions:
+        raise click.BadParameter(
+            f"Region '{region}' is not valid for federee '{federee}'. "
+            f"Allowed: {', '.join(allowed_regions)}"
+        )
 
-        allowed_regions = ewc_hub_config.allowed_regions(federee)
-        if region not in allowed_regions:
-            raise click.BadParameter(
-                f"Region '{region}' is not valid for federee '{federee}'. "
-                f"Allowed: {', '.join(allowed_regions)}"
-            )
+    if not tenant_name:
+        tenant_name = click.prompt("Tenant name")
 
     resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
+
+    profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+
+    if not os.path.exists(profiles_file_path) or not cfg.sections():
+        pass
+    else:
+        if resolved_profile in cfg:
+            click.secho(
+                f"❌ Profile '{resolved_profile}' already exists in {ewc_hub_config.EWC_CLI_PROFILES_PATH}",
+                fg="red",
+                bold=True,
+            )
+            click.secho(
+                "Use a different profile name or delete the existing profile first.",
+                fg="yellow",
+            )
+            raise click.Abort()
 
     ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
@@ -621,10 +562,6 @@ def init_command(
         # token=token,
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
-        keycloak_access_token=keycloak_access_token,
-        keycloak_refresh_token=keycloak_refresh_token,
-        keycloak_id_token=keycloak_id_token,
-        keycloak_token_expires_at=keycloak_token_expires_at,
     )
 
     console.print(

@@ -1,8 +1,8 @@
 """Keycloak login orchestrator — ties PKCE, callback, OIDC, and portal together."""
 
-import subprocess
 import webbrowser
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from click import ClickException
@@ -12,11 +12,16 @@ from ewccli.backends.keycloak.callback_server import CallbackServer
 from ewccli.backends.keycloak.oidc_client import OIDCClient
 from ewccli.backends.keycloak.pkce import generate_pkce_pair, generate_state
 from ewccli.backends.keycloak.portal_client import PortalClient
-from ewccli.backends.keycloak.token_manager import _compute_expires_at
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
 _console = Console()
+
+
+def _compute_expires_at(expires_in: int) -> str:
+    """Compute the absolute expiry timestamp from an expires_in value."""
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    return expiry.isoformat()
 
 
 @dataclass
@@ -96,21 +101,13 @@ def keycloak_login(
 
     if open_browser:
         try:
-            subprocess.Popen(
-                ["xdg-open", auth_url],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            webbrowser.open(auth_url)
             _console.print("[green]Browser opened automatically.[/green]")
         except Exception:
-            try:
-                webbrowser.open(auth_url)
-                _console.print("[green]Browser opened automatically.[/green]")
-            except Exception:
-                _console.print(
-                    "[yellow]Could not open browser automatically. "
-                    "Please copy the URL above manually.[/yellow]"
-                )
+            _console.print(
+                "[yellow]Could not open browser automatically. "
+                "Please copy the URL above manually.[/yellow]"
+            )
     else:
         _console.print(
             "[yellow]--no-browser: copy the URL above manually.[/yellow]"
