@@ -1,5 +1,6 @@
 """Lightweight HTTP server to receive the OIDC authorization code callback."""
 
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
@@ -41,9 +42,10 @@ class CallbackServer:
         self.port: int = 0
 
     def start(self) -> None:
-        """Start the server on a random loopback port."""
+        """Start the server on a loopback port."""
         handler = self._make_handler()
-        self._httpd = HTTPServer(("127.0.0.1", 0), handler)
+        port = int(os.getenv("EWC_CLI_OIDC_CALLBACK_PORT", "0"))
+        self._httpd = HTTPServer(("127.0.0.1", port), handler)
         self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
