@@ -203,6 +203,53 @@ ssh_public_key_path =
 ssh_private_key_path =
 ```
 
+### Login with Keycloak (OIDC)
+
+Instead of manually entering OpenStack application credentials, you can authenticate via Keycloak:
+
+```bash
+ewc login --keycloak
+```
+
+This will:
+1. Open a browser window for Keycloak authentication
+2. After successful login, fetch OpenStack credentials from the EWC portal
+3. Save everything to your profile
+
+If you're on a headless machine or SSH session, use `--no-browser` to print the URL instead:
+
+```bash
+ewc login --keycloak --no-browser
+```
+
+You can still combine with other flags:
+
+```bash
+ewc login --keycloak --federee EUMETSAT --region ECIS-R1
+```
+
+**Configuration:**
+
+The Keycloak settings can be overridden via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `EWC_CLI_KEYCLOAK_URL` | `https://auth.europeanweather.cloud` | Keycloak server URL |
+| `EWC_CLI_KEYCLOAK_REALM` | `ewc` | Keycloak realm |
+| `EWC_CLI_KEYCLOAK_CLIENT_ID` | `ewccli` | OIDC client ID |
+| `EWC_CLI_KEYCLOAK_SCOPE` | `openid profile email` | OIDC scopes |
+| `EWC_CLI_PORTAL_API_URL` | `https://europeanweather.cloud` | EWC portal API URL |
+| `EWC_CLI_OIDC_CALLBACK_TIMEOUT` | `300` | Callback wait timeout (seconds) |
+| `EWC_CLI_KEYCLOAK_LOGIN` | `0` | Set to `1` to enable Keycloak login by default |
+
+**Token refresh:**
+
+The CLI stores OIDC tokens (access + refresh) in your profile and silently refreshes them when they expire. With refresh token rotation enabled on the Keycloak realm, each refresh invalidates the old refresh token for security. When the refresh token itself expires (default: 7 days), you will see:
+
+```
+Your EWC session has expired. Please run: ewc login --keycloak
+```
+
 ## List Items in the catalog
 
 The following command shows the current available Items. Official Items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
