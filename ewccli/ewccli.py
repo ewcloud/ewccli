@@ -49,6 +49,8 @@ def init(
     federee: str,
     region: str,
     profile: Optional[str] = None,
+    keycloak: bool = False,
+    no_browser: bool = False,
     # token: str,
 ):
     """Login command."""
@@ -61,6 +63,8 @@ def init(
         federee=federee,
         profile=profile,
         region=region,
+        keycloak=keycloak,
+        no_browser=no_browser,
         # token=token,
     )
 

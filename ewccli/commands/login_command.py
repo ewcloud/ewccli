@@ -128,11 +128,11 @@ def init_options(func):
     func = click.option(
         "--tenant-name",
         envvar="EWC_CLI_LOGIN_TENANT_NAME",
-        prompt=True,
-        required=True,
+        required=False,
         callback=validate_tenant_name,
         help=(
-            "Name of your tenancy in EWC, used to identify cloud configurations.\n"
+            "Name of your tenancy in EWC, used to identify cloud configurations. "
+            "Required when not using --keycloak.\n"
             "Must follow the format: 'part1-part2-part3' (e.g. 'demo-user-eu'), "
             "where each part is alphanumeric and separated by dashes.\n"
             "Can also be set via the EWC_CLI_LOGIN_TENANT_NAME environment variable."
@@ -216,6 +216,27 @@ def init_options(func):
         envvar="EWC_CLI_LOGIN_PROFILE",
         required=False,
         help="EWC CLI profile name",
+    )(func)
+    func = click.option(
+        "--keycloak",
+        is_flag=True,
+        default=False,
+        envvar="EWC_CLI_KEYCLOAK_LOGIN",
+        help=(
+            "Login via Keycloak OIDC (browser-based). "
+            "Opens a browser for authentication and fetches "
+            "OpenStack credentials automatically from the EWC portal. "
+            "Can also be set via EWC_CLI_KEYCLOAK_LOGIN=1."
+        ),
+    )(func)
+    func = click.option(
+        "--no-browser",
+        is_flag=True,
+        default=False,
+        help=(
+            "Print the login URL instead of opening a browser. "
+            "Useful for SSH sessions or headless environments."
+        ),
     )(func)
     return func
 
@@ -391,33 +412,43 @@ def init_command(
     tenant_name: str,
     federee: str,
     region: str,
-    profile: str = None
+    profile: str = None,
+    keycloak: bool = False,
+    no_browser: bool = False,
     # token: str,
 ):
     """EWC CLI Login."""
-    if not federee:
+    if keycloak and not federee:
+        # When using keycloak without an explicit federee, defer selection
+        # until after the portal returns federee/region.
+        pass
+    elif not federee:
         # If --federee is not passed, ask interactively
         federee = select_federee()
         if not federee:
             console.print("No federee selection made. Exiting.")
             return
 
-    console.print(f"Considering federee: {federee}")
+    if federee:
+        console.print(f"Considering federee: {federee}")
 
-    if not region:
+    if keycloak and not region:
+        pass
+    elif not region:
         # If --federee is not passed, ask interactively
         region = select_region(federee=federee)
         if not region:
             console.print("No region selection made. Exiting.")
             return
 
-    allowed_regions = ewc_hub_config.allowed_regions(federee)
+    if federee and region:
+        allowed_regions = ewc_hub_config.allowed_regions(federee)
 
-    if region not in allowed_regions:
-        raise click.BadParameter(
-            f"Region '{region}' is not valid for federee '{federee}'. "
-            f"Allowed: {', '.join(allowed_regions)}"
-        )
+        if region not in allowed_regions:
+            raise click.BadParameter(
+                f"Region '{region}' is not valid for federee '{federee}'. "
+                f"Allowed: {', '.join(allowed_regions)}"
+            )
 
     resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
 
@@ -441,6 +472,48 @@ def init_command(
             )
             raise click.Abort()
 
+    # If tenant_name is missing and not using keycloak, prompt for it
+    if not keycloak and not tenant_name:
+        tenant_name = click.prompt("Tenant name")
+
+    # --- Keycloak OIDC login path ---
+    keycloak_access_token = None
+    keycloak_refresh_token = None
+    keycloak_id_token = None
+    keycloak_token_expires_at = None
+
+    if keycloak:
+        from ewccli.backends.keycloak.keycloak_backend import keycloak_login
+
+        kc_result = keycloak_login(
+            config=ewc_hub_config,
+            open_browser=not no_browser,
+            federee=federee,
+            region=region,
+        )
+
+        # Use credentials from the portal
+        application_credential_id = kc_result.application_credential_id
+        application_credential_secret = kc_result.application_credential_secret
+
+        # If the portal returned federee/region/tenant_name, use them
+        if kc_result.federee:
+            federee = kc_result.federee
+        if kc_result.region:
+            region = kc_result.region
+        if kc_result.tenant_name:
+            tenant_name = kc_result.tenant_name
+
+        # Store OIDC tokens for future refresh
+        keycloak_access_token = kc_result.access_token
+        keycloak_refresh_token = kc_result.refresh_token
+        keycloak_id_token = kc_result.id_token
+        keycloak_token_expires_at = kc_result.token_expires_at
+
+    # Re-resolve profile now that keycloak may have filled in
+    # federee/region/tenant_name.
+    resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
+
     ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
@@ -448,34 +521,35 @@ def init_command(
     )
     
 
-    if openstack_config_available():
-        console.print(
-            "🔑 [bold green]Openstack cloud.yaml found at ~/.config/openstack/clouds.yaml[/bold green]"
-            " – skipping Openstack ID and secret requirements."
-        )
-        application_credential_id = ""
-        application_credential_secret = ""
-
-    elif not application_credential_id or not application_credential_secret:
-        if not application_credential_id:
-            # Handle OpenStack credential ID
-            application_credential_id = (
-                application_credential_id
-                or os.getenv("OS_APPLICATION_CREDENTIAL_ID")
-                or click.prompt(
-                    "Enter OpenStack Application Credential ID", hide_input=True
-                )
+    if not keycloak:
+        if openstack_config_available():
+            console.print(
+                "🔑 [bold green]Openstack cloud.yaml found at ~/.config/openstack/clouds.yaml[/bold green]"
+                " – skipping Openstack ID and secret requirements."
             )
+            application_credential_id = ""
+            application_credential_secret = ""
 
-        if not application_credential_secret:
-            # Handle OpenStack credential secret
-            application_credential_secret = (
-                application_credential_secret
-                or os.getenv("OS_APPLICATION_CREDENTIAL_SECRET")
-                or click.prompt(
-                    "Enter OpenStack Application Credential Secret", hide_input=True
+        elif not application_credential_id or not application_credential_secret:
+            if not application_credential_id:
+                # Handle OpenStack credential ID
+                application_credential_id = (
+                    application_credential_id
+                    or os.getenv("OS_APPLICATION_CREDENTIAL_ID")
+                    or click.prompt(
+                        "Enter OpenStack Application Credential ID", hide_input=True
+                    )
                 )
-            )
+
+            if not application_credential_secret:
+                # Handle OpenStack credential secret
+                application_credential_secret = (
+                    application_credential_secret
+                    or os.getenv("OS_APPLICATION_CREDENTIAL_SECRET")
+                    or click.prompt(
+                        "Enter OpenStack Application Credential Secret", hide_input=True
+                    )
+                )
 
     # if kubeconfig_available():
     #     click.echo("🔑 kubeconfig found – skipping token requirement.")
@@ -514,6 +588,10 @@ def init_command(
         # token=token,
         application_credential_id=application_credential_id,
         application_credential_secret=application_credential_secret,
+        keycloak_access_token=keycloak_access_token,
+        keycloak_refresh_token=keycloak_refresh_token,
+        keycloak_id_token=keycloak_id_token,
+        keycloak_token_expires_at=keycloak_token_expires_at,
     )
 
     console.print(
