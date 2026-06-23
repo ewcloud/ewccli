@@ -39,7 +39,7 @@ class EWCCLIConfiguration:
     EWC_CLI_KEYCLOAK_CLIENT_ID = os.getenv("EWC_CLI_KEYCLOAK_CLIENT_ID", "ewccli")
     EWC_CLI_KEYCLOAK_SCOPE = os.getenv("EWC_CLI_KEYCLOAK_SCOPE", "openid profile email")
     EWC_CLI_PORTAL_API_URL = os.getenv(
-        "EWC_CLI_PORTAL_API_URL", "https://europeanweather.cloud"
+        "EWC_CLI_PORTAL_API_URL", ""
     )
     EWC_CLI_OIDC_CALLBACK_TIMEOUT = int(
         os.getenv("EWC_CLI_OIDC_CALLBACK_TIMEOUT", "300")

@@ -238,7 +238,7 @@ The Keycloak settings can be overridden via environment variables:
 | `EWC_CLI_KEYCLOAK_REALM` | `ewc` | Keycloak realm |
 | `EWC_CLI_KEYCLOAK_CLIENT_ID` | `ewccli` | OIDC client ID |
 | `EWC_CLI_KEYCLOAK_SCOPE` | `openid profile email` | OIDC scopes |
-| `EWC_CLI_PORTAL_API_URL` | `https://europeanweather.cloud` | EWC portal API URL |
+| `EWC_CLI_PORTAL_API_URL` | _(empty — portal disabled)_ | EWC portal API URL. When set, the CLI fetches OpenStack credentials automatically after Keycloak auth. When empty, the CLI stores OIDC tokens and falls through to the existing credential path (cloud.yaml, env vars, or manual prompt). |
 | `EWC_CLI_OIDC_CALLBACK_TIMEOUT` | `300` | Callback wait timeout (seconds) |
 | `EWC_CLI_KEYCLOAK_LOGIN` | `0` | Set to `1` to enable Keycloak login by default |
 

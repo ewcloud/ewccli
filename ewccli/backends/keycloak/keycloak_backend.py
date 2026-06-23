@@ -140,9 +140,33 @@ def keycloak_login(
 
     _console.print("[green]Authentication successful![/green]")
 
-    # 7. Fetch OpenStack credentials from portal
+    # 7. Fetch OpenStack credentials from portal (if configured)
+    expires_in = tokens.get("expires_in", 300)
+    token_expires_at = _compute_expires_at(expires_in)
+
+    portal_url = getattr(config, "EWC_CLI_PORTAL_API_URL", "")
+    if not portal_url:
+        # Portal not configured — store OIDC tokens only, fall through to
+        # the existing credential path (cloud.yaml, env vars, or manual prompt).
+        _console.print(
+            "[yellow]Portal API not configured — skipping OpenStack credential fetch. "
+            "Set EWC_CLI_PORTAL_API_URL to enable automatic credential retrieval.[/yellow]"
+        )
+        return KeycloakLoginResult(
+            application_credential_id="",
+            application_credential_secret="",
+            auth_url="",
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token"),
+            id_token=tokens.get("id_token"),
+            token_expires_at=token_expires_at,
+            federee=federee,
+            region=region,
+            tenant_name=None,
+        )
+
     portal_client = PortalClient(
-        portal_api_url=config.EWC_CLI_PORTAL_API_URL,
+        portal_api_url=portal_url,
     )
 
     try:
@@ -157,10 +181,6 @@ def keycloak_login(
         )
 
     _console.print("[green]OpenStack credentials obtained![/green]")
-
-    # 8. Compute absolute expiry timestamp
-    expires_in = tokens.get("expires_in", 300)
-    token_expires_at = _compute_expires_at(expires_in)
 
     return KeycloakLoginResult(
         application_credential_id=creds.application_credential_id,

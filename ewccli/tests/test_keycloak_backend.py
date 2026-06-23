@@ -18,6 +18,18 @@ def mock_config():
     return config
 
 
+@pytest.fixture
+def mock_config_no_portal():
+    config = MagicMock()
+    config.EWC_CLI_KEYCLOAK_URL = "https://auth.example.com"
+    config.EWC_CLI_KEYCLOAK_REALM = "ewc"
+    config.EWC_CLI_KEYCLOAK_CLIENT_ID = "ewccli"
+    config.EWC_CLI_KEYCLOAK_SCOPE = "openid profile"
+    config.EWC_CLI_PORTAL_API_URL = ""
+    config.EWC_CLI_OIDC_CALLBACK_TIMEOUT = 10
+    return config
+
+
 @patch("ewccli.backends.keycloak.keycloak_backend.webbrowser")
 @patch("ewccli.backends.keycloak.keycloak_backend.PortalClient")
 @patch("ewccli.backends.keycloak.keycloak_backend.OIDCClient")
@@ -180,3 +192,49 @@ def test_keycloak_login_portal_failure(
 
     with pytest.raises(ClickException, match="Failed to fetch OpenStack credentials"):
         keycloak_login(config=mock_config, open_browser=False)
+
+
+@patch("ewccli.backends.keycloak.keycloak_backend.PortalClient")
+@patch("ewccli.backends.keycloak.keycloak_backend.OIDCClient")
+@patch("ewccli.backends.keycloak.keycloak_backend.CallbackServer")
+def test_keycloak_login_no_portal_returns_empty_creds(
+    mock_cb_server_cls,
+    mock_oidc_cls,
+    mock_portal_cls,
+    mock_config_no_portal,
+):
+    """When portal is not configured, return empty app creds but keep OIDC tokens."""
+    mock_server = MagicMock()
+    mock_server.port = 12345
+    mock_server.redirect_uri = "http://127.0.0.1:12345/callback"
+    mock_server.wait_for_callback.return_value = ("code", "state")
+    mock_server.error = None
+    mock_cb_server_cls.return_value = mock_server
+
+    mock_oidc = MagicMock()
+    mock_oidc.exchange_code_for_tokens.return_value = {
+        "access_token": "access123",
+        "refresh_token": "refresh456",
+        "id_token": "id789",
+        "expires_in": 300,
+    }
+    mock_oidc_cls.return_value = mock_oidc
+
+    result = keycloak_login(
+        config=mock_config_no_portal,
+        open_browser=False,
+        federee="EUMETSAT",
+        region="ECIS-R1",
+    )
+
+    assert isinstance(result, KeycloakLoginResult)
+    # App creds are empty — fall through to existing credential path
+    assert result.application_credential_id == ""
+    assert result.application_credential_secret == ""
+    assert result.auth_url == ""
+    # OIDC tokens are still stored for refresh
+    assert result.access_token == "access123"
+    assert result.refresh_token == "refresh456"
+    assert result.id_token == "id789"
+    # Portal client was never called
+    mock_portal_cls.assert_not_called()

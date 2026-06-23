@@ -492,9 +492,10 @@ def init_command(
             region=region,
         )
 
-        # Use credentials from the portal
-        application_credential_id = kc_result.application_credential_id
-        application_credential_secret = kc_result.application_credential_secret
+        # If the portal returned credentials, use them
+        if kc_result.application_credential_id:
+            application_credential_id = kc_result.application_credential_id
+            application_credential_secret = kc_result.application_credential_secret
 
         # If the portal returned federee/region/tenant_name, use them
         if kc_result.federee:
@@ -521,7 +522,7 @@ def init_command(
     )
     
 
-    if not keycloak:
+    if not keycloak or not application_credential_id:
         if openstack_config_available():
             console.print(
                 "🔑 [bold green]Openstack cloud.yaml found at ~/.config/openstack/clouds.yaml[/bold green]"
