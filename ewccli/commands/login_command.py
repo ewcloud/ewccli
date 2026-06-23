@@ -99,6 +99,8 @@ def openstack_config_available():
 
 def validate_tenant_name(ctx, param, value):
     """Validate tenant name."""
+    if not value:
+        return value
     pattern = r"^[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+$"
     if not re.match(pattern, value):
         raise click.BadParameter(
@@ -450,7 +452,12 @@ def init_command(
                 f"Allowed: {', '.join(allowed_regions)}"
             )
 
-    resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
+    # When using keycloak without explicit profile/federee/region, defer
+    # profile resolution until after the OIDC flow (which may fill them in).
+    if keycloak and not profile and not (federee and region and tenant_name):
+        resolved_profile = None
+    else:
+        resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
 
     profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
     cfg = ConfigParser()
@@ -513,6 +520,31 @@ def init_command(
 
     # Re-resolve profile now that keycloak may have filled in
     # federee/region/tenant_name.
+    if keycloak and not profile and not (federee and region and tenant_name):
+        # Still missing values — prompt interactively for the ones we don't have
+        if not federee:
+            federee = select_federee()
+            if not federee:
+                console.print("No federee selection made. Exiting.")
+                return
+        console.print(f"Considering federee: {federee}")
+
+        if not region:
+            region = select_region(federee=federee)
+            if not region:
+                console.print("No region selection made. Exiting.")
+                return
+
+        if not tenant_name:
+            tenant_name = click.prompt("Tenant name")
+
+        allowed_regions = ewc_hub_config.allowed_regions(federee)
+        if region not in allowed_regions:
+            raise click.BadParameter(
+                f"Region '{region}' is not valid for federee '{federee}'. "
+                f"Allowed: {', '.join(allowed_regions)}"
+            )
+
     resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
 
     ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(

@@ -1,5 +1,6 @@
 """Keycloak login orchestrator — ties PKCE, callback, OIDC, and portal together."""
 
+import subprocess
 import webbrowser
 from dataclasses import dataclass
 from typing import Optional
@@ -95,13 +96,21 @@ def keycloak_login(
 
     if open_browser:
         try:
-            webbrowser.open(auth_url)
+            subprocess.Popen(
+                ["xdg-open", auth_url],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             _console.print("[green]Browser opened automatically.[/green]")
         except Exception:
-            _console.print(
-                "[yellow]Could not open browser automatically. "
-                "Please copy the URL above manually.[/yellow]"
-            )
+            try:
+                webbrowser.open(auth_url)
+                _console.print("[green]Browser opened automatically.[/green]")
+            except Exception:
+                _console.print(
+                    "[yellow]Could not open browser automatically. "
+                    "Please copy the URL above manually.[/yellow]"
+                )
     else:
         _console.print(
             "[yellow]--no-browser: copy the URL above manually.[/yellow]"

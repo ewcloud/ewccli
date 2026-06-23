@@ -30,6 +30,7 @@ def mock_config_no_portal():
     return config
 
 
+@patch("ewccli.backends.keycloak.keycloak_backend.subprocess")
 @patch("ewccli.backends.keycloak.keycloak_backend.webbrowser")
 @patch("ewccli.backends.keycloak.keycloak_backend.PortalClient")
 @patch("ewccli.backends.keycloak.keycloak_backend.OIDCClient")
@@ -39,6 +40,7 @@ def test_keycloak_login_success(
     mock_oidc_cls,
     mock_portal_cls,
     mock_webbrowser,
+    mock_subprocess,
     mock_config,
 ):
     # Callback server
@@ -88,8 +90,10 @@ def test_keycloak_login_success(
     assert result.federee == "EUMETSAT"
     assert result.region == "ECIS-R1"
 
-    # Browser was opened
-    mock_webbrowser.open.assert_called_once()
+    # Browser was opened (via subprocess.Popen)
+    mock_subprocess.Popen.assert_called_once()
+    # webbrowser.open should not be called (subprocess takes priority)
+    mock_webbrowser.open.assert_not_called()
 
     # Callback server was started and stopped
     mock_server.start.assert_called_once()

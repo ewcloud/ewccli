@@ -27,7 +27,7 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
-from ewccli.commands.commons_infra import check_user_ssh_keys
+from ewccli.commands.commons_infra import check_user_ssh_keys, connect_to_openstack_backend
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
 from ewccli.commands.commons_infra import create_server_command
 from ewccli.utils import load_cli_profile
@@ -164,21 +164,12 @@ def create_cmd(
 
     _LOGGER.info(f"The server will be deployed on {federee} side of the EWC.")
 
-    #####################################################################################
-    # Authenticate to Openstack
-    #####################################################################################
-
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
-        )
+    openstack_api = connect_to_openstack_backend(
+        ctx=ctx,
+        auth_url=auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret
+    )
 
     server_inputs = {
         "server_name": server_name,
@@ -270,17 +261,12 @@ def show_cmd(
     """Show Server from Openstack."""
     federee = federee or ctx.cli_profile["federee"]
 
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
-        )
+    openstack_api = connect_to_openstack_backend(
+        ctx=ctx,
+        auth_url=auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret
+    )
 
     try:
         # Find the server info by name
@@ -330,18 +316,12 @@ def list_cmd(
     """List Servers from Openstack."""
     federee = federee or ctx.cli_profile["federee"]
 
-
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
-        )
+    openstack_api = connect_to_openstack_backend(
+        ctx=ctx,
+        auth_url=auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret
+    )
 
     try:
         servers = ctx.openstack_backend.list_servers(
@@ -385,18 +365,13 @@ def delete_cmd(
     dry_run: bool = False,
 ):
     """Delete VM from Openstack."""
-    # Step 1: Authenticate and initialize the OpenStack connection
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
-        )
+
+    openstack_api = connect_to_openstack_backend(
+        ctx=ctx,
+        auth_url=auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret
+    )
 
     server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
 
