@@ -181,6 +181,21 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
 ewc login
 ```
 
+Keycloak authentication is **mandatory** for all EWC CLI commands (except `ewc version`). The login command:
+
+1. Opens a browser window for Keycloak OIDC authentication (auth code + PKCE) → an **ephemeral** access token (not stored).
+2. Uses that token to authenticate to **OpenBao** (JWT/OIDC auth method) → an ephemeral OpenBao client token.
+3. Reads secrets from OpenBao:
+   - Kubernetes kubeconfig → saved to `~/.ewccli/kubeconfigs/<profile>.yaml`
+   - OpenStack application credentials (id + secret) → saved to the profile.
+4. Saves the downstream credentials to your profile. **No Keycloak/OpenBao tokens are persisted.**
+
+When a downstream credential expires (OpenStack 401/403), the command tells you to re-login:
+
+```
+Your OpenStack credentials have expired. Please run: ewc login --profile <profile_name>
+```
+
 IMPORTANT:
 
 - EWC CLI uses the following order of importance:
@@ -192,15 +207,77 @@ All your profiles are saved under `~/.ewccli/profiles`
 
 You can manually add profiles in the same file and the ewccli can use them already.
 
-Info required for a profile:
+Info stored in a profile (no OIDC tokens):
 ```
 [my-profile]
 federee = EUMETSAT or ECMWF
+region = WAW3-1
 tenant_name = eumetsat-ewc-communityhub
-application_credential_id = 
-application_credential_secret = 
+application_credential_id =
+application_credential_secret =
 ssh_public_key_path =
 ssh_private_key_path =
+kubeconfig_path = /home/user/.ewccli/kubeconfigs/my-profile.yaml
+```
+
+### Multi-tenancy with `--profile`
+
+The `--profile` flag lets you manage multiple tenancy profiles. Each profile stores its own federee, region, tenant name, SSH keys, application credentials, and kubeconfig path.
+
+```bash
+ewc login --profile my-profile
+```
+
+If `--profile` is omitted, the default profile named `default` is used.
+
+When you log in with a profile that already exists, the CLI skips the federee/region/tenant_name prompts and simply refreshes your downstream credentials from OpenBao. When the profile does not exist, you will be prompted to choose a federee and region interactively.
+
+If you do not provide `--profile` during login but supply `--federee`, `--region`, and `--tenant-name`, the profile name is auto-generated as `federee-region-tenant_name` (e.g. `eumetsat-ecis-r1-demo-user-eu`).
+
+All commands that access cloud resources accept `--profile`:
+
+```bash
+ewc infra list --profile my-profile
+ewc hub deploy ITEM --profile my-profile
+```
+
+### Headless / SSH sessions
+
+If you're on a headless machine or SSH session, use `--no-browser` to print the login URL instead of opening a browser:
+
+```bash
+ewc login --no-browser
+```
+
+You can also combine with other flags:
+
+```bash
+ewc login --profile my-profile --no-browser
+```
+
+**Configuration:**
+
+The Keycloak and OpenBao settings can be overridden via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `EWC_CLI_KEYCLOAK_URL` | `https://iam.europeanweather.cloud` | Keycloak server URL |
+| `EWC_CLI_KEYCLOAK_REALM` | `ewc-login-broker` | Keycloak realm |
+| `EWC_CLI_KEYCLOAK_CLIENT_ID` | `ewccli` | OIDC client ID |
+| `EWC_CLI_KEYCLOAK_SCOPE` | `openid profile email` | OIDC scopes |
+| `EWC_CLI_OIDC_CALLBACK_TIMEOUT` | `300` | Callback wait timeout (seconds) |
+| `EWC_CLI_OIDC_CALLBACK_PORT` | `11325` | Loopback port for the OIDC callback server |
+| `EWC_CLI_OPENBAO_URL` | `https://secrets-val.internal.eumetsat.europeanweather.cloud` | OpenBao API base URL |
+| `EWC_CLI_OPENBAO_OIDC_ROLE` | `default` | OpenBao OIDC auth role name |
+| `EWC_CLI_OPENBAO_KV_MOUNT` | `secret` | KV2 engine mount path |
+| `EWC_CLI_OPENBAO_NAMESPACE` | `openbao-users` | OpenBao namespace (sent as `X-Vault-Namespace`) |
+
+**Credential expiry:**
+
+The CLI does **not** store Keycloak or OpenBao tokens. Instead it stores the downstream credentials (OpenStack application credentials and kubeconfig) retrieved from OpenBao. When those credentials expire or are revoked, cloud operations will fail with a 401/403 and the CLI will prompt you to re-login:
+
+```
+Your OpenStack credentials have expired. Please run: ewc login --profile <profile_name>
 ```
 
 ## List Items in the catalog

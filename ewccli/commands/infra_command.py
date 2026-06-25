@@ -27,10 +27,10 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
-from ewccli.commands.commons_infra import check_user_ssh_keys
+from ewccli.commands.commons_infra import check_user_ssh_keys, connect_to_openstack_backend
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
-from ewccli.commands.commons_infra import create_server_command
-from ewccli.utils import load_cli_profile
+from ewccli.commands.commons_infra import create_server_command, handle_credential_expiry
+from ewccli.utils import load_cli_profile, CredentialExpiredError
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -46,14 +46,10 @@ infra_context = click.make_pass_decorator(CommonBackendContext, ensure=True)
 @login_options
 def ewc_infra_command(ctx, profile):
     """EWC Infrastructure commands group."""
-    if profile:
-        ctx.cli_profile = load_cli_profile(profile=profile)
-        _LOGGER.info(f"Using `{profile}` profile.")
-    else:
-        ctx.cli_profile = load_cli_profile(
-            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
-        )
-        _LOGGER.info(f"Using `{ctx.cli_profile.get('profile')}` profile.")
+    ctx.cli_profile = load_cli_profile(
+        profile=profile or ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
+    )
+    _LOGGER.info(f"Using `{ctx.cli_profile.get('profile')}` profile.")
 
     federee = ctx.cli_profile.get("federee")
     region = ctx.cli_profile.get("region")
@@ -164,47 +160,39 @@ def create_cmd(
 
     _LOGGER.info(f"The server will be deployed on {federee} side of the EWC.")
 
-    #####################################################################################
-    # Authenticate to Openstack
-    #####################################################################################
-
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
+    with handle_credential_expiry(ctx.cli_profile["profile"]):
+        openstack_api = connect_to_openstack_backend(
+            ctx=ctx,
             auth_url=auth_url,
             application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
+            application_credential_secret=application_credential_secret
         )
 
-    server_inputs = {
-        "server_name": server_name,
-        "is_gpu": None,
-        "image_name": image_name,
-        "keypair_name": keypair_name,
-        "flavour_name": flavour_name,
-        "external_ip": external_ip,
-        "networks": networks,
-        "security_groups": security_groups,
-        "item_default_security_groups": ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee]
-    }
+        server_inputs = {
+            "server_name": server_name,
+            "is_gpu": None,
+            "image_name": image_name,
+            "keypair_name": keypair_name,
+            "flavour_name": flavour_name,
+            "external_ip": external_ip,
+            "networks": networks,
+            "security_groups": security_groups,
+            "item_default_security_groups": ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee]
+        }
 
-    os_status_code, os_message, outputs = create_server_command(
-        openstack_backend=ctx.openstack_backend,
-        openstack_api=openstack_api,
-        federee=federee,
-        region=region,
-        server_inputs=server_inputs,
-        ssh_private_encoded=ssh_private_encoded,
-        ssh_public_encoded=ssh_public_encoded,
-        ssh_public_key_path=ssh_public_key_path,
-        ssh_private_key_path=ssh_private_key_path,
-        dry_run=dry_run,
-        force=force,  
-    )
+        os_status_code, os_message, outputs = create_server_command(
+            openstack_backend=ctx.openstack_backend,
+            openstack_api=openstack_api,
+            federee=federee,
+            region=region,
+            server_inputs=server_inputs,
+            ssh_private_encoded=ssh_private_encoded,
+            ssh_public_encoded=ssh_public_encoded,
+            ssh_public_key_path=ssh_public_key_path,
+            ssh_private_key_path=ssh_private_key_path,
+            dry_run=dry_run,
+            force=force,  
+        )
     internal_ip_machine = outputs["internal_ip_machine"]
     external_ip_machine = outputs["external_ip_machine"]
     normalized_image_name = outputs.get("normalized_image_name")
@@ -270,42 +258,38 @@ def show_cmd(
     """Show Server from Openstack."""
     federee = federee or ctx.cli_profile["federee"]
 
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
+    with handle_credential_expiry(ctx.cli_profile["profile"]):
+        openstack_api = connect_to_openstack_backend(
+            ctx=ctx,
             auth_url=auth_url,
             application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
+            application_credential_secret=application_credential_secret
         )
 
-    try:
-        # Find the server info by name
-        server_info = openstack_api.get_server(name_or_id=server_name)
-    except Exception as e:
-        raise ClickException(
-            f"Could not retrieve server {server_name} from Openstack due to: {e}"
+        try:
+            # Find the server info by name
+            server_info = openstack_api.get_server(name_or_id=server_name)
+        except Exception as e:
+            raise ClickException(
+                f"Could not retrieve server {server_name} from Openstack due to: {e}"
+            )
+
+        if not server_info:
+            click.echo(f"Server '{server_name}' not found.")
+            return
+
+        image_id = server_info.get("image", "").get("id")
+        image_info = openstack_api.image.find_image(image_id)
+
+        image_name = image_info.get("name")
+
+        vm_info = get_deployed_server_info(
+            federee=federee,
+            server_info=server_info,
+            image_name=image_name,
         )
 
-    if not server_info:
-        click.echo(f"Server '{server_name}' not found.")
-        return
-
-    image_id = server_info.get("image", "").get("id")
-    image_info = openstack_api.image.find_image(image_id)
-
-    image_name = image_info.get("name")
-
-    vm_info = get_deployed_server_info(
-        federee=federee,
-        server_info=server_info,
-        image_name=image_name,
-    )
-
-    list_server_details(vm_info)
+        list_server_details(vm_info)
 
 
 @ewc_infra_command.command(name="list", help="List servers in Openstack.")
@@ -330,28 +314,23 @@ def list_cmd(
     """List Servers from Openstack."""
     federee = federee or ctx.cli_profile["federee"]
 
-
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
+    with handle_credential_expiry(ctx.cli_profile["profile"]):
+        openstack_api = connect_to_openstack_backend(
+            ctx=ctx,
             auth_url=auth_url,
             application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
+            application_credential_secret=application_credential_secret
         )
 
-    try:
-        servers = ctx.openstack_backend.list_servers(
-            conn=openstack_api, show_all=show_all, federee=federee
-        )
-    except Exception as e:
-        raise ClickException(
-            f"Could not retrieve server list from Openstack due to: {e}"
-        )
-    list_server_table(servers=servers)
+        try:
+            servers = ctx.openstack_backend.list_servers(
+                conn=openstack_api, show_all=show_all, federee=federee
+            )
+        except Exception as e:
+            raise ClickException(
+                f"Could not retrieve server list from Openstack due to: {e}"
+            )
+        list_server_table(servers=servers)
 
 
 @ewc_infra_command.command(name="delete", help="Delete server in Openstack.")
@@ -385,29 +364,25 @@ def delete_cmd(
     dry_run: bool = False,
 ):
     """Delete VM from Openstack."""
-    # Step 1: Authenticate and initialize the OpenStack connection
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
+
+    with handle_credential_expiry(ctx.cli_profile["profile"]):
+        openstack_api = connect_to_openstack_backend(
+            ctx=ctx,
             auth_url=auth_url,
             application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
+            application_credential_secret=application_credential_secret
         )
 
-    server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
+        server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
 
-    try:
-        ctx.openstack_backend.delete_server(
-            conn=openstack_api, server_name=server_name, force=force, dry_run=dry_run
-        )
-    except Exception as e:
-        raise ClickException(
-            f"Could not delete server {server_name} from Openstack due to: {e}"
-        )
+        try:
+            ctx.openstack_backend.delete_server(
+                conn=openstack_api, server_name=server_name, force=force, dry_run=dry_run
+            )
+        except Exception as e:
+            raise ClickException(
+                f"Could not delete server {server_name} from Openstack due to: {e}"
+            )
 
 
 # def remove_server_external_ip(

@@ -31,6 +31,32 @@ class EWCCLIConfiguration:
     EWC_CLI_DEFAULT_FEDEREE = "default"
     EWC_CLI_DEFAULT_KEYPAIR_NAME = "ewc-hub-key"
 
+    # Keycloak / OIDC configuration
+    EWC_CLI_KEYCLOAK_URL = os.getenv(
+        "EWC_CLI_KEYCLOAK_URL", "https://iam.europeanweather.cloud"
+    )
+    EWC_CLI_KEYCLOAK_REALM = os.getenv("EWC_CLI_KEYCLOAK_REALM", "ewc-login-broker")
+    EWC_CLI_KEYCLOAK_CLIENT_ID = os.getenv("EWC_CLI_KEYCLOAK_CLIENT_ID", "ewccli")
+    EWC_CLI_KEYCLOAK_SCOPE = os.getenv("EWC_CLI_KEYCLOAK_SCOPE", "openid profile email")
+    EWC_CLI_OIDC_CALLBACK_TIMEOUT = int(
+        os.getenv("EWC_CLI_OIDC_CALLBACK_TIMEOUT", "300")
+    )
+    EWC_CLI_OIDC_CALLBACK_PORT = int(
+        os.getenv("EWC_CLI_OIDC_CALLBACK_PORT", "11325")
+    )
+
+    # OpenBao (secrets) configuration
+    EWC_CLI_OPENBAO_URL = os.getenv(
+        "EWC_CLI_OPENBAO_URL",
+        "https://secrets-val.internal.eumetsat.europeanweather.cloud",
+    )
+    EWC_CLI_OPENBAO_OIDC_ROLE = os.getenv("EWC_CLI_OPENBAO_OIDC_ROLE", "default")
+    EWC_CLI_OPENBAO_KV_MOUNT = os.getenv("EWC_CLI_OPENBAO_KV_MOUNT", "secret")
+    EWC_CLI_OPENBAO_NAMESPACE = os.getenv("EWC_CLI_OPENBAO_NAMESPACE", "openbao-users")
+
+    # Per-profile kubeconfig directory
+    EWC_CLI_KUBECONFIG_PATH = EWC_CLI_BASE_PATH / "kubeconfigs"
+
     # EWC_CLI_HUB_ITEMS_PATH = files("ewccli.data").joinpath("items.yaml")
     EWC_CLI_HUB_ITEMS_PATH = EWC_CLI_BASE_PATH / "items.yaml"
     EWC_CLI_HUB_SSH_REPO_PATH = EWC_CLI_BASE_PATH / ".ssh"

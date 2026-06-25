@@ -41,27 +41,23 @@ def cli():
 @cli.command(name="login", help="Initialize configuration for EWC CLI.")
 @init_options
 def init(
-    application_credential_id: str,
-    application_credential_secret: str,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
     tenant_name: str,
     federee: str,
     region: str,
     profile: Optional[str] = None,
-    # token: str,
+    no_browser: bool = False,
 ):
     """Login command."""
     init_command(
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         tenant_name=tenant_name,
         federee=federee,
         profile=profile,
         region=region,
-        # token=token,
+        no_browser=no_browser,
     )
 
 

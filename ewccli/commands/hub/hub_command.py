@@ -40,6 +40,7 @@ from ewccli.commands.commons import wait_for_dns_record
 from ewccli.commands.commons import load_hub_items
 from ewccli.commands.commons_infra import create_server_command
 from ewccli.commands.commons_infra import check_user_ssh_keys
+from ewccli.commands.commons_infra import handle_credential_expiry
 from ewccli.commands.hub.hub_backends import git_clone_item
 from ewccli.commands.hub.hub_backends import run_ansible_playbook_item
 from ewccli.commands.hub.hub_backends import get_hub_item_env_variable_value
@@ -363,17 +364,13 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     """
     if dry_run:
         _LOGGER.info("Dry run enabled...")
-
-    if profile:
         cli_profile = load_cli_profile(
-            profile=profile,
+            profile=profile or ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
             dry_run=dry_run
         )
     else:
-        # Use default profile if exists
         cli_profile = load_cli_profile(
-            profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
-            dry_run=dry_run
+            profile=profile or ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
         )
 
     _LOGGER.info(f"Using `{cli_profile.get('profile')}` profile.")
@@ -558,92 +555,102 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         # Authenticate to Openstack
         #####################################################################################
 
-        try:
-            # Step 1: Authenticate and initialize the OpenStack connection
-            openstack_api = openstack_backend.connect(
-                auth_url=auth_url,
-                application_credential_id=application_credential_id,
-                application_credential_secret=application_credential_secret,
-            )
-        except Exception as op_error:
-            raise ClickException(
-                f"Could not connect to Openstack due to the following error: {op_error}"
-            )
+        with handle_credential_expiry(cli_profile.get("profile")):
+            try:
+                # Step 1: Authenticate and initialize the OpenStack connection
+                openstack_api = openstack_backend.connect(
+                    auth_url=auth_url,
+                    application_credential_id=application_credential_id,
+                    application_credential_secret=application_credential_secret,
+                )
+            except Exception as op_error:
+                from openstack.exceptions import HttpException, ForbiddenException
 
-        ##########################################
-        # Validate inputs
-        ###########################################
-        # R = required
-        # D = default
-        # catalog -> D (yaml inputs)
-        # user -> R or D (overwrite) (bash inputs)
-        ###########################################
+                status_code = getattr(op_error, "status_code", None)
+                if isinstance(op_error, (HttpException, ForbiddenException)) and status_code in (401, 403):
+                    from ewccli.utils import CredentialExpiredError
 
-        # Prepare default parameters
-        for d_item in default_item_inputs:
-            default_item_input_name = d_item.get("name")
+                    raise CredentialExpiredError(
+                        f"OpenStack authentication failed ({status_code}): {op_error}"
+                    ) from op_error
+                raise ClickException(
+                    f"Could not connect to Openstack due to the following error: {op_error}"
+                ) from op_error
 
-            # If default value is not provided by the user.
-            if default_item_input_name not in item_inputs:
-                # TODO: Improve this logic with new parameter in the catalog
-                # Take the default from the EWC values if they exist
-                if default_item_input_name in HUB_ENV_VARIABLES_MAP:
-                    item_inputs[default_item_input_name] = (
-                        get_hub_item_env_variable_value(
-                            hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
-                            federee=federee,
-                            tenancy_name=tenancy_name,
-                            variable_name=default_item_input_name,
-                            openstack_api=openstack_api,
+            ##########################################
+            # Validate inputs
+            ###########################################
+            # R = required
+            # D = default
+            # catalog -> D (yaml inputs)
+            # user -> R or D (overwrite) (bash inputs)
+            ###########################################
+
+            # Prepare default parameters
+            for d_item in default_item_inputs:
+                default_item_input_name = d_item.get("name")
+
+                # If default value is not provided by the user.
+                if default_item_input_name not in item_inputs:
+                    # TODO: Improve this logic with new parameter in the catalog
+                    # Take the default from the EWC values if they exist
+                    if default_item_input_name in HUB_ENV_VARIABLES_MAP:
+                        item_inputs[default_item_input_name] = (
+                            get_hub_item_env_variable_value(
+                                hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
+                                federee=federee,
+                                tenancy_name=tenancy_name,
+                                variable_name=default_item_input_name,
+                                openstack_api=openstack_api,
+                            )
                         )
-                    )
-                else:
-                    # Take the default from the catalog
-                    item_inputs[default_item_input_name] = d_item.get("default")
+                    else:
+                        # Take the default from the catalog
+                        item_inputs[default_item_input_name] = d_item.get("default")
 
-        # Validate all input parameters (R + D)
-        # (R) Validate required inputs
-        # (D) Validate default inputs provided by user (overwritten) or from default section of the catalog
-        validation_message = validate_item_input_types(
-            parsed_inputs=item_inputs,
-            item_info_inputs=item_info_inputs,
-        )
-
-        if validation_message:
-            raise click.UsageError(validation_message)
-
-        #####################################################################################
-        # Deploy Server (Openstack)
-        #####################################################################################
-
-        server_inputs = {
-            "server_name": server_name,
-            "is_gpu": is_gpu,
-            "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value) if not image_name else image_name,
-            "keypair_name": keypair_name,
-            "flavour_name": flavour_name,
-            "external_ip": external_ip
-            or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
-            "networks": networks,
-            "security_groups": security_groups,
-            "item_default_security_groups": item_info_ewccli.get(
-                HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
+            # Validate all input parameters (R + D)
+            # (R) Validate required inputs
+            # (D) Validate default inputs provided by user (overwritten) or from default section of the catalog
+            validation_message = validate_item_input_types(
+                parsed_inputs=item_inputs,
+                item_info_inputs=item_info_inputs,
             )
-        }
 
-        os_status_code, os_message, outputs = create_server_command(
-            openstack_backend=openstack_backend,
-            openstack_api=openstack_api,
-            federee=federee,
-            region=region,
-            server_inputs=server_inputs,
-            ssh_private_encoded=ssh_private_encoded,
-            ssh_public_encoded=ssh_public_encoded,
-            ssh_public_key_path=ssh_public_key_path,
-            ssh_private_key_path=ssh_private_key_path,
-            dry_run=dry_run,
-            force=force,  
-        )
+            if validation_message:
+                raise click.UsageError(validation_message)
+
+            #####################################################################################
+            # Deploy Server (Openstack)
+            #####################################################################################
+
+            server_inputs = {
+                "server_name": server_name,
+                "is_gpu": is_gpu,
+                "image_name": item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value) if not image_name else image_name,
+                "keypair_name": keypair_name,
+                "flavour_name": flavour_name,
+                "external_ip": external_ip
+                or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
+                "networks": networks,
+                "security_groups": security_groups,
+                "item_default_security_groups": item_info_ewccli.get(
+                    HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
+                )
+            }
+
+            os_status_code, os_message, outputs = create_server_command(
+                openstack_backend=openstack_backend,
+                openstack_api=openstack_api,
+                federee=federee,
+                region=region,
+                server_inputs=server_inputs,
+                ssh_private_encoded=ssh_private_encoded,
+                ssh_public_encoded=ssh_public_encoded,
+                ssh_public_key_path=ssh_public_key_path,
+                ssh_private_key_path=ssh_private_key_path,
+                dry_run=dry_run,
+                force=force,  
+            )
 
         internal_ip_machine = outputs["internal_ip_machine"]
         external_ip_machine = outputs["external_ip_machine"]
