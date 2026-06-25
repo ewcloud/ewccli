@@ -58,49 +58,6 @@ def _resolve_profile(
     return f"{federee.lower()}-{region.lower()}-{tenant_name.lower()}"
 
 
-def save_default_login_profile(
-    federee: str,
-    region: str,
-    tenant_name: str,
-    ssh_private_key_path_to_save: str,
-    ssh_public_key_path_to_save: str,
-    application_credential_id: Optional[str] = None,
-    application_credential_secret: Optional[str] = None,
-    token: Optional[str] = None,
-    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
-) -> None:
-    """
-    Save the default login profile to EWC_CLI_PROFILES_PATH only if it does not exist.
-    If it already exists, do nothing (skip).
-
-    Uses ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME as the profile name.
-    """
-    resolved_profile = _resolve_profile(
-        profile=ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME,
-    )
-
-    cfg = ConfigParser()
-    cfg.read(profiles_file_path)
-
-    # Skip saving if the default profile already exists
-    if resolved_profile in cfg:
-        return
-
-    # Save profile (reusing the unified save_cli_profile logic)
-
-    save_cli_profile(
-        federee=federee,
-        region=region,
-        tenant_name=tenant_name,
-        ssh_private_key_path_to_save=ssh_private_key_path_to_save,
-        ssh_public_key_path_to_save=ssh_public_key_path_to_save,
-        profile=resolved_profile,
-        token=token,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
-    )
-
-
 def save_cli_profile(
     federee: str,
     region: str,
@@ -108,13 +65,17 @@ def save_cli_profile(
     ssh_private_key_path_to_save: str,
     ssh_public_key_path_to_save: str,
     profile: Optional[str] = None,
-    token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
+    kubeconfig_path: Optional[str] = None,
     profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
     """
     Save all profile data (config + credentials) into a single profiles file.
+
+    No Keycloak/OIDC tokens are persisted. The profile stores only the
+    downstream credentials (app creds, kubeconfig path, federee, region,
+    tenant_name, SSH keys).
 
     Parameters
     ----------
@@ -130,12 +91,12 @@ def save_cli_profile(
         SSH public key path
     profile : str, optional
         Explicit profile name. If None, auto-generated using federee-tenant.
-    token : str, optional
-        Authentication token.
     application_credential_id : str, optional
         Application credential ID.
     application_credential_secret : str, optional
         Application credential secret.
+    kubeconfig_path : str, optional
+        Path to the per-profile kubeconfig file.
     """
     resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
     cfg = ConfigParser()
@@ -164,10 +125,7 @@ def save_cli_profile(
     cfg[resolved_profile]["ssh_public_key_path"] = ssh_public_key_path_to_save
     cfg[resolved_profile]["ssh_private_key_path"] = ssh_private_key_path_to_save
 
-    # Sensitive
-    if token:
-        cfg[resolved_profile]["token"] = token
-
+    # Downstream credentials (no OIDC tokens are stored)
     if application_credential_id:
         cfg[resolved_profile]["application_credential_id"] = application_credential_id
 
@@ -175,6 +133,9 @@ def save_cli_profile(
         cfg[resolved_profile][
             "application_credential_secret"
         ] = application_credential_secret
+
+    if kubeconfig_path:
+        cfg[resolved_profile]["kubeconfig_path"] = kubeconfig_path
 
     os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
     with open(profiles_file_path, "w") as f:
@@ -220,9 +181,9 @@ def load_cli_profile(
             "tenant_name": "internal-ewc-admins",
             "ssh_public_key_path": "/tmp/id_rsa.pub",
             "ssh_private_key_path": "/tmp/id_rsa",
-            "token": None,
             "application_credential_id": "",
             "application_credential_secret": "",
+            "kubeconfig_path": "",
         }
 
     if profile is None:
@@ -366,10 +327,64 @@ def load_cli_profile(
         "tenant_name": section.get("tenant_name"),
         "ssh_public_key_path": ssh_public_key_path,
         "ssh_private_key_path": ssh_private_key_path,
-        "token": section.get("token"),
         "application_credential_id": section.get("application_credential_id"),
         "application_credential_secret": section.get("application_credential_secret"),
+        "kubeconfig_path": section.get("kubeconfig_path"),
     }
+
+
+def profile_exists(
+    profile: str,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> bool:
+    """Check whether a profile section already exists in the profiles file."""
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+    return profile in cfg
+
+
+class CredentialExpiredError(Exception):
+    """Raised when downstream credentials (OpenStack/k8s) have expired.
+
+    Typically triggered by a 401/403 from the cloud API. Commands catch
+    this to tell the user to re-run ``ewc login``.
+    """
+
+
+def update_cli_profile_credentials(
+    profile: str,
+    application_credential_id: Optional[str] = None,
+    application_credential_secret: Optional[str] = None,
+    kubeconfig_path: Optional[str] = None,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> None:
+    """Update downstream credential fields in an existing profile section.
+
+    Unlike ``save_cli_profile``, this does NOT fail if the section already
+    exists — it updates it in place. Used by the login command (re-login to
+    refresh credentials fetched from OpenBao).
+
+    No OIDC tokens are touched (none are persisted).
+    """
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+
+    if profile not in cfg:
+        raise ClickException(
+            f"Profile '{profile}' not found in {profiles_file_path}. "
+            "Please run 'ewc login' first."
+        )
+
+    if application_credential_id is not None:
+        cfg[profile]["application_credential_id"] = application_credential_id
+    if application_credential_secret is not None:
+        cfg[profile]["application_credential_secret"] = application_credential_secret
+    if kubeconfig_path is not None:
+        cfg[profile]["kubeconfig_path"] = kubeconfig_path
+
+    os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
+    with open(profiles_file_path, "w") as f:
+        cfg.write(f)
 
 
 def generate_random_id(length: int = 10):

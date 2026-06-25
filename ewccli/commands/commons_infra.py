@@ -20,8 +20,9 @@ from rich import box
 
 from click import ClickException
 from openstack import connection
+from openstack.exceptions import HttpException, ForbiddenException
 
-from ewccli.utils import save_encoded_ssh_keys, check_ssh_keys_match
+from ewccli.utils import save_encoded_ssh_keys, check_ssh_keys_match, CredentialExpiredError
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.enums import Federee, Region
 from ewccli.configuration import config as ewc_hub_config
@@ -1151,8 +1152,41 @@ def connect_to_openstack_backend(
             application_credential_id=application_credential_id,
             application_credential_secret=application_credential_secret,
         )
+    except (ForbiddenException, HttpException) as op_error:
+        status_code = getattr(op_error, "status_code", None)
+        if status_code in (401, 403):
+            raise CredentialExpiredError(
+                f"OpenStack authentication failed ({status_code}): {op_error}"
+            ) from op_error
+        raise ClickException(
+            f"Could not connect to Openstack due to the following error: {op_error}"
+        ) from op_error
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
-        )
+        ) from op_error
     return openstack_api
+
+
+def handle_credential_expiry(profile: str):
+    """Context manager that catches CredentialExpiredError and exits.
+
+    Wraps OpenStack operations so that expired/revoked credentials produce
+    a clear "please re-login" message instead of a raw stack trace.
+    """
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _cm():
+        try:
+            yield
+        except CredentialExpiredError:
+            click.secho(
+                "Your OpenStack credentials have expired. "
+                f"Please run: ewc login --profile {profile}",
+                fg="red",
+                bold=True,
+            )
+            sys.exit(1)
+
+    return _cm()

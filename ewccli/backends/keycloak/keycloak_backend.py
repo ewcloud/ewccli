@@ -1,10 +1,12 @@
-"""Keycloak login orchestrator — ties PKCE, callback, OIDC, and portal together."""
+"""Keycloak login orchestrator — OIDC auth code + PKCE flow.
 
-import os
+Returns an ephemeral access token. No tokens are persisted here; the caller
+decides what to do with the access token (e.g. exchange it for OpenBao
+credentials).
+"""
+
 import webbrowser
-from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from click import ClickException
@@ -13,58 +15,41 @@ from rich.console import Console
 from ewccli.backends.keycloak.callback_server import CallbackServer
 from ewccli.backends.keycloak.oidc_client import OIDCClient
 from ewccli.backends.keycloak.pkce import generate_pkce_pair, generate_state
-from ewccli.backends.keycloak.portal_client import PortalClient
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
 _console = Console()
 
 
-def _compute_expires_at(expires_in: int) -> str:
-    """Compute the absolute expiry timestamp from an expires_in value."""
-    expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    return expiry.isoformat()
-
-
 @dataclass
 class KeycloakLoginResult:
     """Result of a successful Keycloak login."""
 
-    application_credential_id: str
-    application_credential_secret: str
-    auth_url: str
     access_token: str
-    refresh_token: Optional[str]
-    id_token: Optional[str]
-    token_expires_at: str
-    federee: Optional[str] = None
-    region: Optional[str] = None
-    tenant_name: Optional[str] = None
 
 
 def keycloak_login(
     config,
     open_browser: bool = True,
     federee: Optional[str] = None,
-    region: Optional[str] = None,
 ) -> KeycloakLoginResult:
     """Run the full Keycloak OIDC login flow.
 
-    1. Start a local callback server
-    2. Build the authorization URL (PKCE)
-    3. Print URL and optionally open browser
-    4. Wait for callback
-    5. Exchange code for tokens
-    6. Call portal API for OpenStack credentials
+    1. Generate PKCE pair and state
+    2. Start a local callback server
+    3. Build the authorization URL (PKCE)
+    4. Print URL and optionally open browser
+    5. Wait for callback
+    6. Exchange code for tokens
 
     Args:
         config: EWCCLIConfiguration instance with Keycloak settings.
         open_browser: If True, attempt to open the browser automatically.
-        federee: Optional federee to pass to the portal API.
-        region: Optional region to pass to the portal API.
+        federee: Optional federee (unused by the OIDC flow itself, kept for
+            API compatibility).
 
     Returns:
-        KeycloakLoginResult with app creds and OIDC tokens.
+        KeycloakLoginResult with the ephemeral access token.
 
     Raises:
         ClickException: On timeout, state mismatch, or API errors.
@@ -76,7 +61,10 @@ def keycloak_login(
     state = generate_state()
 
     # 2. Start callback server
-    server = CallbackServer(expected_state=state)
+    server = CallbackServer(
+        expected_state=state,
+        port=config.EWC_CLI_OIDC_CALLBACK_PORT,
+    )
     server.start()
     _LOGGER.debug(f"Callback server listening on port {server.port}")
 
@@ -118,7 +106,11 @@ def keycloak_login(
     _console.print(f"\nWaiting for authentication (timeout: {timeout}s)...")
 
     # 5. Wait for callback
-    callback_result = server.wait_for_callback(timeout=timeout)
+    try:
+        callback_result = server.wait_for_callback(timeout=timeout)
+    except KeyboardInterrupt:
+        server.stop()
+        raise ClickException("Authentication cancelled by user.")
     redirect_uri = server.redirect_uri
     server.stop()
 
@@ -148,57 +140,4 @@ def keycloak_login(
 
     _console.print("[green]Authentication successful![/green]")
 
-    # 7. Fetch OpenStack credentials from portal (if configured)
-    expires_in = tokens.get("expires_in", 300)
-    token_expires_at = _compute_expires_at(expires_in)
-
-    portal_url = getattr(config, "EWC_CLI_PORTAL_API_URL", "")
-    if not portal_url:
-        # Portal not configured — store OIDC tokens only, fall through to
-        # the existing credential path (cloud.yaml, env vars, or manual prompt).
-        _console.print(
-            "[yellow]Portal API not configured — skipping OpenStack credential fetch. "
-            "Set EWC_CLI_PORTAL_API_URL to enable automatic credential retrieval.[/yellow]"
-        )
-        return KeycloakLoginResult(
-            application_credential_id="",
-            application_credential_secret="",
-            auth_url="",
-            access_token=tokens["access_token"],
-            refresh_token=tokens.get("refresh_token"),
-            id_token=tokens.get("id_token"),
-            token_expires_at=token_expires_at,
-            federee=federee,
-            region=region,
-            tenant_name=None,
-        )
-
-    portal_client = PortalClient(
-        portal_api_url=portal_url,
-    )
-
-    try:
-        creds = portal_client.fetch_openstack_credentials(
-            access_token=tokens["access_token"],
-            federee=federee,
-            region=region,
-        )
-    except Exception as e:
-        raise ClickException(
-            f"Failed to fetch OpenStack credentials from EWC portal: {e}"
-        )
-
-    _console.print("[green]OpenStack credentials obtained![/green]")
-
-    return KeycloakLoginResult(
-        application_credential_id=creds.application_credential_id,
-        application_credential_secret=creds.application_credential_secret,
-        auth_url=creds.auth_url,
-        access_token=tokens["access_token"],
-        refresh_token=tokens.get("refresh_token"),
-        id_token=tokens.get("id_token"),
-        token_expires_at=token_expires_at,
-        federee=creds.federee,
-        region=creds.region,
-        tenant_name=creds.tenant_name,
-    )
+    return KeycloakLoginResult(access_token=tokens["access_token"])

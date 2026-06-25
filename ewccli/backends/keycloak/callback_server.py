@@ -1,6 +1,6 @@
 """Lightweight HTTP server to receive the OIDC authorization code callback."""
 
-import os
+import time
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
@@ -33,19 +33,19 @@ class CallbackServer:
         server.stop()
     """
 
-    def __init__(self, expected_state: str):
+    def __init__(self, expected_state: str, port: int = 0):
         self._expected_state = expected_state
         self._result: Optional[tuple[str, str]] = None
         self._error: Optional[str] = None
         self._httpd: Optional[HTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+        self._requested_port = port
         self.port: int = 0
 
     def start(self) -> None:
         """Start the server on a loopback port."""
         handler = self._make_handler()
-        port = int(os.getenv("EWC_CLI_OIDC_CALLBACK_PORT", "0"))
-        self._httpd = HTTPServer(("127.0.0.1", port), handler)
+        self._httpd = HTTPServer(("127.0.0.1", self._requested_port), handler)
         self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
@@ -62,12 +62,21 @@ class CallbackServer:
         """Block until the callback is received or timeout.
 
         Returns (code, state) on success, or None on timeout/error.
+
+        Uses a polling loop instead of a blocking thread.join() so that
+        SIGINT (Ctrl+C) can interrupt the wait on the main thread.
         """
         if self._thread is None:
             return None
-        self._thread.join(timeout=timeout)
-        if self._thread.is_alive():
-            return None  # timed out
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._result is not None or self._error is not None:
+                break
+            if not self._thread.is_alive():
+                break
+            time.sleep(0.2)
+
         return self._result
 
     @property

@@ -16,6 +16,9 @@ from ewccli.utils import (
     save_cli_profile,
     load_cli_profile,
     _resolve_profile,
+    profile_exists,
+    update_cli_profile_credentials,
+    CredentialExpiredError,
 )
 
 
@@ -41,10 +44,9 @@ def test_save_and_load_profile(profile_file_path, ssh_paths):
     federee = "EUMETSAT"
     region = "WAW3-1"
     tenant_name = "TeamA"
-    token = "tok1"
     app_id = "ID1"
     app_secret = "SECRET1"
-    region = "us-east-1"
+    kubeconfig_path = "/home/user/.ewccli/kubeconfigs/default.yaml"
 
     ssh_private, ssh_public = ssh_paths
 
@@ -54,9 +56,9 @@ def test_save_and_load_profile(profile_file_path, ssh_paths):
         tenant_name=tenant_name,
         ssh_private_key_path_to_save=ssh_private,
         ssh_public_key_path_to_save=ssh_public,
-        token=token,
         application_credential_id=app_id,
         application_credential_secret=app_secret,
+        kubeconfig_path=kubeconfig_path,
         profiles_file_path=str(profile_file_path),
     )
 
@@ -70,12 +72,17 @@ def test_save_and_load_profile(profile_file_path, ssh_paths):
     assert data["profile"] == profile_name
     assert data["federee"] == federee
     assert data["tenant_name"] == tenant_name
-    assert data["token"] == token
     assert data["application_credential_id"] == app_id
     assert data["application_credential_secret"] == app_secret
     assert data["region"] == region
     assert data["ssh_private_key_path"] == ssh_private
     assert data["ssh_public_key_path"] == ssh_public
+    assert data["kubeconfig_path"] == kubeconfig_path
+    # No OIDC tokens are persisted
+    assert "access_token" not in data
+    assert "refresh_token" not in data
+    assert "id_token" not in data
+    assert "token_expires_at" not in data
 
 
 def test_save_existing_profile_fails(profile_file_path, ssh_paths):
@@ -143,3 +150,69 @@ def test_overwrite_profile_not_allowed(profile_file_path, ssh_paths):
         )
 
 
+def test_profile_exists_true(profile_file_path, ssh_paths):
+    ssh_private, ssh_public = ssh_paths
+    save_cli_profile(
+        federee="EUMETSAT",
+        region="WAW3-1",
+        tenant_name="TeamA",
+        ssh_private_key_path_to_save=ssh_private,
+        ssh_public_key_path_to_save=ssh_public,
+        profiles_file_path=str(profile_file_path),
+    )
+    profile_name = _resolve_profile(None, "EUMETSAT", "WAW3-1", "TeamA")
+    assert profile_exists(profile_name, str(profile_file_path)) is True
+
+
+def test_profile_exists_false(profile_file_path):
+    assert profile_exists("nonexistent", str(profile_file_path)) is False
+
+
+def test_update_cli_profile_credentials(profile_file_path, ssh_paths):
+    ssh_private, ssh_public = ssh_paths
+    save_cli_profile(
+        federee="EUMETSAT",
+        region="WAW3-1",
+        tenant_name="TeamA",
+        ssh_private_key_path_to_save=ssh_private,
+        ssh_public_key_path_to_save=ssh_public,
+        profiles_file_path=str(profile_file_path),
+    )
+    profile_name = _resolve_profile(None, "EUMETSAT", "WAW3-1", "TeamA")
+
+    update_cli_profile_credentials(
+        profile=profile_name,
+        application_credential_id="new-app-id",
+        application_credential_secret="new-app-secret",
+        kubeconfig_path="/home/user/.ewccli/kubeconfigs/default.yaml",
+        profiles_file_path=str(profile_file_path),
+    )
+
+    data = load_cli_profile(
+        profile=profile_name,
+        profiles_file_path=str(profile_file_path),
+    )
+    assert data["application_credential_id"] == "new-app-id"
+    assert data["application_credential_secret"] == "new-app-secret"
+    assert data["kubeconfig_path"] == "/home/user/.ewccli/kubeconfigs/default.yaml"
+    # Original fields preserved
+    assert data["federee"] == "EUMETSAT"
+    assert data["tenant_name"] == "TeamA"
+
+
+def test_update_cli_profile_credentials_missing_profile_raises(profile_file_path):
+    from click import ClickException
+
+    with pytest.raises(ClickException):
+        update_cli_profile_credentials(
+            profile="nonexistent",
+            application_credential_id="new-app-id",
+            profiles_file_path=str(profile_file_path),
+        )
+
+
+def test_credential_expired_error_is_exception():
+    """CredentialExpiredError should be a catchable Exception."""
+    assert issubclass(CredentialExpiredError, Exception)
+    err = CredentialExpiredError("expired")
+    assert str(err) == "expired"
