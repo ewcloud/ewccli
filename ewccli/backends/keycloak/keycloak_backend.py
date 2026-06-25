@@ -1,6 +1,8 @@
 """Keycloak login orchestrator — ties PKCE, callback, OIDC, and portal together."""
 
+import os
 import webbrowser
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Optional
