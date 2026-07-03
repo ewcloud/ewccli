@@ -181,27 +181,97 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
 ewc login
 ```
 
-IMPORTANT:
+Authentication is **mandatory** for all EWC CLI commands (except `ewc version`).
 
-- EWC CLI uses the following order of importance:
-    - env variables
-    - cli config
-    - any other config (e.g. Openstack cloud.yaml or Kubernetes `kubeconfig` file)
+The login command authenticates via browser-based OIDC (kubelogin → Dex) and
+fetches an OIDC kubeconfig from the KKP API:
 
-All your profiles are saved under `~/.ewccli/profiles`
+1. **kubelogin** is invoked as a subprocess. It opens a browser for Dex/Keycloak
+   authentication and obtains a kubermatic-audience token. The token is cached
+   at `~/.kube/cache/oidc-login/` (~2h lifetime) — subsequent logins are silent
+   until the cache expires. If `kubelogin` is not installed, it is downloaded
+   automatically.
+2. The token is used to call the **KKP API**
+   (`/api/v2/projects/{pid}/clusters/{cid}/oidckubeconfig`) which returns an
+   OIDC kubeconfig for the user cluster.
+3. The kubeconfig is **post-processed**: the deprecated `auth-provider: oidc`
+   block is replaced with a `kubelogin` exec plugin, so `kubectl` and the
+   kubernetes client transparently refresh tokens.
+4. The kubeconfig is saved to `~/.ewccli/kubeconfigs/<profile>.yaml`.
+5. **Network setup** (automatic, idempotent):
+   - An SSH tunnel (`localhost:6443` → apiserver via jump host) is started if
+     not already listening.
+   - The apiserver hostname is added to `/etc/hosts` (requires `sudo`).
+6. SSH keys are checked / generated (still needed for hub/infra commands).
+7. The profile is saved with the kubeconfig path. **No OIDC tokens are persisted.**
 
-You can manually add profiles in the same file and the ewccli can use them already.
+### Prerequisites
 
-Info required for a profile:
+- **SSH access** to the jump host — your SSH key must be authorized on the jump
+  host and tunnel host.
+- **sudo** access for the `/etc/hosts` entry.
+- **Environment variables** `EWC_CLI_KKP_PROJECT_ID` and `EWC_CLI_KKP_CLUSTER_ID`
+  must be set (see table below).
+
+### Headless / SSH sessions
+
+Use `--no-browser` to print the login URL instead of opening a browser:
+
+```bash
+ewc login --no-browser
+```
+
+### Multi-tenancy with `--profile`
+
+The `--profile` flag lets you manage multiple profiles. Each profile stores its
+own kubeconfig path and SSH keys.
+
+```bash
+ewc login --profile my-profile
+```
+
+If `--profile` is omitted, the default profile named `default` is used.
+
+All commands that access cloud resources accept `--profile`:
+
+```bash
+ewc infra list --profile my-profile
+ewc hub deploy ITEM --profile my-profile
+```
+
+All your profiles are saved under `~/.ewccli/profiles`.
+
+Info stored in a profile (no OIDC tokens):
 ```
 [my-profile]
-federee = EUMETSAT or ECMWF
-tenant_name = eumetsat-ewc-communityhub
-application_credential_id = 
-application_credential_secret = 
+federee =
+region =
+tenant_name =
 ssh_public_key_path =
 ssh_private_key_path =
+kubeconfig_path = /home/user/.ewccli/kubeconfigs/my-profile.yaml
 ```
+
+> **Note:** `federee`, `region`, and `tenant_name` are kept empty for
+> k8s-only profiles. The `hub` and `infra` commands (which need OpenStack
+> application credentials) are currently broken after the switch to KKP OIDC
+> login — a separate OpenStack auth path will be added.
+
+**Configuration:**
+
+The KKP OIDC settings can be overridden via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `EWC_CLI_KKP_API_URL` | `https://k8s-val.eumetsat.europeanweather.cloud` | KKP API base URL |
+| `EWC_CLI_KKP_DEX_ISSUER` | `https://k8s-val.eumetsat.europeanweather.cloud/dex` | Dex issuer URL |
+| `EWC_CLI_KKP_CLIENT_ID` | `kubermatic` | OIDC client ID for KKP API |
+| `EWC_CLI_KKP_CLIENT_SECRET` | *(set in code)* | OIDC client secret for KKP API |
+| `EWC_CLI_KKP_PROJECT_ID` | *(none — must be set)* | KKP project ID |
+| `EWC_CLI_KKP_CLUSTER_ID` | *(none — must be set)* | KKP user cluster ID |
+| `EWC_CLI_SSH_JUMP` | `krajtar@10.5.214.221` | SSH jump host for tunnel |
+| `EWC_CLI_TUNNEL_HOST` | `eouser@199.195.56.57` | SSH tunnel target host |
+| `EWC_CLI_APISERVER_IP` | `185.254.221.7` | User cluster apiserver IP |
 
 ## List Items in the catalog
 
