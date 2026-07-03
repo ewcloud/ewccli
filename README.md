@@ -198,20 +198,15 @@ fetches an OIDC kubeconfig from the KKP API:
    block is replaced with a `kubelogin` exec plugin, so `kubectl` and the
    kubernetes client transparently refresh tokens.
 4. The kubeconfig is saved to `~/.ewccli/kubeconfigs/<profile>.yaml`.
-5. **Network setup** (automatic, idempotent):
-   - An SSH tunnel (`localhost:6443` → apiserver via jump host) is started if
-     not already listening.
-   - The apiserver hostname is added to `/etc/hosts` (requires `sudo`).
-6. SSH keys are checked / generated (still needed for hub/infra commands).
-7. The profile is saved with the kubeconfig path. **No OIDC tokens are persisted.**
+5. SSH keys are checked / generated (still needed for hub/infra commands).
+6. The profile is saved with the kubeconfig path. **No OIDC tokens are persisted.**
 
 ### Prerequisites
 
-- **SSH access** to the jump host — your SSH key must be authorized on the jump
-  host and tunnel host.
-- **sudo** access for the `/etc/hosts` entry.
 - **Environment variables** `EWC_CLI_KKP_PROJECT_ID` and `EWC_CLI_KKP_CLUSTER_ID`
   must be set (see table below).
+- The user-cluster apiserver must be **directly reachable** from your machine
+  (network-level access).
 
 ### Headless / SSH sessions
 
@@ -269,9 +264,6 @@ The KKP OIDC settings can be overridden via environment variables:
 | `EWC_CLI_KKP_CLIENT_SECRET` | *(set in code)* | OIDC client secret for KKP API |
 | `EWC_CLI_KKP_PROJECT_ID` | *(none — must be set)* | KKP project ID |
 | `EWC_CLI_KKP_CLUSTER_ID` | *(none — must be set)* | KKP user cluster ID |
-| `EWC_CLI_SSH_JUMP` | `krajtar@10.5.214.221` | SSH jump host for tunnel |
-| `EWC_CLI_TUNNEL_HOST` | `eouser@199.195.56.57` | SSH tunnel target host |
-| `EWC_CLI_APISERVER_IP` | `185.254.221.7` | User cluster apiserver IP |
 
 ## List Items in the catalog
 

@@ -221,10 +221,6 @@ def test_login_existing_profile_refreshes_kubeconfig(tmp_path, monkeypatch):
     ), patch(
         "ewccli.backends.kkp.network.ensure_kubelogin"
     ), patch(
-        "ewccli.backends.kkp.network.ensure_tunnel"
-    ), patch(
-        "ewccli.backends.kkp.network.ensure_hosts_entry"
-    ), patch(
         "ewccli.backends.kkp.kkp_client.KKPClient.get_oidc_kubeconfig",
         return_value=_RAW_KUBECONFIG,
     ):
@@ -281,10 +277,6 @@ def test_login_new_profile_creates_profile(tmp_path, monkeypatch):
         "ewccli.backends.kkp.kubelogin.get_kkp_token", return_value="kkp-tok"
     ), patch(
         "ewccli.backends.kkp.network.ensure_kubelogin"
-    ), patch(
-        "ewccli.backends.kkp.network.ensure_tunnel"
-    ), patch(
-        "ewccli.backends.kkp.network.ensure_hosts_entry"
     ), patch(
         "ewccli.backends.kkp.kkp_client.KKPClient.get_oidc_kubeconfig",
         return_value=_RAW_KUBECONFIG,

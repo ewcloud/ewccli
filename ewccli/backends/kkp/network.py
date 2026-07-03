@@ -7,13 +7,8 @@
 
 """Network setup for KKP user-cluster access.
 
-User-cluster apiservers use Tunneling expose strategy — not directly
-reachable. This module ensures:
-  1. An SSH tunnel (localhost:6443 → apiserver via jump host) is up.
-  2. /etc/hosts maps the apiserver hostname to 127.0.0.1 (TLS SNI).
-  3. The kubelogin binary is installed.
-
-All functions are idempotent.
+Ensures the kubelogin binary is installed. The user-cluster apiserver
+must be directly reachable from the host running ewccli — no tunnel.
 """
 
 import os
@@ -27,51 +22,6 @@ _KUBELOGIN_URL = (
     "https://github.com/int128/kubelogin/releases/download/"
     "v1.36.2/kubelogin_linux_amd64.zip"
 )
-
-
-def ensure_tunnel(jump_host, tunnel_host, apiserver_ip, port=6443):
-    """Start SSH tunnel if not already listening. Idempotent.
-
-    ssh -f -J {jump_host} -L {port}:{apiserver_ip}:{port} -N {tunnel_host}
-    """
-    r = subprocess.run(["ss", "-tlnp"], capture_output=True, text=True)
-    if f":{port} " in r.stdout:
-        _LOGGER.debug("SSH tunnel on port %s already up", port)
-        return
-
-    _LOGGER.info("Starting SSH tunnel: localhost:%s -> %s:%s", port, apiserver_ip, port)
-    subprocess.run(
-        [
-            "ssh",
-            "-f",
-            "-J",
-            jump_host,
-            "-L",
-            f"{port}:{apiserver_ip}:{port}",
-            "-N",
-            tunnel_host,
-        ],
-        check=True,
-        timeout=30,
-    )
-
-
-def ensure_hosts_entry(hostname):
-    """Add ``127.0.0.1 <hostname>`` to /etc/hosts. Needs sudo. Idempotent."""
-    try:
-        with open("/etc/hosts") as f:
-            if hostname in f.read():
-                _LOGGER.debug("/etc/hosts already has %s", hostname)
-                return
-    except PermissionError:
-        pass  # fall through to sudo path
-
-    _LOGGER.info("Adding %s to /etc/hosts (sudo required)", hostname)
-    subprocess.run(
-        f'echo "127.0.0.1 {hostname}" | sudo tee -a /etc/hosts',
-        shell=True,
-        check=True,
-    )
 
 
 def ensure_kubelogin():

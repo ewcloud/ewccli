@@ -154,23 +154,15 @@ def init_command(
     Flow: kubelogin obtains a kubermatic-audience token (browser auth,
     cached ~2h), that token authenticates to the KKP API which returns
     an OIDC kubeconfig, the kubeconfig is post-processed (auth-provider
-    -> exec plugin), saved, and the SSH tunnel + /etc/hosts entry are
-    set up for apiserver reachability.
+    -> exec plugin) and saved.
 
     No OIDC tokens are persisted. The profile stores only the kubeconfig
     path and SSH keys.
     """
     from ewccli.backends.kkp.kubelogin import get_kkp_token
     from ewccli.backends.kkp.kkp_client import KKPClient, KKPError
-    from ewccli.backends.kkp.kubeconfig_processor import (
-        patch_kubeconfig,
-        extract_hostname,
-    )
-    from ewccli.backends.kkp.network import (
-        ensure_tunnel,
-        ensure_hosts_entry,
-        ensure_kubelogin,
-    )
+    from ewccli.backends.kkp.kubeconfig_processor import patch_kubeconfig
+    from ewccli.backends.kkp.network import ensure_kubelogin
 
     # 1. Resolve profile name (use default if not given)
     resolved_profile = profile or ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
@@ -223,24 +215,14 @@ def init_command(
     kc_path.write_text(patched)
     _LOGGER.info(f"Kubeconfig saved to {kc_path}")
 
-    # 7. Network setup (tunnel + /etc/hosts)
-    hostname = extract_hostname(patched)
-    if hostname:
-        ensure_tunnel(
-            jump_host=ewc_hub_config.EWC_CLI_SSH_JUMP,
-            tunnel_host=ewc_hub_config.EWC_CLI_TUNNEL_HOST,
-            apiserver_ip=ewc_hub_config.EWC_CLI_APISERVER_IP,
-        )
-        ensure_hosts_entry(hostname)
-
-    # 8. SSH keys (still needed for hub/infra)
+    # 7. SSH keys (still needed for hub/infra)
     ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         resolved_profile=resolved_profile,
     )
 
-    # 9. Save profile
+    # 8. Save profile
     if profile_already_exists:
         update_cli_profile_credentials(
             profile=resolved_profile,
