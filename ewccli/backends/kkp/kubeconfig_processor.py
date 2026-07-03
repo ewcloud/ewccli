@@ -48,16 +48,3 @@ def patch_kubeconfig(raw_yaml: str) -> str:
                 "interactiveMode": "IfAvailable",
             }
     return yaml.dump(cfg, default_flow_style=False)
-
-
-def extract_hostname(kubeconfig_yaml: str) -> str:
-    """Extract the server hostname from a kubeconfig YAML string."""
-    cfg = yaml.safe_load(kubeconfig_yaml)
-    for cluster in cfg.get("clusters", []):
-        server = cluster.get("cluster", {}).get("server", "")
-        if server:
-            # ponytail: strip scheme + port, no urllib for one split
-            host = server.split("://")[-1].split(":")[0].split("/")[0]
-            if host:
-                return host
-    return ""

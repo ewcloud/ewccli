@@ -2,10 +2,7 @@
 
 import yaml
 
-from ewccli.backends.kkp.kubeconfig_processor import (
-    patch_kubeconfig,
-    extract_hostname,
-)
+from ewccli.backends.kkp.kubeconfig_processor import patch_kubeconfig
 
 
 def _raw_kubeconfig():
@@ -101,13 +98,3 @@ users:
 
     user = cfg["users"][0]["user"]
     assert user == {"token": "abc123"}
-
-
-def test_extract_hostname():
-    patched = patch_kubeconfig(_raw_kubeconfig())
-    host = extract_hostname(patched)
-    assert host == "abv9l8vmfm.kubermatic.k8s-val.eumetsat.europeanweather.cloud"
-
-
-def test_extract_hostname_empty_on_no_clusters():
-    assert extract_hostname("apiVersion: v1\nkind: Config\n") == ""
