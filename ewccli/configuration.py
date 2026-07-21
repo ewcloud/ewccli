@@ -205,5 +205,20 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: "",
     }
 
+    # KKP OIDC configuration (kubelogin -> Dex -> KKP API)
+    EWC_CLI_KKP_API_URL = os.getenv(
+        "EWC_CLI_KKP_API_URL", "https://k8s-val.eumetsat.europeanweather.cloud"
+    )
+    EWC_CLI_KKP_DEX_ISSUER = os.getenv(
+        "EWC_CLI_KKP_DEX_ISSUER", "https://k8s-val.eumetsat.europeanweather.cloud/dex"
+    )
+    EWC_CLI_KKP_CLIENT_ID = os.getenv("EWC_CLI_KKP_CLIENT_ID", "kubermatic")
+    EWC_CLI_KKP_CLIENT_SECRET = os.getenv(
+        "EWC_CLI_KKP_CLIENT_SECRET", "pX2Fg5XpM0q4PtUzqAth4PIsz9fPXl9W"
+    )
+    EWC_CLI_KKP_PROJECT_ID = os.getenv("EWC_CLI_KKP_PROJECT_ID")
+    EWC_CLI_KKP_CLUSTER_ID = os.getenv("EWC_CLI_KKP_CLUSTER_ID")
+    EWC_CLI_KUBECONFIG_PATH = EWC_CLI_BASE_PATH / "kubeconfigs"
+
 
 config = EWCCLIConfiguration()

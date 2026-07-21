@@ -111,6 +111,7 @@ def save_cli_profile(
     token: Optional[str] = None,
     application_credential_id: Optional[str] = None,
     application_credential_secret: Optional[str] = None,
+    kubeconfig_path: Optional[str] = None,
     profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
 ) -> None:
     """
@@ -136,6 +137,8 @@ def save_cli_profile(
         Application credential ID.
     application_credential_secret : str, optional
         Application credential secret.
+    kubeconfig_path : str, optional
+        Path to the kubeconfig file for k8s access.
     """
     resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
     cfg = ConfigParser()
@@ -176,6 +179,40 @@ def save_cli_profile(
             "application_credential_secret"
         ] = application_credential_secret
 
+    if kubeconfig_path:
+        cfg[resolved_profile]["kubeconfig_path"] = kubeconfig_path
+
+    os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
+    with open(profiles_file_path, "w") as f:
+        cfg.write(f)
+
+
+def profile_exists(
+    profile: str,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> bool:
+    """Check if a profile section exists in the profiles file."""
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+    return profile in cfg
+
+
+def update_cli_profile_credentials(
+    profile: str,
+    kubeconfig_path: str,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> None:
+    """Update kubeconfig_path on an existing profile (re-login)."""
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+    if profile not in cfg:
+        click.secho(
+            f"❌ Profile '{profile}' does not exist in {profiles_file_path}",
+            fg="red",
+            bold=True,
+        )
+        raise click.Abort()
+    cfg[profile]["kubeconfig_path"] = kubeconfig_path
     os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
     with open(profiles_file_path, "w") as f:
         cfg.write(f)

@@ -8,8 +8,6 @@
 
 """CLI EWC Login: EWC Login interaction."""
 
-import os
-import re
 from typing import Optional
 from pathlib import Path
 
@@ -17,27 +15,10 @@ import rich_click as click
 from rich.console import Console
 from click import ClickException
 
-from configparser import ConfigParser
-
-from prompt_toolkit.application import Application
-from prompt_toolkit.widgets import RadioList, Box, Frame
-from prompt_toolkit.layout import Layout
-from prompt_toolkit.styles import Style
-
-from kubernetes import config
-from kubernetes.config.config_exception import (  # noqa: N813
-    ConfigException as kubernetes_config_exception,
-)
-from openstack.config import OpenStackConfig
-from openstack.exceptions import (  # noqa: N813
-    ConfigException as openstack_config_exception,
-)
-
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import save_cli_profile, _resolve_profile
+from ewccli.utils import save_cli_profile
+from ewccli.utils import profile_exists, update_cli_profile_credentials
 from ewccli.utils import generate_ssh_keypair, check_ssh_keys_match
-from ewccli.utils import save_default_login_profile
-from ewccli.enums import Federee, Region
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
@@ -46,155 +27,8 @@ _LOGGER = get_logger(__name__)
 console = Console()
 
 
-def kubeconfig_available():
-    """Verify if kubeconfig is available."""
-    try:
-        config.load_kube_config()
-        return True
-    except kubernetes_config_exception as e:
-        _LOGGER.warning(
-            f"⚠️ Kubeconfig not found: {e}\n"
-            "You could set KUBECONFIG=/path/to/your/kubeconfig or continue below using the token"
-        )
-        return False
-
-
-def cloud_yaml_exists():
-    """Check if OpenStack clouds.yaml file exists."""
-    # Default OpenStack config paths (can vary by environment)
-    default_paths = [
-        Path(
-            os.getenv("OS_CLIENT_CONFIG_FILE", "~/.config/openstack/clouds.yaml")
-        ).expanduser(),
-        Path("/etc/openstack/clouds.yaml"),
-    ]
-
-    return any(p.exists() for p in default_paths)
-
-
-def openstack_config_available():
-    """Verify if OpenStack cloud config is available."""
-    try:
-        os_config = OpenStackConfig()
-        if cloud_yaml_exists():
-            os_config.get_one_cloud()
-        else:
-            _LOGGER.warning(
-                "⚠️ OpenStack cloud config not found at '~/.config/openstack/cloud.yaml'\n"
-                "You can set the config path with the environment variable:\n"
-                "  OS_CLIENT_CONFIG_FILE=/path/to/clouds.yaml\n"
-                "Alternatively, provide your credentials using:\n"
-                "  OS_APPLICATION_CREDENTIAL_ID and OS_APPLICATION_CREDENTIAL_SECRET\n"
-                "Or continue below to enter them manually."
-            )
-            return False
-        return True
-    except openstack_config_exception as e:
-        _LOGGER.warning(
-            f"⚠️ OpenStack cloud config not found: {e}\n"
-            "You can also set the config path with `OS_CLIENT_CONFIG_FILE=/path/to/clouds.yaml` or continue below"
-        )
-        return False
-
-
-def validate_tenant_name(ctx, param, value):
-    """Validate tenant name."""
-    pattern = r"^[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+$"
-    if not re.match(pattern, value):
-        raise click.BadParameter(
-            "Config name must be exactly 3 alphanumeric parts separated by dashes (e.g. thisis-my-tenancy)."
-        )
-    return value
-
-
-def validate_region(ctx, param, value):
-    federee = ctx.params.get("federee")
-    if federee is None or value is None:
-        return value
-
-    allowed = ewc_hub_config.allowed_regions(Federee(federee))
-
-    if value not in allowed:
-        raise click.BadParameter(
-            f"Region '{value}' is not valid for federee '{federee}'. "
-            f"Allowed: {', '.join(allowed)}"
-        )
-
-    return value
-
-
 def init_options(func):
     """Login options for the CLI login command."""
-    func = click.option(
-        "--tenant-name",
-        envvar="EWC_CLI_LOGIN_TENANT_NAME",
-        prompt=True,
-        required=True,
-        callback=validate_tenant_name,
-        help=(
-            "Name of your tenancy in EWC, used to identify cloud configurations.\n"
-            "Must follow the format: 'part1-part2-part3' (e.g. 'demo-user-eu'), "
-            "where each part is alphanumeric and separated by dashes.\n"
-            "Can also be set via the EWC_CLI_LOGIN_TENANT_NAME environment variable."
-        ),
-    )(func)
-    func = click.option(
-        "--federee",
-        type=click.Choice([r.value for r in Federee], case_sensitive=True),
-        required=False,
-        envvar="EWC_CLI_LOGIN_FEDEREE",
-        help=(
-            "Cloud federee where the resources will be deployed. "
-            "You can also set this using the EWC_CLI_LOGIN_FEDEREE environment variable. "
-            "If not provided, you'll be prompted to choose."
-        ),
-    )(func)
-    func = click.option(
-        "--region",
-        type=click.Choice([r.value for r in Region], case_sensitive=True),
-        required=False,
-        callback=validate_region,
-        envvar="EWC_CLI_LOGIN_REGION",
-        help=(
-            "Region to deploy resources. Allowed values depend on the federee."
-            "You can also set this using the EWC_CLI_LOGIN_REGION environment variable. "
-            "If not provided, you'll be prompted to choose."
-        ),
-    )(func)
-    func = click.option(
-        "--application-credential-id",
-        required=False,
-        hide_input=True,
-        help=(
-            "OpenStack Application Credential ID. "
-            "Ignored if environment variable OS_APPLICATION_CREDENTIAL_ID is set, "
-            "or if a cloud.yaml config is found at '~/.config/openstack/cloud.yaml' "
-            "or at the path specified by OS_CLIENT_CONFIG_FILE."
-        ),
-    )(func)
-    func = click.option(
-        "--application-credential-secret",
-        required=False,
-        hide_input=True,
-        help=(
-            "OpenStack Application Credential Secret. "
-            "Ignored if environment variable OS_APPLICATION_CREDENTIAL_SECRET is set, "
-            "or if a cloud.yaml config is found at '~/.config/openstack/cloud.yaml' "
-            "or at the path specified by OS_CLIENT_CONFIG_FILE."
-        ),
-    )(func)
-    # func = click.option(
-    #     "--token",
-    #     hide_input=True,
-    #     required=False,
-    #     default="",
-    #     help=(
-    #         "Kubernetes token (leave blank if not needed).\n"
-    #         "Provide this only if you plan to use Kubernetes services and "
-    #         "do not have a kubeconfig file available "
-    #         "(e.g. ~/.kube/config or via the KUBECONFIG environment variable)."
-    #     ),
-    # )(func)
     func = click.option(
         "--ssh-public-key-path",
         required=False,
@@ -217,90 +51,16 @@ def init_options(func):
         required=False,
         help="EWC CLI profile name",
     )(func)
-    return func
-
-
-def select_federee():
-    """Select provider."""
-    choices = [
-        ("EUMETSAT", "EUMETSAT"),
-        ("ECMWF", "ECMWF"),
-    ]
-
-    radio_list = RadioList(choices)
-
-    # Use the widget's own default key bindings
-    kb = radio_list.control.key_bindings
-
-    @kb.add("enter")
-    def _(event):
-        index = radio_list._selected_index
-        selected_value = radio_list.values[index][
-            1
-        ]  # values is list of tuples (display, value)
-        event.app.exit(result=selected_value)
-
-    # Add quit keys as well
-    @kb.add("c-c")
-    @kb.add("c-q")
-    def _(event):
-        event.app.exit(None)
-
-    root_container = Box(Frame(radio_list, title="Select Federee"), padding=1)
-    layout = Layout(root_container)
-
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        full_screen=False,
-        mouse_support=True,
-        style=Style.from_dict(
-            {
-                "frame.label": "bold",
-            }
+    func = click.option(
+        "--no-browser",
+        is_flag=True,
+        default=False,
+        help=(
+            "Print the login URL instead of opening a browser. "
+            "Useful for SSH sessions or headless environments."
         ),
-    )
-
-    selected = app.run()
-    return selected
-
-
-def select_region(federee: str):
-    """Select region based on the chosen federee."""
-
-    # Load allowed regions from your config
-    allowed = ewc_hub_config.allowed_regions(federee)
-
-    # Convert to RadioList format: (display, value)
-    choices = [(r, r) for r in allowed]
-
-    radio_list = RadioList(choices)
-    kb = radio_list.control.key_bindings
-
-    @kb.add("enter")
-    def _(event):
-        index = radio_list._selected_index
-        selected_value = radio_list.values[index][1]
-        event.app.exit(result=selected_value)
-
-    @kb.add("c-c")
-    @kb.add("c-q")
-    def _(event):
-        event.app.exit(None)
-
-    root_container = Box(Frame(radio_list, title=f"Select Region for {federee}"), padding=1)
-    layout = Layout(root_container)
-
-    app = Application(
-        layout=layout,
-        key_bindings=kb,
-        full_screen=False,
-        mouse_support=True,
-        style=Style.from_dict({"frame.label": "bold"}),
-    )
-
-    selected = app.run()
-    return selected
+    )(func)
+    return func
 
 
 def check_and_generate_ssh_keys(
@@ -342,7 +102,7 @@ def check_and_generate_ssh_keys(
             )
         else:
             click.secho("SSH private and public keys are matching! Continuing...", fg="green")
-        
+
         return ssh_private_key_path, ssh_public_key_path
 
     elif not private_exists and not public_exists:
@@ -384,139 +144,104 @@ def check_and_generate_ssh_keys(
 
 
 def init_command(
-    application_credential_id: str,
-    application_credential_secret: str,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
-    tenant_name: str,
-    federee: str,
-    region: str,
-    profile: str = None
-    # token: str,
+    profile: str = None,
+    no_browser: bool = False,
 ):
-    """EWC CLI Login."""
-    if not federee:
-        # If --federee is not passed, ask interactively
-        federee = select_federee()
-        if not federee:
-            console.print("No federee selection made. Exiting.")
-            return
+    """EWC CLI Login — kubelogin -> KKP API -> OIDC kubeconfig.
 
-    console.print(f"Considering federee: {federee}")
+    Flow: kubelogin obtains a kubermatic-audience token (browser auth,
+    cached ~2h), that token authenticates to the KKP API which returns
+    an OIDC kubeconfig, the kubeconfig is post-processed (auth-provider
+    -> exec plugin) and saved.
 
-    if not region:
-        # If --federee is not passed, ask interactively
-        region = select_region(federee=federee)
-        if not region:
-            console.print("No region selection made. Exiting.")
-            return
+    No OIDC tokens are persisted. The profile stores only the kubeconfig
+    path and SSH keys.
+    """
+    from ewccli.backends.kkp.kubelogin import get_kkp_token
+    from ewccli.backends.kkp.kkp_client import KKPClient, KKPError
+    from ewccli.backends.kkp.kubeconfig_processor import patch_kubeconfig
+    from ewccli.backends.kkp.network import ensure_kubelogin
 
-    allowed_regions = ewc_hub_config.allowed_regions(federee)
+    # 1. Resolve profile name (use default if not given)
+    resolved_profile = profile or ewc_hub_config.EWC_CLI_DEFAULT_PROFILE_NAME
+    profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
+    profile_already_exists = profile_exists(resolved_profile, profiles_file_path)
 
-    if region not in allowed_regions:
-        raise click.BadParameter(
-            f"Region '{region}' is not valid for federee '{federee}'. "
-            f"Allowed: {', '.join(allowed_regions)}"
+    if profile_already_exists:
+        console.print(
+            f"Using existing profile '[bold cyan]{resolved_profile}[/bold cyan]' — refreshing kubeconfig."
         )
 
-    resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
+    # 2. Ensure kubelogin binary
+    ensure_kubelogin()
 
-    profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
-    cfg = ConfigParser()
-    cfg.read(profiles_file_path)
+    # 3. Get KKP API token (browser auth, cached ~2h)
+    token = get_kkp_token(
+        issuer=ewc_hub_config.EWC_CLI_KKP_DEX_ISSUER,
+        client_id=ewc_hub_config.EWC_CLI_KKP_CLIENT_ID,
+        client_secret=ewc_hub_config.EWC_CLI_KKP_CLIENT_SECRET,
+    )
 
-    if not os.path.exists(profiles_file_path) or not cfg.sections():
-        pass
-    else:
-        # Check only when the profile path exist
-        if resolved_profile and resolved_profile in cfg:
-            click.secho(
-                f"❌ Profile '{resolved_profile}' already exists in {ewc_hub_config.EWC_CLI_PROFILES_PATH}",
-                fg="red",
-                bold=True,
-            )
-            click.secho(
-                "Use a different profile name or delete the existing profile first.",
-                fg="yellow",
-            )
-            raise click.Abort()
+    # 4. Fetch raw kubeconfig from KKP API
+    project_id = ewc_hub_config.EWC_CLI_KKP_PROJECT_ID
+    cluster_id = ewc_hub_config.EWC_CLI_KKP_CLUSTER_ID
+    if not project_id or not cluster_id:
+        raise ClickException(
+            "EWC_CLI_KKP_PROJECT_ID and EWC_CLI_KKP_CLUSTER_ID must be set. "
+            "Export them or add to your shell profile."
+        )
 
+    client = KKPClient(
+        api_url=ewc_hub_config.EWC_CLI_KKP_API_URL,
+        token=token,
+    )
+    try:
+        raw = client.get_oidc_kubeconfig(
+            project_id=project_id,
+            cluster_id=cluster_id,
+        )
+    except KKPError as e:
+        raise ClickException(f"Failed to fetch kubeconfig from KKP API: {e}") from e
+
+    # 5. Post-process: auth-provider -> exec
+    patched = patch_kubeconfig(raw)
+
+    # 6. Save kubeconfig
+    kc_dir = ewc_hub_config.EWC_CLI_KUBECONFIG_PATH
+    kc_dir.mkdir(parents=True, exist_ok=True)
+    kc_path = kc_dir / f"{resolved_profile}.yaml"
+    kc_path.write_text(patched)
+    _LOGGER.info(f"Kubeconfig saved to {kc_path}")
+
+    # 7. SSH keys (still needed for hub/infra)
     ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         resolved_profile=resolved_profile,
     )
-    
 
-    if openstack_config_available():
-        console.print(
-            "🔑 [bold green]Openstack cloud.yaml found at ~/.config/openstack/clouds.yaml[/bold green]"
-            " – skipping Openstack ID and secret requirements."
+    # 8. Save profile
+    if profile_already_exists:
+        update_cli_profile_credentials(
+            profile=resolved_profile,
+            kubeconfig_path=str(kc_path),
+            profiles_file_path=profiles_file_path,
         )
-        application_credential_id = ""
-        application_credential_secret = ""
-
-    elif not application_credential_id or not application_credential_secret:
-        if not application_credential_id:
-            # Handle OpenStack credential ID
-            application_credential_id = (
-                application_credential_id
-                or os.getenv("OS_APPLICATION_CREDENTIAL_ID")
-                or click.prompt(
-                    "Enter OpenStack Application Credential ID", hide_input=True
-                )
-            )
-
-        if not application_credential_secret:
-            # Handle OpenStack credential secret
-            application_credential_secret = (
-                application_credential_secret
-                or os.getenv("OS_APPLICATION_CREDENTIAL_SECRET")
-                or click.prompt(
-                    "Enter OpenStack Application Credential Secret", hide_input=True
-                )
-            )
-
-    # if kubeconfig_available():
-    #     click.echo("🔑 kubeconfig found – skipping token requirement.")
-    #     token = None
-    # elif not token:
-    #     token = click.prompt(
-    #         "Enter Kubernetes token (leave blank if not needed)",
-    #         hide_input=True,
-    #         default="",
-    #         show_default=False,
-    #         prompt_suffix=": ",
-    #     )
-    #     if token == "":
-    #         token = None
-
-    #
-    save_default_login_profile(
-        federee=federee,
-        region=region,
-        tenant_name=tenant_name,
-        ssh_private_key_path_to_save=ssh_private_key_path_to_save,
-        ssh_public_key_path_to_save=ssh_public_key_path_to_save,
-        # token=token,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
-    )
-
-    # Save config
-    save_cli_profile(
-        federee=federee,
-        region=region,
-        tenant_name=tenant_name,
-        ssh_private_key_path_to_save=ssh_private_key_path_to_save,
-        ssh_public_key_path_to_save=ssh_public_key_path_to_save,
-        profile=profile,
-        # token=token,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
-    )
+    else:
+        save_cli_profile(
+            federee="",  # ponytail: kept for backward compat, empty for k8s-only
+            region="",
+            tenant_name="",
+            ssh_private_key_path_to_save=ssh_private_key_path_to_save,
+            ssh_public_key_path_to_save=ssh_public_key_path_to_save,
+            profile=resolved_profile,
+            kubeconfig_path=str(kc_path),
+            profiles_file_path=profiles_file_path,
+        )
 
     console.print(
-        f"✅ Profile '[bold cyan]{resolved_profile}[/bold cyan]' saved "
-        f"in the following file {ewc_hub_config.EWC_CLI_PROFILES_PATH}"
+        f"✅ Profile '[bold cyan]{resolved_profile}[/bold cyan]' saved. "
+        f"Kubeconfig: {kc_path}"
     )
