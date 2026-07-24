@@ -80,7 +80,7 @@ The `ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). T
 
 ## Prerequisites
 
-- You will need a python environment to run the library implementation of this code. Python version **3.11** or higher.
+- You will need a python environment to run the library implementation of this code. Python version **3.10** or higher.
 - **git** installed on your operating system. (usually is available to most OS nowadays)
 
 ### Openstack inputs
