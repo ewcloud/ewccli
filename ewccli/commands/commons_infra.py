@@ -354,6 +354,17 @@ def resolve_image_and_flavor(
             if not image_name:
                 image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
 
+            else:
+                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
+                gpu_image = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
+
+                if image_name != gpu_image:
+                    message = (
+                        "[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs.\n"
+                        f"[bold green]✔️ GPU image to use:[/bold green] {gpu_image}"
+                    )
+                    return 1, message, result
+
             # Assign Default GPU flavour (federee dependennt)
             if not flavour_name:
                 flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee).get(region)
@@ -368,6 +379,47 @@ def resolve_image_and_flavor(
                         f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
                     )
                     return 1, message, result
+        elif flavour_name and flavour_name in ewc_hub_config.GPU_FLAVOURS_MAP[federee][region]:
+            # GPU case with flavour even if is_GPU is false, so not coming from items.
+
+            # GPU case
+            _LOGGER.info("The selected flavour requires a GPU image...")
+
+            # Assign Default GPU short name
+            if not image_name:
+                image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
+            else:
+                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
+                gpu_image = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
+
+                if image_name != gpu_image:
+                    message = (
+                        "[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs.\n"
+                        f"[bold green]✔️ GPU image to use:[/bold green] {gpu_image}"
+                    )
+                    return 1, message, result
+
+        elif image_name and image_name in ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
+            # GPU case with image even if is_GPU is false, so not coming from items.
+
+            # GPU case
+            _LOGGER.info("The selected image requires a GPU flavour...")
+
+            # Assign Default GPU flavour (federee dependennt)
+            if not flavour_name:
+                flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee).get(region)
+            else:
+                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
+                gpu_flavours = ewc_hub_config.GPU_FLAVOURS_MAP.get(federee).get(region)
+
+                if flavour_name not in gpu_flavours:
+                    gpu_list = ", ".join(gpu_flavours)
+                    message = (
+                        "[bold red]❌ Invalid flavour:[/bold red] The selected flavour does not support GPUs.\n"
+                        f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
+                    )
+                    return 1, message, result
+
         else:
             # CPU case
 

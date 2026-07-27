@@ -166,7 +166,6 @@ def test_resolve_specific_image(conn, backend):
         backend,
         federee="EUMETSAT",
         region="WAW3-1",
-        image_name="Ubuntu-22.04-20250202020202",
         flavour_name="vm.a6000.1",
         is_gpu=True,
     )
@@ -176,7 +175,7 @@ def test_resolve_specific_image(conn, backend):
     from ewccli.commands.commons_infra import normalize_os_image
 
     normalized, _ = normalize_os_image(
-        image_name="Ubuntu-22.04-20250202020202",
+        image_name="Ubuntu 22.04 NVIDIA_AI",
         federee="EUMETSAT",
         region="WAW3-1",
     )
