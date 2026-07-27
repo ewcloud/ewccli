@@ -62,6 +62,7 @@ def test_basic_server(conn, backend):
         metadata={"deployed": "ewccli"},
         image={"id": "img1"},
         flavor={"original_name": "vm.a6000.4"},
+        key_name="test-keypair",
         addresses={
             "private": [
                 {"addr": "10.0.0.152", "OS-EXT-IPS:type": "fixed"}
@@ -91,6 +92,7 @@ def test_security_groups_none(conn, backend):
         status="ACTIVE",
         metadata={"deployed": "ewccli"},
         image=None,
+        key_name="test-keypair",
         flavor={"original_name": "vm"},
         addresses={},
         security_groups=None,
@@ -112,6 +114,7 @@ def test_multiple_networks(conn, backend):
         metadata={"deployed": "ewccli"},
         image=None,
         flavor={"original_name": "vm"},
+        key_name="test-keypair",
         addresses={
             "private": [
                 {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
@@ -139,6 +142,7 @@ def test_filtered_by_metadata(conn, backend):
         status="ACTIVE",
         metadata={},  # no deployed=ewccli
         image=None,
+        key_name="test-keypair",
         flavor={"original_name": "vm"},
         addresses={},
         security_groups=[],
@@ -159,6 +163,7 @@ def test_show_all(conn, backend):
         status="ACTIVE",
         metadata={},
         image=None,
+        key_name="test-keypair",
         flavor={"original_name": "vm"},
         addresses={},
         security_groups=[],
@@ -179,6 +184,7 @@ def test_error_server(conn, backend):
         status="ERROR",
         metadata={"deployed": "ewccli"},
         image=None,
+        key_name="test-keypair",
         flavor={"original_name": "vm"},
         addresses={},
         security_groups=None,

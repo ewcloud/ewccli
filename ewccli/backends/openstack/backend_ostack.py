@@ -625,6 +625,7 @@ class OpenstackBackend:
                 "image": image_name,
                 "networks": networks,
                 "security-groups": ",".join(sg.get("name") for sg in sec_groups),
+                "keypair": server.key_name,
                 "id": server.id,
             }
 
