@@ -401,13 +401,14 @@ def delete_cmd(
     server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
 
     try:
-        ctx.openstack_backend.delete_server(
+        _, delete_message = ctx.openstack_backend.delete_server(
             conn=openstack_api, server_name=server_name, force=force, dry_run=dry_run
         )
     except Exception as e:
         raise ClickException(
             f"Could not delete server {server_name} from Openstack due to: {e}"
         )
+    _LOGGER.info(delete_message)
 
 
 # def remove_server_external_ip(
