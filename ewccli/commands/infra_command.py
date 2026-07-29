@@ -512,6 +512,48 @@ def pre_delete_server(
     _LOGGER.info("Pre delete server steps starting...")
 
     ############################################################
+    # Resolve machine IPs
+    ############################################################
+
+    sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
+        federee=federee, server_info=server_info
+    )
+    if sc_resolve_ip != 0:
+        return 1, resolve_ip_message
+
+    if resolve_ip_outputs is None:
+        return 1, "[Pre delete server] No IPs identified."
+
+    external_ip_machine = resolve_ip_outputs.get("external_ip_machine")
+    internal_ip_machine = resolve_ip_outputs.get("internal_ip_machine")
+
+    if not internal_ip_machine:
+        return (
+            1,
+            f"[Pre delete server] internal_ip_machine {internal_ip_machine} is missing or empty",
+        )
+
+    ############################################################
+    # Detach external IP (if present)
+    ############################################################
+
+    if external_ip_machine:
+        _LOGGER.info(f"Detaching external IP {external_ip_machine} from server {server_name}")
+
+        detach_status, message, _ = openstack_backend.remove_external_ip(
+            conn=openstack_api,
+            server=server_info,
+            external_ip=external_ip_machine
+        )
+
+        time.sleep(_EWC_CLI_SLEEP_TIME - 15)
+
+        if not detach_status[0]:
+            return 1, message
+
+        _LOGGER.info(message)
+
+    ############################################################
     # Detach and delete extra volumes on the vm
     ############################################################
 

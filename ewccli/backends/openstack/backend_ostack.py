@@ -1137,9 +1137,9 @@ class OpenstackBackend:
             _LOGGER.error(
                 f"Floating IP ({external_ip}) not detached/released due to: {e}"
             )
-            return ExternalIPResult(False, False)
+            return ExternalIPResult(False, False), f"Floating IP ({external_ip}) not detached/released due to: {e}"
 
-        return ExternalIPResult(True, True)
+        return ExternalIPResult(True, True), f"Finished detaching {external_ip} successfully."
 
 
     def add_external_ip(
