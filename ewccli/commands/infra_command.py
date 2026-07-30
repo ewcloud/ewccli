@@ -2,7 +2,7 @@
 #
 # Package Name: ewccli
 # License: GPL-3.0-or-later
-# Copyright (c) 2025 EUMETSAT, ECMWF for European Weather Cloud
+# Copyright (c) 2025,2026 EUMETSAT, ECMWF for European Weather Cloud
 # See the LICENSE file for more details
 
 
@@ -10,6 +10,7 @@
 
 import sys
 import os
+import time
 from typing import Optional
 
 import rich_click as click
@@ -18,6 +19,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 from click import ClickException
+from openstack import connection
 
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
@@ -27,13 +29,16 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
+from ewccli.commands.commons_infra import CreateServerInputs
 from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
 from ewccli.commands.commons_infra import create_server_command
+from ewccli.commands.commons_infra import resolve_machine_ip
 from ewccli.utils import load_cli_profile
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
+_EWC_CLI_SLEEP_TIME = 30  # seconds
 
 console = Console()
 
@@ -136,6 +141,7 @@ def create_cmd(
     external_ip: bool = False,
     networks: Optional[tuple] = None,
     security_groups: Optional[tuple] = None,
+    extra_volume: Optional[tuple] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
 ):
@@ -150,7 +156,8 @@ def create_cmd(
     allowed_regions = ewc_hub_config.allowed_regions(federee)
     if region not in allowed_regions:
         raise ClickException(
-            f"Region {region} is not available on {federee} side. The following regions are available: {allowed_regions}"
+            f"Region {region} is not available on {federee} side."
+            f" The following regions are available: {allowed_regions}"
         )
 
     # Try to fill from CLI profile if not provided
@@ -183,17 +190,18 @@ def create_cmd(
             f"Could not connect to Openstack due to the following error: {op_error}"
         )
 
-    server_inputs = {
-        "server_name": server_name,
-        "is_gpu": None,
-        "image_name": image_name,
-        "keypair_name": keypair_name,
-        "flavour_name": flavour_name,
-        "external_ip": external_ip,
-        "networks": networks,
-        "security_groups": security_groups,
-        "item_default_security_groups": ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee]
-    }
+    server_inputs = CreateServerInputs.safe_create(
+        server_name=server_name,
+        keypair_name=keypair_name,
+        external_ip=external_ip,
+        is_gpu=False,
+        image_name=image_name,
+        flavour_name=flavour_name,
+        networks=networks,
+        security_groups=security_groups,
+        item_default_security_groups=ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee],
+        extra_volume=extra_volume,
+    )
 
     os_status_code, os_message, outputs = create_server_command(
         openstack_backend=ctx.openstack_backend,
@@ -302,10 +310,45 @@ def show_cmd(
 
     image_name = image_info.get("name")
 
+    root_volume = None
+    extra_volumes = []
+
+    for att in server_info.attached_volumes:
+        vol_id = att["id"]
+        device = att.get("device") or "unknown"
+
+        # # Skip root disk
+        # if att.get("delete_on_termination", False):
+        #     continue
+
+        # Fetch real Cinder volume
+        vol = openstack_api.block_storage.get_volume(vol_id)
+
+        # Extract mount point from Cinder volume
+        device = None
+        if vol.attachments:
+            device = vol.attachments[0].get("device") or "unknown"
+        else:
+            device = "unknown"
+
+        is_root_nova = att.get("delete_on_termination", False)
+        is_root_cinder = getattr(vol, "is_bootable", False)
+
+        if is_root_nova and is_root_cinder:
+            # Root disk
+            root_volume = f"{vol.name or vol.id} [{vol.size}] (mount: {device})"
+            continue
+
+        extra_volumes.append(
+            f"{vol.name or vol.id} [{vol.size}] (mount: {device})"
+        )
+
     vm_info = get_deployed_server_info(
         federee=federee,
         server_info=server_info,
         image_name=image_name,
+        root_volume=root_volume,
+        extra_volumes=extra_volumes
     )
 
     list_server_details(vm_info)
@@ -388,6 +431,9 @@ def delete_cmd(
     dry_run: bool = False,
 ):
     """Delete VM from Openstack."""
+    cli_profile = ctx.cli_profile
+    federee = cli_profile["federee"]
+
     # Step 1: Authenticate and initialize the OpenStack connection
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
@@ -403,52 +449,151 @@ def delete_cmd(
 
     server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
 
+    # Step 2: Fetch server_info
+    try:
+        server_info = openstack_api.get_server(name_or_id=server_name)
+    except Exception as e:
+        raise ClickException(
+            f"Could not retrieve server {server_name} due to: {e}"
+        )
+
+    # Step 3: Run pre-delete steps
+    try:
+        sc_pre, msg_pre = pre_delete_server(
+            openstack_backend=ctx.openstack_backend,
+            openstack_api=openstack_api,
+            federee=federee,
+            server_name=server_name,
+            server_info=server_info,
+            dry_run=dry_run,
+        )
+    except Exception as e:
+        raise ClickException(
+            f"Pre-delete steps failed for server {server_name} due to: {e}"
+        )
+
+    if sc_pre != 0:
+        raise ClickException(msg_pre)
+
+    _LOGGER.info(msg_pre)
+
+    # Step 4: Delete server
     try:
         _, delete_message = ctx.openstack_backend.delete_server(
-            conn=openstack_api, server_name=server_name, force=force, dry_run=dry_run
+            conn=openstack_api,
+            server_name=server_name,
+            force=force,
+            dry_run=dry_run,
         )
     except Exception as e:
         raise ClickException(
             f"Could not delete server {server_name} from Openstack due to: {e}"
         )
+
     _LOGGER.info(delete_message)
 
 
-# def remove_server_external_ip(
-#     federee: str,
-#     application_credential_id: str,
-#     application_credential_secret: str,
-#     server_info: dict,
-#     external_ip_machine: str,
-#     auth_url: Optional[str] = None,
-# ):
-#     """Run post ansible operation if something goes wrong."""
-#     try:
-#         openstack_backend = OpenstackBackend(
-#             application_credential_id=application_credential_id,
-#             application_credential_secret=application_credential_secret,
-#             auth_url=ewc_hub_config.EWC_CLI_SITE_MAP.get(federee),
-#         )
-#     except Exception as op_error:
-#         return (
-#             1,
-#             f"Could not initialize Openstack config due to the following error: {op_error}",
-#         )
+def pre_delete_server(
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: str,
+    server_name: str,
+    server_info: dict,
+    dry_run: bool = False,
+):
+    """Pre delete server steps:
 
-#     try:
-#         # Step 1: Authenticate and initialize the OpenStack connection
-#         openstack_api = openstack_backend.connect(
-#             auth_url=auth_url,
-#             application_credential_id=application_credential_id,
-#             application_credential_secret=application_credential_secret,
-#         )
-#     except Exception as op_error:
-#         return (
-#             1,
-#             f"Could not connect to Openstack due to the following error: {op_error}",
-#         )
+        - detach floating IP
+        - detach and delete extra volumes
+    """
+    if dry_run:
+        return 0, "[Dry Run] skipping pre delete server steps..."
 
-#     # Remove external IP if not requested
-#     openstack_backend.remove_external_ip(
-#         conn=openstack_api, server=server_info, external_ip=external_ip_machine
-#     )
+    _LOGGER.info("Pre delete server steps starting...")
+
+    ############################################################
+    # Resolve machine IPs
+    ############################################################
+
+    sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
+        federee=federee, server_info=server_info
+    )
+    if sc_resolve_ip != 0:
+        return 1, resolve_ip_message
+
+    if resolve_ip_outputs is None:
+        return 1, "[Pre delete server] No IPs identified."
+
+    external_ip_machine = resolve_ip_outputs.get("external_ip_machine")
+    internal_ip_machine = resolve_ip_outputs.get("internal_ip_machine")
+
+    if not internal_ip_machine:
+        return (
+            1,
+            f"[Pre delete server] internal_ip_machine {internal_ip_machine} is missing or empty",
+        )
+
+    ############################################################
+    # Detach external IP (if present)
+    ############################################################
+
+    if external_ip_machine:
+        _LOGGER.info(f"Detaching external IP {external_ip_machine} from server {server_name}")
+
+        detach_status, message, _ = openstack_backend.remove_external_ip(
+            conn=openstack_api,
+            server=server_info,
+            external_ip=external_ip_machine
+        )
+
+        time.sleep(_EWC_CLI_SLEEP_TIME - 15)
+
+        if not detach_status[0]:
+            return 1, message
+
+        _LOGGER.info(message)
+
+    ############################################################
+    # Detach and delete extra volumes on the vm
+    ############################################################
+
+    # Get attached volumes from server_info
+    attached_volume_ids = [v["id"] for v in server_info.attached_volumes]
+
+    if not attached_volume_ids:
+        _LOGGER.info("No volumes attached to this server.")
+    else:
+        _LOGGER.info(f"Server has {len(attached_volume_ids)} attached volumes.")
+
+        volumes_to_process = []
+
+        # Fetch each volume object and filter by metadata
+        for vol_id in attached_volume_ids:
+            vol = openstack_api.block_storage.get_volume(vol_id)
+
+            if vol.metadata and vol.metadata.get("ewccli") == "true":
+                if vol.metadata.get("server_name") == server_name:
+                    volumes_to_process.append(vol)
+
+        if volumes_to_process:
+            _LOGGER.info(f"Found {len(volumes_to_process)} ewccli volumes to detach/delete")
+
+            detach_result, deleted_ids, msg = openstack_backend.detach_volumes_from_server(
+                conn=openstack_api,
+                server_id=server_info.id,
+                volumes=volumes_to_process,
+                attempts=2,
+                retry_delay_s=30,
+                wait_time_s=600,
+                dry_run=dry_run,
+            )
+
+            if not detach_result.success:
+                return 1, f"[Pre delete] Volume detach/delete failed: {msg}"
+
+            _LOGGER.info(msg)
+
+        else:
+            _LOGGER.info("No ewccli volumes found for this server.")
+
+    return 0, "Pre delete server steps finished successfully"

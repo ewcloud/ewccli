@@ -11,7 +11,9 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
+from pydantic import BaseModel, validator
+from pydantic import ValidationError
 
 from rich.console import Console
 from rich.table import Table
@@ -31,6 +33,63 @@ _LOGGER = get_logger(__name__)
 _EWC_CLI_SLEEP_TIME = 30  # seconds
 
 console = Console()
+
+
+class CreateServerInputs(BaseModel):
+    server_name: str
+    keypair_name: str
+
+    external_ip: bool = False
+    is_gpu: bool = False
+
+    image_name: Optional[str] = None
+    flavour_name: Optional[str] = None
+
+    networks: Optional[Tuple[str, ...]] = None
+    security_groups: Optional[Tuple[str, ...]] = None
+    item_default_security_groups: Optional[Tuple[str, ...]] = None
+
+    extra_volume: Optional[Tuple[int, ...]] = None
+
+    @validator("networks", "security_groups", "item_default_security_groups", pre=True)
+    def normalize_tuple(cls, v):
+        if v is None:
+            return ()
+        if isinstance(v, tuple):
+            return v
+        if isinstance(v, list):
+            return tuple(v)
+        if isinstance(v, str):
+            return (v,)
+        return v
+
+    @validator("extra_volume", pre=True)
+    def normalize_extra_volume(cls, v):
+        if v is None:
+            return ()
+        if isinstance(v, tuple):
+            sizes = v
+        elif isinstance(v, list):
+            sizes = tuple(v)
+        else:
+            sizes = (v,)
+
+        for size in sizes:
+            if not isinstance(size, int) or size <= 0:
+                raise ValueError(f"Invalid extra volume size: {size}")
+
+        return sizes
+
+    @classmethod
+    def safe_create(cls, **data):
+        try:
+            return cls(**data)
+        except ValidationError as e:
+            err = e.errors()[0]
+            loc = ".".join(str(x) for x in err["loc"])
+            msg = err["msg"]
+
+            raise ClickException(f"Invalid server inputs: {loc} → {msg}")
 
 
 def check_user_ssh_keys(
@@ -143,6 +202,7 @@ def show_server_input_requested_summary(
     image_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
     keypair_name: Optional[str] = None,
+    extra_volumes: Optional[tuple] = None
 ):
     """Print table with inputs for the server."""
     table = Table(
@@ -157,6 +217,9 @@ def show_server_input_requested_summary(
     table.add_row("Network", ", ".join(networks))
     table.add_row("Security Groups", ", ".join(security_groups))
     table.add_row("Keypair", keypair_name)
+
+    if extra_volumes:
+        table.add_row("Extra Volumes [GB]", ", ".join(str(v) for v in extra_volumes))
 
     console.print(table)
 
@@ -575,6 +638,8 @@ def get_deployed_server_info(
     federee: str,
     server_info: dict,
     image_name: Optional[str] = None,
+    root_volume: Optional[str] = None,
+    extra_volumes: Optional[list] = None
 ):
     """Get deployed server info."""
     _LOGGER.debug(server_info)
@@ -619,6 +684,10 @@ def get_deployed_server_info(
     vm_info["security-groups"] = [
         s["name"] for s in server_info.get("security_groups") or []
     ]
+
+    vm_info["root-volume"] = root_volume
+    vm_info["extra-volumes"] = extra_volumes
+
     return vm_info
 
 
@@ -652,6 +721,16 @@ def list_server_details(
 
     table.add_row("Networks", "\n".join(networks))
     table.add_row("Security Groups", ",".join(vm_info.get("security-groups") or []))
+
+    root_volume = vm_info.get("root-volume")
+    extra_volumes = vm_info.get("extra-volumes") or []
+
+    root_volume_str = "\n".join([root_volume] if root_volume else [])
+    extra_volumes_str = "\n".join(extra_volumes)
+
+    table.add_row("Root volume [GB]", root_volume_str)
+    table.add_row("Extra volumes [GB]", extra_volumes_str)
+
     table.add_row("ID", str(vm_info.get("id", "")))
 
     console.print(table)
@@ -662,7 +741,7 @@ def pre_deploy_server_setup(
     openstack_api: connection.Connection,
     federee: str,
     region: str,
-    server_inputs: dict,
+    server_inputs: CreateServerInputs,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
     ssh_private_encoded: Optional[str] = None,
@@ -931,6 +1010,7 @@ def deploy_server(
     security_groups: Optional[tuple] = server_inputs["security_groups"]
     resolved_image_name: str = pre_deploy_server_outputs["resolved_image_name"]
     resolved_flavour_name: str = pre_deploy_server_outputs["resolved_flavour_name"]
+    extra_volumes: tuple = server_inputs["extra_volume"]
 
     _LOGGER.info(f"Deploy server {server_name} starting...")
 
@@ -940,6 +1020,7 @@ def deploy_server(
         networks=networks,
         security_groups=security_groups,
         keypair_name=keypair_name,
+        extra_volumes=extra_volumes
     )
 
     #################################################################################
@@ -1095,6 +1176,51 @@ def post_deploy_server_setup(
         "server_info": server_info,
     }
 
+    ############################################################
+    # Attach extra volumes (if provided)
+    ############################################################
+
+    extra_volume_sizes = server_inputs.get("extra_volume", None)
+
+    if extra_volume_sizes:
+        _LOGGER.info(f"Post deploy: creating and attaching extra volumes: {extra_volume_sizes}")
+
+        # 1. Create volumes (volume_type=None → default backend)
+        vol_result, created_volumes, msg = openstack_backend.create_volumes(
+            conn=openstack_api,
+            base_name=server_name,
+            volume_sizes=tuple(extra_volume_sizes),
+            volume_type=None,        # <── default volume type TODO: Add volume type performance
+            attempts=2,
+            retry_delay_s=30,
+            wait_time_s=600,
+            dry_run=dry_run,
+            metadata={"ewccli": "true"},
+        )
+
+        if not vol_result.success:
+            return 1, f"[Post deploy] Volume creation failed: {msg}", outputs
+
+        _LOGGER.info(msg)
+
+        # 2. Attach volumes
+        attach_result, attachments, attach_msg = openstack_backend.attach_volumes_to_server(
+            conn=openstack_api,
+            server_id=server_info.id,
+            volumes=created_volumes,
+            attempts=2,
+            retry_delay_s=30,
+            wait_time_s=600,
+            dry_run=dry_run,
+        )
+
+        if not attach_result.success:
+            return 1, f"[Post deploy] Volume attachment failed: {attach_msg}", outputs
+
+        _LOGGER.info(attach_msg)
+
+        outputs["attached_volumes"] = [v.id for v in created_volumes]
+
     return 0, "Post deploy server setup finished successfully", outputs
 
 
@@ -1103,7 +1229,7 @@ def create_server_command(
     openstack_api: connection.Connection,
     federee: str,
     region: str,
-    server_inputs: dict,
+    server_inputs: CreateServerInputs,
     ssh_public_key_path: str,
     ssh_private_key_path: str,
     ssh_private_encoded: Optional[str] = None,
@@ -1112,6 +1238,11 @@ def create_server_command(
     force: bool = False, 
 ):
     """Create Server command."""
+    # Accept both dict and Pydantic model
+    if hasattr(server_inputs, "model_dump"):
+        server_inputs = server_inputs.model_dump()
+
+
     #### PRE DEPLOY SERVER ACTION
     os_status_code, os_message, pre_deploy_server_outputs = pre_deploy_server_setup(
         openstack_backend=openstack_backend,

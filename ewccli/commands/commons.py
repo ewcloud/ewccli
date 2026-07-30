@@ -257,6 +257,12 @@ def openstack_optional_options(func):
         show_default=True,
         help="Add External IP to the machine.",
     )(func)
+    func = click.option(
+        "--extra-volume",
+        type=int,
+        multiple=True,
+        help="Attach an extra volume of the given size in GB. Can be used multiple times.",
+    )(func)
 
     return func
 
