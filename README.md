@@ -196,6 +196,7 @@ Info required for a profile:
 ```
 [my-profile]
 federee = EUMETSAT or ECMWF
+region = CCI1 or CCI2 or ECIS-R1 or ECIS-R2
 tenant_name = eumetsat-ewc-communityhub
 application_credential_id = 
 application_credential_secret = 
