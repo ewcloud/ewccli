@@ -103,7 +103,7 @@ def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    result = finder(None, conn, "Rocky-9.6-GPU", "ECMWF", "CC1")
+    result = finder(None, conn, "Rocky-9.6-GPU", "ECMWF", "CCI1")
     assert result == img2
 
 
@@ -319,7 +319,7 @@ def test_exact_cpu_match(monkeypatch):
         "EWC_CLI_CPU_IMAGES",
         {
             "ECMWF": {
-                "CC1": "Rocky-8"
+                "CCI1": "Rocky-8"
             }
         }
     )
@@ -330,12 +330,12 @@ def test_exact_cpu_match(monkeypatch):
         "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
         {
             "ECMWF": {
-                "CC1": "Rocky-9-GPU"
+                "CCI1": "Rocky-9-GPU"
             }
         }
     )
 
-    normalized, exact = normalize_os_image("Rocky-8", "ECMWF", "CC1")
+    normalized, exact = normalize_os_image("Rocky-8", "ECMWF", "CCI1")
     assert normalized == "Rocky-8"
     assert exact is True
 
@@ -347,7 +347,7 @@ def test_exact_cpu_match(monkeypatch):
         ["Rocky-8", "Ubuntu-22.04"]
     )
 
-    normalized, exact = normalize_os_image("Rocky-8", "ECMWF", "CC1")
+    normalized, exact = normalize_os_image("Rocky-8", "ECMWF", "CCI1")
     assert normalized == "Rocky-8"
     assert exact is True
 
@@ -411,12 +411,12 @@ def test_ecmwf_exact_gpu(monkeypatch):
         "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
         {
             "ECMWF": {
-                "CC1": "Rocky-9-GPU"
+                "CCI1": "Rocky-9-GPU"
             }
         }
     )
 
-    normalized, exact = normalize_os_image("Rocky-9-GPU", "ECMWF", "CC1")
+    normalized, exact = normalize_os_image("Rocky-9-GPU", "ECMWF", "CCI1")
     assert normalized == "Rocky-9-GPU"
     assert exact is True
 
@@ -424,10 +424,10 @@ def test_ecmwf_timestamp_gpu(monkeypatch):
     monkeypatch.setattr(
         ewc_hub_config,
         "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {"ECMWF": {"CC1": "Rocky-9-GPU"}}
+        {"ECMWF": {"CCI1": "Rocky-9-GPU"}}
     )
 
-    normalized, exact = normalize_os_image("Rocky-9.6-GPU-20250101010101", "ECMWF", "CC1")
+    normalized, exact = normalize_os_image("Rocky-9.6-GPU-20250101010101", "ECMWF", "CCI1")
     assert normalized == "Rocky-9-GPU"
     assert exact is False
 

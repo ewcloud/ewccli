@@ -147,17 +147,17 @@ def test_resolve_ecmwf_gpu_defaults(conn, backend):
         conn,
         backend,
         federee="ECMWF",
-        region="CC1",
+        region="CCI1",
         is_gpu=True,
     )
     assert code == 0
     assert (
         result["normalized_image_name"]
-        == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CC1"]
+        == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI1"]
     )
     assert (
         result["flavour_name"]
-        == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CC1"]
+        == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CCI1"]
     )
 
 def test_resolve_specific_image(conn, backend):

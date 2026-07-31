@@ -62,8 +62,8 @@ class EWCCLIConfiguration:
 
     EWC_CLI_SITE_MAP = {
         Federee.ECMWF.value: {
-            Region.CC1.value: "https://auth.os-api.cci1.ecmwf.int:443",
-            Region.CC2.value: "https://auth.os-api.cci2.ecmwf.int:443",
+            Region.CCI1.value: "https://auth.os-api.cci1.ecmwf.int:443",
+            Region.CCI2.value: "https://auth.os-api.cci2.ecmwf.int:443",
         },
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "https://keystone.cloudferro.com:5000",
@@ -84,8 +84,8 @@ class EWCCLIConfiguration:
     # GPU images short custom names
     EWC_CLI_GPU_IMAGES_SITE_MAP: dict[Federee, dict[Region, str]] = {
         Federee.ECMWF.value: {
-            Region.CC1.value: "Rocky-9-GPU",
-            Region.CC2.value: "Rocky-9-GPU",
+            Region.CCI1.value: "Rocky-9-GPU",
+            Region.CCI2.value: "Rocky-9-GPU",
         },
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "Ubuntu-22.04-GPU",
@@ -104,8 +104,8 @@ class EWCCLIConfiguration:
     # Openstack value of the GPU images
     EWC_CLI_OS_GPU_IMAGES_SITE_MAP: dict[Federee, dict[Region, str]] = {
         Federee.ECMWF.value: {
-            Region.CC1.value: "Rocky-9.6-GPU",  # This can be find after normalization
-            Region.CC2.value: "Rocky-9.6-GPU",  # This can be find after normalization
+            Region.CCI1.value: "Rocky-9.6-GPU",  # This can be find after normalization
+            Region.CCI2.value: "Rocky-9.6-GPU",  # This can be find after normalization
         },
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "Ubuntu 22.04 NVIDIA_AI",  # ( usually fixed)
@@ -119,8 +119,8 @@ class EWCCLIConfiguration:
     # CPU
     DEFAULT_CPU_FLAVOURS_MAP: dict[Federee, dict[Region, str]] = {
         Federee.ECMWF.value: {
-            Region.CC1.value: "4cpu-4gbmem-30gbdisk",
-            Region.CC2.value: "4cpu-4gbmem-30gbdisk",
+            Region.CCI1.value: "4cpu-4gbmem-30gbdisk",
+            Region.CCI2.value: "4cpu-4gbmem-30gbdisk",
         },
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "eo1.large",
@@ -131,12 +131,12 @@ class EWCCLIConfiguration:
     # GPU
     GPU_FLAVOURS_MAP: dict[Federee, dict[Region, list[str]]] = {
         Federee.ECMWF.value: {
-            Region.CC1.value: [
+            Region.CCI1.value: [
                 "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
                 "8cpu-64gbmem-30gbdisk-a100.2g.20gbgpu",
                 "16cpu-128gbmem-30gbdisk-40gbgpu",
             ],
-            Region.CC2.value: [
+            Region.CCI2.value: [
                 "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
                 "8cpu-64gbmem-30gbdisk-a100.2g.20gbgpu",
                 "16cpu-128gbmem-30gbdisk-40gbgpu",
@@ -165,8 +165,8 @@ class EWCCLIConfiguration:
 
     DEFAULT_GPU_FLAVOURS_MAP: dict[Federee, dict[Region, str]] = {
         Federee.ECMWF.value: {
-            Region.CC1.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
-            Region.CC2.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
+            Region.CCI1.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
+            Region.CCI2.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
         },
 
         Federee.EUMETSAT.value: {
