@@ -618,6 +618,13 @@ def resolve_machine_ip(
                 if net_name == ewc_hub_config.DEFAULT_EXTERNAL_NETWORK_MAP[federee]:
                     external_ip_machine = addresses[external_network][0]["addr"]
 
+        else:
+            allowed_federees = [member.value for member in Federee]
+            if federee not in allowed_federees:
+                message = f"Federee {federee} is not in the list of allowed federees: {allowed_federees}."
+                _LOGGER.error(message)
+                return 1, message, None
+
         _LOGGER.debug(
             f"external_ip_machine: {external_ip_machine}, internal_ip_machine: {internal_ip_machine}"
         )
@@ -626,6 +633,7 @@ def resolve_machine_ip(
             "internal_ip_machine": internal_ip_machine,
             "external_ip_machine": external_ip_machine,
         }
+
         return 0, "Success", result
 
     except Exception as e:

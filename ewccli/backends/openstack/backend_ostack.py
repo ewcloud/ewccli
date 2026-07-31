@@ -1107,9 +1107,8 @@ class OpenstackBackend:
         conn: openstack.connection.Connection,
         server: Server,
         external_ip: str,
-    ):
+    ) -> Tuple[ExternalIPResult, str]:
         """Detach and release external IP from the machine."""
-
         try:
             ports = list(conn.network.ports(device_id=server.id))
             server_port = ports[0]
@@ -1140,8 +1139,6 @@ class OpenstackBackend:
             return ExternalIPResult(False, False), f"Floating IP ({external_ip}) not detached/released due to: {e}"
 
         return ExternalIPResult(True, True), f"Finished detaching {external_ip} successfully."
-
-
 
     def add_external_ip(
         self,
