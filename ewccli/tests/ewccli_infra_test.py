@@ -10,7 +10,7 @@
 
 import pytest
 from click.testing import CliRunner
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
 from ewccli.ewccli import cli
@@ -49,6 +49,13 @@ class FakeServer(SimpleNamespace):
 
 def make_server(**kwargs):
     return FakeServer(**kwargs)
+
+
+def mock_resolve_ip():
+    return patch(
+        "ewccli.commands.infra_command.resolve_machine_ip",
+        return_value=(0, "", {"internal_ip_machine": "10.0.0.5", "external_ip_machine": None}),
+    )
 
 
 # -------------------------
@@ -217,13 +224,14 @@ def test_pre_delete_no_volumes():
 
     server_info = FakeServerInfo(attached_volumes=[])
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="testfed",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
+    with mock_resolve_ip():
+        rc, msg = pre_delete_server(
+            openstack_backend=backend,
+            openstack_api=api,
+            federee="testfed",
+            server_name="vm1",
+            server_info=server_info,
+            dry_run=False,
     )
 
     assert rc == 0
@@ -241,13 +249,14 @@ def test_pre_delete_non_ewccli_volumes():
         metadata={"other": "true"}
     )
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="testfed",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
+    with mock_resolve_ip():
+        rc, msg = pre_delete_server(
+            openstack_backend=backend,
+            openstack_api=api,
+            federee="testfed",
+            server_name="vm1",
+            server_info=server_info,
+            dry_run=False,
     )
 
     assert rc == 0
@@ -272,13 +281,14 @@ def test_pre_delete_ewccli_volume_detach_delete():
         "ok"
     )
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="testfed",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
+    with mock_resolve_ip():
+        rc, msg = pre_delete_server(
+            openstack_backend=backend,
+            openstack_api=api,
+            federee="testfed",
+            server_name="vm1",
+            server_info=server_info,
+            dry_run=False,
     )
 
     assert rc == 0
@@ -303,13 +313,14 @@ def test_pre_delete_detach_failure():
         "detach failed"
     )
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="testfed",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
+    with mock_resolve_ip():
+        rc, msg = pre_delete_server(
+            openstack_backend=backend,
+            openstack_api=api,
+            federee="testfed",
+            server_name="vm1",
+            server_info=server_info,
+            dry_run=False,
     )
 
     assert rc == 1
