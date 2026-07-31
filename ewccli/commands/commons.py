@@ -236,7 +236,10 @@ def openstack_optional_options(func):
         envvar="EWC_CLI_OPENSTACK_IMAGE_NAME",
         show_default=True,
         type=str,
-        help="Select image name to be used. (or set env var EWC_CLI_OPENSTACK_IMAGE_NAME)",
+        help=(
+            "Select image name to be used (or set env var EWC_CLI_OPENSTACK_IMAGE_NAME). "
+            "See available EWC images: https://confluence.ecmwf.int/x/pU2xG"
+        ),
     )(func)
     func = click.option(
         "--flavour-name",
@@ -246,7 +249,11 @@ def openstack_optional_options(func):
         envvar="EWC_CLI_OPENSTACK_FLAVOUR_NAME",
         show_default=True,
         type=str,
-        help="Select a name for the flavor in Openstack. (or set env var EWC_CLI_OPENSTACK_FLAVOUR_NAME)",
+        help=(
+            "Select a name for the flavor in OpenStack "
+            "(or set env var EWC_CLI_OPENSTACK_FLAVOUR_NAME). "
+            "See EWC VM plans: https://confluence.ecmwf.int/x/evWHEw"
+        ),
     )(func)
     func = click.option(
         "--external-ip",
