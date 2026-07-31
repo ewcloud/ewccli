@@ -1142,6 +1142,7 @@ class OpenstackBackend:
         return ExternalIPResult(True, True), f"Finished detaching {external_ip} successfully."
 
 
+
     def add_external_ip(
         self,
         conn: openstack.connection.Connection,
