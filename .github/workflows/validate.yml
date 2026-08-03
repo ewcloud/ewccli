@@ -56,11 +56,11 @@ jobs:
   e2e:
     name: End-to-end Testing
     runs-on: ubuntu-latest
-    needs: unittiest
+    needs: unittest
     if: ${{ always() }}
     strategy:
       max-parallel: 1
-      fail-fast: true
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: ['3.10', '3.11', '3.12']
