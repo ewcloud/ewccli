@@ -534,13 +534,13 @@ def pre_delete_server(
         )
 
     ############################################################
-    # Detach external IP (if present)
+    # Detach and release external IP (if present)
     ############################################################
 
     if external_ip_machine:
         _LOGGER.info(f"Detaching external IP {external_ip_machine} from server {server_name}")
 
-        detach_status, message, _ = openstack_backend.remove_external_ip(
+        detach_status, message = openstack_backend.remove_external_ip(
             conn=openstack_api,
             server=server_info,
             external_ip=external_ip_machine
@@ -558,7 +558,8 @@ def pre_delete_server(
     ############################################################
 
     # Get attached volumes from server_info
-    attached_volume_ids = [v["id"] for v in server_info.attached_volumes]
+    attached_volumes = server_info.get("attached_volumes") or []
+    attached_volume_ids = [v["id"] for v in attached_volumes]
 
     if not attached_volume_ids:
         _LOGGER.info("No volumes attached to this server.")
@@ -580,7 +581,7 @@ def pre_delete_server(
 
             detach_result, deleted_ids, msg = openstack_backend.detach_volumes_from_server(
                 conn=openstack_api,
-                server_id=server_info.id,
+                server_id=server_info.get("id"),
                 volumes=volumes_to_process,
                 attempts=2,
                 retry_delay_s=30,
