@@ -3,6 +3,24 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.7.0](https://github.com/ewcloud/ewccli/compare/0.6.0...0.7.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* ECMWF region names ([#141](https://github.com/ewcloud/ewccli/issues/141)) ([5358cf6](https://github.com/ewcloud/ewccli/commit/5358cf6b3b02d6b7c12626348d3b8414dcfdb0ef))
+* Fix tests and external ip deletion ([#142](https://github.com/ewcloud/ewccli/issues/142)) ([560f769](https://github.com/ewcloud/ewccli/commit/560f76987dbd6f95f8d16a26652e9eb1ebef2d3f))
+* GPU flavour and GPU image mismatch ([#136](https://github.com/ewcloud/ewccli/issues/136)) ([1f3d4af](https://github.com/ewcloud/ewccli/commit/1f3d4af8994525f939e7ae1cc8ecdb05e8c8d3e7))
+* Release External IP when VM is deleted ([#138](https://github.com/ewcloud/ewccli/issues/138)) ([24a3513](https://github.com/ewcloud/ewccli/commit/24a35138a4c364f598a076560797ba307c86c353))
+
+
+### Features
+
+* Expose message output after ewc infra delete command ([#135](https://github.com/ewcloud/ewccli/issues/135)) ([2922164](https://github.com/ewcloud/ewccli/commit/2922164bacadd04650fa818b2c17608284c10060))
+* Include links into help command ([#145](https://github.com/ewcloud/ewccli/issues/145)) ([4f70a34](https://github.com/ewcloud/ewccli/commit/4f70a34e01e882cd48eabe45b3327f23cf24a24e))
+* Introduce extra volume flag for servers ([#97](https://github.com/ewcloud/ewccli/issues/97)) ([7331661](https://github.com/ewcloud/ewccli/commit/7331661ce9dfb599239061431902c2c224cf1c47))
+* Show also keypair in ewc infra list command ([#134](https://github.com/ewcloud/ewccli/issues/134)) ([d6d9173](https://github.com/ewcloud/ewccli/commit/d6d9173e345ce9dd8004870b54527ed53807aafb))
+
 # [0.6.0](https://github.com/ewcloud/ewccli/compare/0.5.1...0.6.0) (2026-06-11)
 
 
