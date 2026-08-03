@@ -5,6 +5,7 @@ on:
     paths:
       - '**.py'
       - 'pyproject.toml'
+      - './github/*'
 
 jobs:
 
