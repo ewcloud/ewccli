@@ -19,7 +19,7 @@ jobs:
         with:
           client-id: ${{ vars.EWC_SEMANTIC_RELEASES_CLIENT_ID }}
           private-key: ${{ secrets.EWC_SEMANTIC_RELEASES_PRIVATE_KEY }}
-      
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:

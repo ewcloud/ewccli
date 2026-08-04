@@ -24,7 +24,7 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -e .[test]
-        
+
       - name: Run pre-commit
         run: pre-commit run --all-files
 
@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Python dependencies
         run: pip install -e .[test]
-        
+
       - name: Run pytest
         run: pytest
 
@@ -78,7 +78,7 @@ jobs:
       OS_REGION_NAME: '${{ secrets.ECMWF_OS_REGION_NAME }}'
       ANSIBLE_SSH_PRIVATE_KEY: '${{ secrets.ECMWF_ANSIBLE_SSH_PRIVATE_KEY }}'
       ANSIBLE_SSH_PUBLIC_KEY: '${{ secrets.ECMWF_ANSIBLE_SSH_PUBLIC_KEY }}'
-      
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
