@@ -12,8 +12,14 @@
 import pytest
 from pathlib import Path
 from click import ClickException
+from click.testing import CliRunner
+from unittest.mock import patch
 
+from ewccli.ewccli import cli
+from ewccli.enums import Federee, Region
+from ewccli.configuration import config as ewc_hub_config
 from ewccli.commands.login_command import check_and_generate_ssh_keys
+from ewccli.utils import delete_cli_profile, _resolve_profile
 
 
 # -----------------------------
@@ -148,3 +154,45 @@ def test_only_public_key_exists(tmp_path):
             ssh_private_key_path=str(priv),
             resolved_profile="profile",
         )
+
+def test_validate_region_valid_eumetsat():
+    import tempfile
+    import subprocess
+    runner = CliRunner()
+
+    # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = Path(tmpdir) / "id_rsa"
+        pub = Path(tmpdir) / "id_rsa.pub"
+
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True
+        )
+
+        federee = Federee.EUMETSAT.value
+        region = Region.R1.value
+        tenant_name = "dummy-dummy-dummy"
+
+        result = runner.invoke(
+            cli,
+            [
+                "login",
+                "--application-credential-id", "dummy",
+                "--application-credential-secret", "dummy",
+                "--ssh-public-key-path", str(pub),
+                "--ssh-private-key-path", str(priv),
+                "--tenant-name", tenant_name,
+                "--federee", federee,
+                "--region", region,
+            ]
+        )
+
+    resolved_profile = _resolve_profile(federee=federee, region=region, tenant_name=tenant_name)
+    delete_cli_profile(profile=resolved_profile)
+
+    print("OUTPUT:", result.output)
+    print("EXCEPTION:", result.exception)
+    print("TRACEBACK:", result.exc_info)
+    assert result.exit_code == 0

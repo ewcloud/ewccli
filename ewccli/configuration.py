@@ -78,7 +78,7 @@ class EWCCLIConfiguration:
         for url in regions.values()
     }
 
-    def allowed_regions(self, federee: Federee) -> list[str]:
+    def allowed_regions(self, federee: str) -> list[str]:
         return [region for region in self.EWC_CLI_SITE_MAP[federee].keys()]
 
     # GPU images short custom names

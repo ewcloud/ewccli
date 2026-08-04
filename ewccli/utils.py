@@ -372,6 +372,80 @@ def load_cli_profile(
     }
 
 
+def delete_cli_profile(
+    profile: str,
+    profiles_file_path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH,
+) -> None:
+    """
+    Delete a profile from the EWC CLI profiles file.
+
+    Parameters
+    ----------
+    profile : str
+        Name of the profile to delete.
+    profiles_file_path : Path, optional
+        Path to the profiles file. Defaults to ewc_hub_config.EWC_CLI_PROFILES_PATH.
+
+    Raises
+    ------
+    click.Abort
+        If the profile does not exist or the profiles file is missing/empty.
+    """
+    cfg = ConfigParser()
+    cfg.read(profiles_file_path)
+
+    # Case 1: file missing or empty
+    if not os.path.exists(profiles_file_path) or not cfg.sections():
+        click.secho(
+            "❌ No profiles found.",
+            fg="red",
+            bold=True,
+        )
+        click.secho(
+            f"Searched in: {profiles_file_path}",
+            fg="cyan",
+        )
+        click.secho(
+            "Please run 'ewc login' first to create a profile.",
+            fg="yellow",
+        )
+        raise click.Abort()
+
+    # Case 2: profile not found
+    if profile not in cfg:
+        click.secho(
+            f"❌ Profile '{profile}' not found.",
+            fg="red",
+            bold=True,
+        )
+        click.secho(
+            f"Searched in: {profiles_file_path}",
+            fg="cyan",
+        )
+        if cfg.sections():
+            click.secho(
+                "ℹ️ Available profiles:",
+                fg="yellow",
+            )
+            for name in cfg.sections():
+                click.secho(f"  • {name}", fg="green")
+        raise click.Abort()
+
+    # Delete the profile
+    cfg.remove_section(profile)
+
+    # Write back to file
+    os.makedirs(os.path.dirname(profiles_file_path), exist_ok=True)
+    with open(profiles_file_path, "w") as f:
+        cfg.write(f)
+
+    click.secho(
+        f"🗑️ Profile '{profile}' deleted successfully.",
+        fg="green",
+        bold=True,
+    )
+
+
 def generate_random_id(length: int = 10):
     """Generate random ID."""
     characters = string.ascii_letters + string.digits
