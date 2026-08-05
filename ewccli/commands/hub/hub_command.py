@@ -624,7 +624,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             image_name=image_name or item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value),
             keypair_name=keypair_name,
             flavour_name=flavour_name,
-            external_ip=external_ip or item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value),
+            external_ip=item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value) \
+               if item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value) is not None \
+               else external_ip,
             networks=networks,
             security_groups=security_groups,
             item_default_security_groups=item_info_ewccli.get(
