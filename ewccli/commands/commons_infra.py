@@ -457,7 +457,7 @@ def resolve_image_and_flavor(
                     )
                     return 1, message, result
 
-        elif image_name and image_name in ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
+        elif image_name and image_name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
             # GPU case with image even if is_GPU is false, so not coming from items.
 
             # GPU case
@@ -480,7 +480,6 @@ def resolve_image_and_flavor(
 
         else:
             # CPU case
-
             # Assign Default CPU short name
             if not image_name:
                 image_name = ewc_hub_config.EWC_CLI_DEFAULT_IMAGE

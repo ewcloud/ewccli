@@ -112,7 +112,7 @@ def validate_region(ctx, param, value):
     if federee is None or value is None:
         return value
 
-    allowed = ewc_hub_config.allowed_regions(Federee(federee))
+    allowed = ewc_hub_config.allowed_regions(federee)
 
     if value not in allowed:
         raise click.BadParameter(
@@ -477,6 +477,27 @@ def init_command(
                 )
             )
 
+    else:
+        if not application_credential_id:
+            # Handle OpenStack credential ID
+            application_credential_id = (
+                application_credential_id
+                or os.getenv("OS_APPLICATION_CREDENTIAL_ID")
+                or click.prompt(
+                    "Enter OpenStack Application Credential ID", hide_input=True
+                )
+            )
+
+        if not application_credential_secret:
+            # Handle OpenStack credential secret
+            application_credential_secret = (
+                application_credential_secret
+                or os.getenv("OS_APPLICATION_CREDENTIAL_SECRET")
+                or click.prompt(
+                    "Enter OpenStack Application Credential Secret", hide_input=True
+                )
+            )
+
     # if kubeconfig_available():
     #     click.echo("🔑 kubeconfig found – skipping token requirement.")
     #     token = None
@@ -520,3 +541,5 @@ def init_command(
         f"✅ Profile '[bold cyan]{resolved_profile}[/bold cyan]' saved "
         f"in the following file {ewc_hub_config.EWC_CLI_PROFILES_PATH}"
     )
+
+    return 0
