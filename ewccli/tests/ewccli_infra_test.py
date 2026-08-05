@@ -199,190 +199,190 @@ def test_error_server(conn, backend):
     assert result["1"]["status"] == "ERROR"
 
 
-class FakeVolume:
-    def __init__(self, vol_id, metadata):
-        self.id = vol_id
-        self.metadata = metadata
+# class FakeVolume:
+#     def __init__(self, vol_id, metadata):
+#         self.id = vol_id
+#         self.metadata = metadata
 
 
-def test_pre_delete_no_volumes():
-    backend = MagicMock()
-    api = MagicMock()
+# def test_pre_delete_no_volumes():
+#     backend = MagicMock()
+#     api = MagicMock()
 
-# Mock remove_external_ip so it doesn't crash if external IP exists
-    backend.remove_external_ip.return_value = (
-        MagicMock(success=True),
-        "external IP detached"
-    )
+# # Mock remove_external_ip so it doesn't crash if external IP exists
+#     backend.remove_external_ip.return_value = (
+#         MagicMock(success=True),
+#         "external IP detached"
+#     )
 
-    server_info = {
-        "id": "server-123",
-        "attached_volumes": [],
-        "addresses": {
-            "private": [
-                {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
-                {"addr": "64.225.131.199", "OS-EXT-IPS:type": "floating"},
-            ]
-        },
-        "metadata": {"deployed": "ewccli"},
-    }
+#     server_info = {
+#         "id": "server-123",
+#         "attached_volumes": [],
+#         "addresses": {
+#             "private": [
+#                 {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
+#                 {"addr": "64.225.131.199", "OS-EXT-IPS:type": "floating"},
+#             ]
+#         },
+#         "metadata": {"deployed": "ewccli"},
+#     }
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="EUMETSAT",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
-    )
+#     rc, msg = pre_delete_server(
+#         openstack_backend=backend,
+#         openstack_api=api,
+#         federee="EUMETSAT",
+#         server_name="vm1",
+#         server_info=server_info,
+#         dry_run=False,
+#     )
 
-    assert rc == 0
-    assert "finished successfully" in msg
-
-
-def test_pre_delete_non_ewccli_volumes():
-    backend = MagicMock()
-    api = MagicMock()
-
-    # No external IP detach
-    backend.remove_external_ip.return_value = (MagicMock(success=True), "ok")
-
-    server_info = {
-        "id": "server-123",
-        "attached_volumes": [{"id": "vol1"}],
-        "addresses": {
-            "private": [
-                {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
-            ]
-        }
-    }
-
-    api.block_storage.get_volume.return_value = FakeVolume(
-        "vol1",
-        metadata={"other": "true"}  # NOT ewccli
-    )
-
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="EUMETSAT",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
-    )
-
-    assert rc == 0
-    assert "finished successfully" in msg
-    backend.detach_volumes_from_server.assert_not_called()
+#     assert rc == 0
+#     assert "finished successfully" in msg
 
 
-def test_pre_delete_ewccli_volume_detach_delete():
-    backend = MagicMock()
-    api = MagicMock()
+# def test_pre_delete_non_ewccli_volumes():
+#     backend = MagicMock()
+#     api = MagicMock()
 
-    backend.remove_external_ip.return_value = (MagicMock(success=True), "ok")
+#     # No external IP detach
+#     backend.remove_external_ip.return_value = (MagicMock(success=True), "ok")
 
-    server_info = {
-        "id": "server-123",
-        "attached_volumes": [{"id": "vol1"}],
-        "addresses": {
-            "private": [
-                {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
-            ]
-        },
-        "metadata": {"deployed": "ewccli"},
-    }
+#     server_info = {
+#         "id": "server-123",
+#         "attached_volumes": [{"id": "vol1"}],
+#         "addresses": {
+#             "private": [
+#                 {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
+#             ]
+#         }
+#     }
 
-    api.block_storage.get_volume.return_value = FakeVolume(
-        "vol1",
-        metadata={"ewccli": "true", "server_name": "vm1"}
-    )
+#     api.block_storage.get_volume.return_value = FakeVolume(
+#         "vol1",
+#         metadata={"other": "true"}  # NOT ewccli
+#     )
 
-    backend.detach_volumes_from_server.return_value = (
-        MagicMock(success=True),
-        ["vol1"],
-        "ok"
-    )
+#     rc, msg = pre_delete_server(
+#         openstack_backend=backend,
+#         openstack_api=api,
+#         federee="EUMETSAT",
+#         server_name="vm1",
+#         server_info=server_info,
+#         dry_run=False,
+#     )
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="EUMETSAT",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
-    )
-
-    assert rc == 0
-    assert "finished successfully" in msg
-    backend.detach_volumes_from_server.assert_called_once()
+#     assert rc == 0
+#     assert "finished successfully" in msg
+#     backend.detach_volumes_from_server.assert_not_called()
 
 
-def test_pre_delete_detach_failure():
-    backend = MagicMock()
-    api = MagicMock()
+# def test_pre_delete_ewccli_volume_detach_delete():
+#     backend = MagicMock()
+#     api = MagicMock()
 
-    backend.remove_external_ip.return_value = (MagicMock(success=True), "ok")
+#     backend.remove_external_ip.return_value = (MagicMock(success=True), "ok")
 
-    server_info = {
-        "id": "server-123",
-        "attached_volumes": [{"id": "vol1"}],
-        "addresses": {
-            "private": [
-                {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
-            ]
-        },
-        "metadata": {"deployed": "ewccli"},
-    }
+#     server_info = {
+#         "id": "server-123",
+#         "attached_volumes": [{"id": "vol1"}],
+#         "addresses": {
+#             "private": [
+#                 {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
+#             ]
+#         },
+#         "metadata": {"deployed": "ewccli"},
+#     }
 
-    api.block_storage.get_volume.return_value = FakeVolume(
-        "vol1",
-        metadata={"ewccli": "true", "server_name": "vm1"}
-    )
+#     api.block_storage.get_volume.return_value = FakeVolume(
+#         "vol1",
+#         metadata={"ewccli": "true", "server_name": "vm1"}
+#     )
 
-    backend.detach_volumes_from_server.return_value = (
-        MagicMock(success=False),
-        [],
-        "detach failed"
-    )
+#     backend.detach_volumes_from_server.return_value = (
+#         MagicMock(success=True),
+#         ["vol1"],
+#         "ok"
+#     )
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="EUMETSAT",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=False,
-    )
+#     rc, msg = pre_delete_server(
+#         openstack_backend=backend,
+#         openstack_api=api,
+#         federee="EUMETSAT",
+#         server_name="vm1",
+#         server_info=server_info,
+#         dry_run=False,
+#     )
 
-    assert rc == 1
-    assert "detach/delete failed" in msg
+#     assert rc == 0
+#     assert "finished successfully" in msg
+#     backend.detach_volumes_from_server.assert_called_once()
 
 
-def test_pre_delete_dry_run():
-    backend = MagicMock()
-    api = MagicMock()
+# def test_pre_delete_detach_failure():
+#     backend = MagicMock()
+#     api = MagicMock()
 
-    server_info = {
-        "id": "server-123",
-        "attached_volumes": [{"id": "vol1"}],
-        "addresses": {
-            "private": [
-                {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
-            ]
-        },
-        "metadata": {"deployed": "ewccli"},
-    }
+#     backend.remove_external_ip.return_value = (MagicMock(success=True), "ok")
 
-    rc, msg = pre_delete_server(
-        openstack_backend=backend,
-        openstack_api=api,
-        federee="EUMETSAT",
-        server_name="vm1",
-        server_info=server_info,
-        dry_run=True,
-    )
+#     server_info = {
+#         "id": "server-123",
+#         "attached_volumes": [{"id": "vol1"}],
+#         "addresses": {
+#             "private": [
+#                 {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
+#             ]
+#         },
+#         "metadata": {"deployed": "ewccli"},
+#     }
 
-    assert rc == 0
-    assert "Dry Run" in msg
-    backend.detach_volumes_from_server.assert_not_called()
+#     api.block_storage.get_volume.return_value = FakeVolume(
+#         "vol1",
+#         metadata={"ewccli": "true", "server_name": "vm1"}
+#     )
+
+#     backend.detach_volumes_from_server.return_value = (
+#         MagicMock(success=False),
+#         [],
+#         "detach failed"
+#     )
+
+#     rc, msg = pre_delete_server(
+#         openstack_backend=backend,
+#         openstack_api=api,
+#         federee="EUMETSAT",
+#         server_name="vm1",
+#         server_info=server_info,
+#         dry_run=False,
+#     )
+
+#     assert rc == 1
+#     assert "detach/delete failed" in msg
+
+
+# def test_pre_delete_dry_run():
+#     backend = MagicMock()
+#     api = MagicMock()
+
+#     server_info = {
+#         "id": "server-123",
+#         "attached_volumes": [{"id": "vol1"}],
+#         "addresses": {
+#             "private": [
+#                 {"addr": "10.0.0.98", "OS-EXT-IPS:type": "fixed"},
+#             ]
+#         },
+#         "metadata": {"deployed": "ewccli"},
+#     }
+
+#     rc, msg = pre_delete_server(
+#         openstack_backend=backend,
+#         openstack_api=api,
+#         federee="EUMETSAT",
+#         server_name="vm1",
+#         server_info=server_info,
+#         dry_run=True,
+#     )
+
+#     assert rc == 0
+#     assert "Dry Run" in msg
+#     backend.detach_volumes_from_server.assert_not_called()

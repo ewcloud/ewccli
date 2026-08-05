@@ -240,12 +240,7 @@ def show_server_inputs_difference_table(server_name: str, diffs: dict):
     for param, existing, requested in diffs:
         table.add_row(param, existing, requested)
 
-    console.print(table)
-
-    raise ClickException(
-        f"The server '{server_name}' already exists with different configuration."
-        " Use a different --server-name or use --force to redeploy."
-    )
+    return table
 
 
 def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) -> bool:
@@ -946,52 +941,90 @@ def identify_server_reconfiguration(
     except Exception as e:
         return (
             1,
-            f"Failed to retrieve information for server {server_name} due to {e}",
+            f"[Identify Server Reconfiguration] Failed to retrieve information for server {server_name} due to {e}",
             outputs,
         )
 
-    if existing_server_info:
-        if not (
-            existing_server_info.metadata.get("deployed")
-            and existing_server_info.metadata.get("deployed") == "ewccli"
-        ):
-            return (
-                1,
-                f"Server {server_name} already exists and it has not been deployed with the EWC CLI. Exiting.",
-                outputs,
-            )
-
-        try:
-            # Fetch image name from the image ID
-            image = openstack_api.compute.find_image(
-                getattr(existing_server_info.image, "id", None)
-            )
-            server_info_image = image.name if image else None
-        except Exception as e:
-            return (
-                1,
-                f"Could not retrieve image name of {server_name} due to {e}",
-                outputs,
-            )
-
-        diffs = check_server_conflict_with_inputs(
-            server_info=existing_server_info,
-            server_info_image=server_info_image,
-            image_name=resolved_image_name,
-            keypair_name=keypair_name,
-            flavour_name=flavour_name,
-            networks=networks,
-            security_groups=security_groups,
+    if not existing_server_info:
+        return (
+            0,
+            f"[Identify Server Reconfiguration] Server {server_name} doesn't exists.",
+            outputs,
         )
 
-        if diffs:
-            show_server_inputs_difference_table(
-                server_name=server_name, diffs=diffs
+    status = existing_server_info.status  # usually "ACTIVE", "ERROR", "BUILD", etc.
+
+    if status == "ERROR":
+
+        parts = [f"[Identify Server Reconfiguration] Server '{server_name}' is in ERROR state."]
+
+        # Always add the guidance text
+        parts.append(
+            "Verify why it failed from the OpenStack UI. "
+            "If you need to retry you can use the --force flag with your command "
+            "or you can delete the VM first (you can use `ewc infra delete VM_NAME`) and retry the deployment."
+        )
+
+        error_state_message = "\n".join(parts)   
+        return (
+            1,
+            f"{error_state_message}",
+            outputs,
+        )
+
+    if not (
+        existing_server_info.metadata.get("deployed")
+        and existing_server_info.metadata.get("deployed") == "ewccli"
+    ):
+        return (
+            1,
+            f"[Identify Server Reconfiguration] Server {server_name} already exists and it has not been deployed with the EWC CLI. Exiting.",
+            outputs,
+        )
+
+    try:
+        # Fetch image name from the image ID
+        image = openstack_api.compute.find_image(
+            getattr(existing_server_info.image, "id", None)
+        )
+        server_info_image = image.name if image else None
+    except Exception as e:
+        return (
+            1,
+            f"[Identify Server Reconfiguration] Could not retrieve image name of {server_name} due to {e}",
+            outputs,
+        )
+
+    diffs = check_server_conflict_with_inputs(
+        server_info=existing_server_info,
+        server_info_image=server_info_image,
+        image_name=resolved_image_name,
+        keypair_name=keypair_name,
+        flavour_name=flavour_name,
+        networks=networks,
+        security_groups=security_groups,
+    )
+
+    if diffs:
+        table = show_server_inputs_difference_table(
+            server_name=server_name, diffs=diffs
+        )
+        if table:
+            console.print(table)
+
+            diff_table_message = (
+                f"[Identify Server Reconfiguration] The server '{server_name}' already exists with different configuration."
+                " Use a different --server-name or use --force to redeploy."
+            )
+            return (
+                1,
+                f"{diff_table_message}",
+                outputs,
             )
 
     return (
         0,
-        f"No reconfiguration needed",
+        "[Identify Server Reconfiguration] No reconfiguration needed.",
         outputs,
     )
 
@@ -1285,11 +1318,21 @@ def create_server_command(
 
     #### VERIFY IF SERVER RECONFIGURATION IS NEEDED
     if not force:
-        identify_server_reconfiguration(
+        sr_status_code, sr_message, _ = identify_server_reconfiguration(
             openstack_api=openstack_api,
             server_inputs=server_inputs,
             pre_deploy_server_outputs=pre_deploy_server_outputs  
         )
+        if sr_status_code != 0:
+            console.print(
+                Panel(sr_message, title="Error", style="red")
+            )
+            sys.exit(1)
+
+        console.print(
+            Panel(sr_message, title="OK", style="green")
+        )
+
 
     #### DEPLOY SERVER ACTION
     os_status_code, os_message, deploy_server_outputs = deploy_server(
