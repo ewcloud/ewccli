@@ -404,7 +404,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     )
 
     # Take item information
-    _LOGGER.info(f"The item will be deployed on {federee} side of the EWC.")
+    _LOGGER.info(f"The item will be deployed on {federee} ({region}) side of the EWC.")
 
     #################################################################################
     # Retrieve item and item info
