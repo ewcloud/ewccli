@@ -169,7 +169,7 @@ def test_resolve_specific_image(conn, backend):
         flavour_name="vm.a6000.1",
         is_gpu=True,
     )
-    print(msg)
+
     assert code == 0
 
     from ewccli.commands.commons_infra import normalize_os_image
@@ -417,7 +417,7 @@ def test_identify_server_reconfiguration_existing_server(conn):
         )
 
     assert code == 0
-    assert msg == "No reconfiguration needed"
+    assert msg == "[Identify Server Reconfiguration] No reconfiguration needed."
     assert outputs == {}
 
 def test_identify_server_reconfiguration_wrong_origin(conn):
@@ -608,7 +608,8 @@ def test_create_server_command_success(conn):
         "ewccli.commands.commons_infra.pre_deploy_server_setup",
         return_value=(0, "ok", pre_deploy_outputs),
     ) as mock_pre, patch(
-        "ewccli.commands.commons_infra.identify_server_reconfiguration"
+        "ewccli.commands.commons_infra.identify_server_reconfiguration",
+        return_value=(0, "[Identify Server Reconfiguration] No reconfiguration needed.", {})
     ) as mock_identify, patch(
         "ewccli.commands.commons_infra.deploy_server",
         return_value=(0, "ok", deploy_outputs),
