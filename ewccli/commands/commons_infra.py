@@ -165,9 +165,12 @@ def check_server_conflict_with_inputs(
             return ", ".join(server_info.addresses.keys())
         return ""
 
-    def _get_security_groups_string(server_info):
+    def _get_security_group_names(server_info):
         groups = getattr(server_info, "security_groups", [])
-        return ",".join(sg.get("name") for sg in groups)
+        return [
+            sg.get("name") if hasattr(sg, "get") else getattr(sg, "name", None)
+            for sg in groups
+        ]
 
     if image_name and server_info_image:
         compare("Image", image_name, server_info_image)
@@ -187,11 +190,15 @@ def check_server_conflict_with_inputs(
         compare("Network", ",".join(networks), _get_network_names(server_info))
 
     if security_groups:
-        compare(
-            "Security Groups",
-            ",".join(security_groups),
-            _get_security_groups_string(server_info),
-        )
+        actual_security_groups = _get_security_group_names(server_info)
+        if sorted(actual_security_groups) != sorted(security_groups):
+            diffs.append(
+                (
+                    "Security Groups",
+                    ",".join(actual_security_groups),
+                    ",".join(security_groups),
+                )
+            )
 
     return diffs
 
