@@ -8,7 +8,7 @@
 """Initialize ewccli package."""
 
 __title__ = "ewccli"
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 __author__ = "European Weather Cloud <support@europeanweather.cloud>"
 
 __all__ = [

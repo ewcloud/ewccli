@@ -3,6 +3,15 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.7.1](https://github.com/ewcloud/ewccli/compare/0.7.0...0.7.1) (2026-08-06)
+
+
+### Bug Fixes
+
+* correct data format for external ip flag input ([#150](https://github.com/ewcloud/ewccli/issues/150)) ([822037a](https://github.com/ewcloud/ewccli/commit/822037a974472fc33d3f57bfb440fabaef2a9e33))
+* Expose VM with ERROR state ([#151](https://github.com/ewcloud/ewccli/issues/151)) ([e3e1958](https://github.com/ewcloud/ewccli/commit/e3e19581c407e721d7ae0a0cd538b40dfac254c1))
+* wrong datatype for ewc login flag ([#148](https://github.com/ewcloud/ewccli/issues/148)) ([91df2be](https://github.com/ewcloud/ewccli/commit/91df2bec74ff10eb7ea95ecab29bd378d2c0962a))
+
 # [0.7.0](https://github.com/ewcloud/ewccli/compare/0.6.0...0.7.0) (2026-08-03)
 
 
