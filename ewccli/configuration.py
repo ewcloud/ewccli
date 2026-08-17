@@ -165,8 +165,8 @@ class EWCCLIConfiguration:
 
     DEFAULT_GPU_FLAVOURS_MAP: dict[Federee, dict[Region, str]] = {
         Federee.ECMWF.value: {
-            Region.CCI1.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
-            Region.CCI2.value: "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
+            Region.CCI1.value: "8cpu-64gbmem-30gbdisk-a100.2g.20gbgpu",
+            Region.CCI2.value: "8cpu-64gbmem-30gbdisk-a100.2g.20gbgpu",
         },
 
         Federee.EUMETSAT.value: {
