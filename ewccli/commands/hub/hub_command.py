@@ -116,7 +116,7 @@ def categorize_item_inputs(
 
         # If the item input has no default, it should be mandatory, but if the variable is known by the ewccli,
         # because it's related to the infrastructure or it's very specific to EWC, then the default will be applied by the EWCCLI
-        # TODO: Change once we have the new variable specific to ewccli default parameters (e.g. tenancy_name, network_name)
+        # TODO: Change once we have the new variable specific to ewccli default parameters (e.g. tenant_name, network_name)
         elif item_input.get("name", "") in HUB_ENV_VARIABLES_MAP:
             default_inputs.append(item_input)
         else:
@@ -380,7 +380,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     _LOGGER.info(f"Using `{cli_profile.get('profile')}` profile.")
 
-    tenancy_name: str = cli_profile.get("tenant_name")
+    tenant_name: str = cli_profile.get("tenant_name")
     federee: str = cli_profile.get("federee")
     region: str = cli_profile.get("region")
 
@@ -594,7 +594,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                         get_hub_item_env_variable_value(
                             hub_item_env_variables_map=HUB_ENV_VARIABLES_MAP,
                             federee=federee,
-                            tenancy_name=tenancy_name,
+                            tenant_name=tenant_name,
                             variable_name=default_item_input_name,
                             openstack_api=openstack_api,
                         )
@@ -667,7 +667,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
             dns_record_name = build_dns_record_name(
                 server_name=server_name,
-                tenancy_name=tenancy_name,
+                tenant_name=tenant_name,
                 hosting_location=ewc_hub_config.FEDEREE_DNS_MAPPING[federee],
             )
 
