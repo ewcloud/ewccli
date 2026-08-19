@@ -15,10 +15,14 @@ from click import ClickException
 from click.testing import CliRunner
 from unittest.mock import patch
 
+from configparser import ConfigParser
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+
 from ewccli.ewccli import cli
 from ewccli.enums import Federee, Region
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.commands.login_command import check_and_generate_ssh_keys
+from ewccli.commands.login_command import check_and_generate_ssh_keys, init_command
 from ewccli.utils import delete_cli_profile, _resolve_profile
 
 
@@ -196,3 +200,69 @@ def test_validate_region_valid_eumetsat():
     print("EXCEPTION:", result.exception)
     print("TRACEBACK:", result.exc_info)
     assert result.exit_code == 0
+
+
+def test_init_command_converts_path_objects_to_strings_without_prompt(tmp_path):
+    # --- Generate a REAL RSA keypair in Python ---
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+    private_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    public_key = private_key.public_key()
+    public_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH,
+    )
+
+    # --- Write valid keys to tmp_path ---
+    fake_priv = tmp_path / "id_rsa"
+    fake_pub = tmp_path / "id_rsa.pub"
+
+    fake_priv.write_bytes(private_bytes)
+    fake_pub.write_bytes(public_bytes)
+
+    # --- Inputs ---
+    federee = Federee.EUMETSAT.value
+    region = Region.R1.value
+    tenant_name = "dummy-tenant"
+
+    # --- Direct call: no CLI runner, no stdin, no ssh-keygen ---
+    exit_code = init_command(
+        application_credential_id="dummy",
+        application_credential_secret="dummy",
+        ssh_public_key_path=str(fake_pub),
+        ssh_private_key_path=str(fake_priv),
+        tenant_name=tenant_name,
+        federee=federee,
+        region=region,
+        profile=None,
+    )
+
+    assert exit_code == 0
+
+    # --- Load saved profile ---
+    resolved_profile = _resolve_profile(
+        federee=federee,
+        region=region,
+        tenant_name=tenant_name
+    )
+
+    cfg = ConfigParser()
+    cfg.read(ewc_hub_config.EWC_CLI_PROFILES_PATH)
+
+    saved_priv = cfg.get(resolved_profile, "ssh_private_key_path")
+    saved_pub = cfg.get(resolved_profile, "ssh_public_key_path")
+
+    # --- Assertions: conversion to string ---
+    assert isinstance(saved_priv, str)
+    assert isinstance(saved_pub, str)
+
+    assert saved_priv.endswith("id_rsa")
+    assert saved_pub.endswith("id_rsa.pub")
+
+    # --- Cleanup ---
+    delete_cli_profile(profile=resolved_profile)
