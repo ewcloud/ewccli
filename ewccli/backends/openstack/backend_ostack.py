@@ -58,22 +58,14 @@ class OpenstackBackend:
         :param application_credential_secret: OpenStack application credential secret.
         :param auth_url: Openstack Auth URL
         """
-        try:
-            # Try loading from parameters or fall back to env vars
-            self.credential_id = application_credential_id or os.getenv(
-                "OS_APPLICATION_CREDENTIAL_ID"
-            )
-            self.credential_secret = application_credential_secret or os.getenv(
-                "OS_APPLICATION_CREDENTIAL_SECRET"
-            )
-            self.auth_url = auth_url
-
-        except (ConfigException, Exception) as e:
-            _LOGGER.error(
-                f"🔐 Missing OpenStack parameters due to: {e}\n\n"
-                "❌ Run `ewc login` first."
-            )
-
+        # Try loading from parameters or fall back to env vars
+        self.credential_id = application_credential_id or os.getenv(
+            "OS_APPLICATION_CREDENTIAL_ID"
+        )
+        self.credential_secret = application_credential_secret or os.getenv(
+            "OS_APPLICATION_CREDENTIAL_SECRET"
+        )
+        self.auth_url = auth_url
 
     def connect(
         self,
