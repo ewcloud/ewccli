@@ -10,7 +10,7 @@
 
 import os
 import re
-from typing import Optional
+from typing import Optional, Tuple
 from pathlib import Path
 
 import rich_click as click
@@ -307,13 +307,13 @@ def check_and_generate_ssh_keys(
     ssh_public_key_path: Optional[str],
     ssh_private_key_path: Optional[str],
     resolved_profile: str
-):
+) -> Tuple[str, str]:
     """Check for SSH keys, prompt to generate if missing"""
     if not ssh_private_key_path:
-        ssh_private_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa"
+        ssh_private_key_path = str(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa")
 
     if not ssh_public_key_path:
-        ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa.pub"
+        ssh_public_key_path = str(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa.pub")
 
     private_exists = Path(ssh_private_key_path).exists()
     public_exists = Path(ssh_public_key_path).exists()
@@ -512,7 +512,6 @@ def init_command(
     #     if token == "":
     #         token = None
 
-    #
     save_default_login_profile(
         federee=federee,
         region=region,
