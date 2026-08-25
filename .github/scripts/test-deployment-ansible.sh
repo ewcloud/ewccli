@@ -196,6 +196,6 @@ cp $GITHUB_STEP_SUMMARY "$ARTIFACTS_DIR/summary.md"
 # --- Step 12 --- 
 echo "Re-rasing test errors (if any)"
 if [ "$EWCCLI_STATUS" = "failing" ]; then
-  echo "::error::One or more failures caught during testing. See the summary or logs for details"
+  echo "::error::Deployment test(s) FAILING!. See the Summary or logs for details""
   exit 1
 fi
