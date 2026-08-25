@@ -101,9 +101,9 @@ set -e
 echo "Deploy (including VM provisioning)"
 
 if [ -z "${EXTRA_VARS}" ]; then 
-  EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --extra-volume 30 --external-ip)
+  EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-run-${GITHUB_RUN_ID}" --extra-volume 30 --external-ip)
 else
-  EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-vm-${GITHUB_RUN_ID}" --extra-volume 30 --external-ip "${EXTRA_VARS[@]}")
+  EWCCLI_DEPLOY_CMD=(ewc hub --path-to-catalog "${PATH_TO_CATALOG}" deploy "${ITEM_NAME}" --server-name "github-run-${GITHUB_RUN_ID}" --extra-volume 30 --external-ip "${EXTRA_VARS[@]}")
 fi
 
 EWCCLI_DEPLOY_EXIT_CODE=0
@@ -116,7 +116,7 @@ set -e
 echo "Cleanup"
 
 EWCCLI_CLEANUP_EXIT_CODE=0
-EWCCLI_CLEANUP_CMD=(ewc infra delete "github-vm-${GITHUB_RUN_ID}")
+EWCCLI_CLEANUP_CMD=(ewc infra delete "github-run-${GITHUB_RUN_ID}")
 set +e
 "${EWCCLI_CLEANUP_CMD[@]}"
 EWCCLI_CLEANUP_EXIT_CODE=$?
