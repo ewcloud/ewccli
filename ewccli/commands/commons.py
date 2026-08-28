@@ -589,19 +589,19 @@ def describe_object(obj: dict) -> None:
 
 
 def build_dns_record_name(
-    server_name: str, tenancy_name: str, hosting_location: str
+    server_name: str, tenant_name: str, hosting_location: str
 ) -> str:
     """
     Build a DNS hostname using the ewcloud pattern:
     <machine-name>.<tenancy-name>.<hosting-location>.ewcloud.host
     Source: https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+DNS
     """
-    if not all([server_name, tenancy_name, hosting_location]):
+    if not all([server_name, tenant_name, hosting_location]):
         raise ValueError(
-            "All arguments (server_name, tenancy_name, hosting_location) are required."
+            "All arguments (server_name, tenant_name, hosting_location) are required."
         )
 
-    dns_record_name = f"{server_name}.{tenancy_name}.{hosting_location}.ewcloud.host"
+    dns_record_name = f"{server_name}.{tenant_name}.{hosting_location}.ewcloud.host"
     _LOGGER.debug("Built DNS Record Name: %s", dns_record_name)
     return dns_record_name
 

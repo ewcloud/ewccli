@@ -10,6 +10,9 @@
 
 
 import pytest
+import tempfile
+import subprocess
+
 from pathlib import Path
 from click import ClickException
 from click.testing import CliRunner
@@ -160,8 +163,6 @@ def test_only_public_key_exists(tmp_path):
         )
 
 def test_validate_region_valid_eumetsat():
-    import tempfile
-    import subprocess
     runner = CliRunner()
 
     # Create temporary directory for SSH keys
@@ -266,3 +267,71 @@ def test_init_command_converts_path_objects_to_strings_without_prompt(tmp_path):
 
     # --- Cleanup ---
     delete_cli_profile(profile=resolved_profile)
+
+
+def test_cloud_name_matches_and_credentials_loaded(mocker):
+    runner = CliRunner()
+
+    mocker.patch(
+        "ewccli.commands.login_command.openstack_config_available",
+        return_value=True
+    )
+
+    # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = Path(tmpdir) / "id_rsa"
+        pub = Path(tmpdir) / "id_rsa.pub"
+
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True
+        )
+
+        # Clouds.yaml template
+        clouds_yaml = Path(tmpdir) / "test-clouds.yaml"
+        clouds_yaml.write_text(
+            """
+clouds:
+  openstack:
+    auth:
+      auth_url: "http://example.com"
+      application_credential_id: "ID123"
+      application_credential_secret: "SECRET123"
+    regions:
+        - ECIS-R1
+    interface: "public"
+    identity_api_version: 3
+    auth_type: "v3applicationcredential"
+"""
+        )
+
+        federee = Federee.EUMETSAT.value
+        region = Region.R1.value
+        tenant_name = "dummy-dummy-dummy"
+
+        result = runner.invoke(
+            cli,
+            [
+                "login",
+                "--cloud-name", "openstack",
+                "--tenant-name", tenant_name ,
+                "--federee", federee,
+                "--region", region,
+                "--ssh-public-key-path", str(pub),
+                "--ssh-private-key-path", str(priv),
+            ],
+            env={
+                "OS_CLIENT_CONFIG_FILE": str(clouds_yaml)
+            }
+        )
+
+    resolved_profile = _resolve_profile(federee=federee, region=region, tenant_name=tenant_name)
+    delete_cli_profile(profile=resolved_profile)
+
+    if result.exit_code != 0:
+        print("\n=== CLI OUTPUT ===")
+        print(result.output)
+        print("\n=== EXCEPTION ===")
+        print(result.exception)
+    assert result.exit_code == 0

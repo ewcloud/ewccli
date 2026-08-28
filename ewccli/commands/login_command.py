@@ -72,12 +72,27 @@ def cloud_yaml_exists():
     return any(p.exists() for p in default_paths)
 
 
-def openstack_config_available():
+def openstack_config_available(cloud_name: str = "openstack"):
     """Verify if OpenStack cloud config is available."""
     try:
         os_config = OpenStackConfig()
         if cloud_yaml_exists():
-            os_config.get_one_cloud()
+            cloud_names = os_config.get_cloud_names()
+
+            if cloud_name not in cloud_names:
+                _LOGGER.warning(
+                    "OpenStack cloud config found at '~/.config/openstack/cloud.yaml'\n"
+                    f"But no clouds match the cloud name '{cloud_name}'\n"
+                    f"{cloud_names}\n\n"
+                    "You can choose the cloud you want with the --cloud-name flag.\n"
+                    "You can set the config path with the environment variable:\n"
+                    "  OS_CLIENT_CONFIG_FILE=/path/to/clouds.yaml\n"
+                    "Alternatively, provide your credentials using:\n"
+                    "  OS_APPLICATION_CREDENTIAL_ID and OS_APPLICATION_CREDENTIAL_SECRET\n"
+                    "Or continue below to enter them manually."
+                )
+                return False
+            return True
         else:
             _LOGGER.warning(
                 "⚠️ OpenStack cloud config not found at '~/.config/openstack/cloud.yaml'\n"
@@ -88,7 +103,6 @@ def openstack_config_available():
                 "Or continue below to enter them manually."
             )
             return False
-        return True
     except openstack_config_exception as e:
         _LOGGER.warning(
             f"⚠️ OpenStack cloud config not found: {e}\n"
@@ -168,7 +182,7 @@ def init_options(func):
         help=(
             "OpenStack Application Credential ID. "
             "Ignored if environment variable OS_APPLICATION_CREDENTIAL_ID is set, "
-            "or if a cloud.yaml config is found at '~/.config/openstack/cloud.yaml' "
+            "or if a clouds.yaml config is found at '~/.config/openstack/cloud.yaml' "
             "or at the path specified by OS_CLIENT_CONFIG_FILE."
         ),
     )(func)
@@ -179,8 +193,19 @@ def init_options(func):
         help=(
             "OpenStack Application Credential Secret. "
             "Ignored if environment variable OS_APPLICATION_CREDENTIAL_SECRET is set, "
-            "or if a cloud.yaml config is found at '~/.config/openstack/cloud.yaml' "
+            "or if a clouds.yaml config is found at '~/.config/openstack/cloud.yaml' "
             "or at the path specified by OS_CLIENT_CONFIG_FILE."
+        ),
+    )(func)
+    func = click.option(
+        "--cloud-name",
+        required=False,
+        default="openstack",
+        show_default=True,
+        help=(
+            "OpenStack cloud name from OpenStack cloud config file available at '~/.config/openstack/cloud.yaml' "
+            "or at the path specified by OS_CLIENT_CONFIG_FILE."
+            " This flag is ignored if the cloud config file is not present."
         ),
     )(func)
     # func = click.option(
@@ -391,7 +416,8 @@ def init_command(
     tenant_name: str,
     federee: str,
     region: str,
-    profile: str = None
+    profile: Optional[str] = None,
+    cloud_name: str = "openstack"
     # token: str,
 ):
     """EWC CLI Login."""
@@ -418,6 +444,8 @@ def init_command(
             f"Region '{region}' is not valid for federee '{federee}'. "
             f"Allowed: {', '.join(allowed_regions)}"
         )
+
+    console.print(f"Considering region: {region}\n")
 
     resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
 
@@ -448,13 +476,27 @@ def init_command(
     )
     
 
-    if openstack_config_available():
+    if openstack_config_available(cloud_name=cloud_name):
+        os_cloud_config_file_path = os.getenv("OS_CLIENT_CONFIG_FILE")
+
+        os_cloud_config_selected_path = os_cloud_config_file_path if os_cloud_config_file_path else "~/.config/openstack/clouds.yaml"
         console.print(
-            "🔑 [bold green]Openstack cloud.yaml found at ~/.config/openstack/clouds.yaml[/bold green]"
-            " – skipping Openstack ID and secret requirements."
+            f"🔑 [bold green]Openstack cloud config found at {os_cloud_config_selected_path} [/bold green]"
+            " – skipping Openstack ID and secret requirement prompt."
         )
-        application_credential_id = ""
-        application_credential_secret = ""
+        config = (
+            OpenStackConfig()
+        )   # default to ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
+    
+        cloud = (
+            config.get_one(cloud=cloud_name)
+        )
+
+        cloud_config = cloud.config.get("auth")
+        application_credential_id = cloud_config.get("application_credential_id")
+        application_credential_secret = cloud_config.get(
+            "application_credential_secret"
+        )
 
     elif not application_credential_id or not application_credential_secret:
         if not application_credential_id:

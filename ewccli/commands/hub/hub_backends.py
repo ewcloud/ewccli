@@ -48,7 +48,7 @@ HUB_ENV_VARIABLES_MAP = {
 def get_hub_item_env_variable_value(
     hub_item_env_variables_map: dict,
     federee: str,
-    tenancy_name: str,
+    tenant_name: str,
     variable_name: str,
     openstack_api: Optional[connection.Connection] = None,
 ) -> str:
@@ -62,7 +62,7 @@ def get_hub_item_env_variable_value(
         hub_item_env_variables_map
         openstack_api: An authenticated OpenStack SDK client.
         federee (str): The federee key (e.g., Federee.ECMWF.value, Federee.EUMETSAT.value).
-        tenancy_name (str): tenancy_name from config file created with ewc login.
+        tenant_name (str): tenant_name from config file created with ewc login.
         variable_name (str): The variable name to retrieve from HUB_ENV_VARIABLES_MAP.
 
     Returns:
@@ -106,7 +106,7 @@ def get_hub_item_env_variable_value(
 
     if variable_name == "dns_domain":
         dns_domain = (
-            f"{tenancy_name}.{ewc_hub_config.FEDEREE_DNS_MAPPING[federee]}.ewcloud.host"
+            f"{tenant_name}.{ewc_hub_config.FEDEREE_DNS_MAPPING[federee]}.ewcloud.host"
         )
         hub_item_env_variables_map["dns_domain"] = {
             federee: dns_domain,

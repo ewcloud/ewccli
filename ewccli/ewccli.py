@@ -48,6 +48,7 @@ def init(
     tenant_name: str,
     federee: str,
     region: str,
+    cloud_name: str = "openstack",
     profile: Optional[str] = None,
     # token: str,
 ):
@@ -61,6 +62,7 @@ def init(
         federee=federee,
         profile=profile,
         region=region,
+        cloud_name=cloud_name
         # token=token,
     )
 

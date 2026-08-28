@@ -49,7 +49,7 @@ class OpenstackBackend:
         self,
         application_credential_id: Optional[str] = None,
         application_credential_secret: Optional[str] = None,
-        auth_url: Optional[str] = None,
+        auth_url: Optional[str] = None
     ):
         """
         Initialize the OpenStack backend.
@@ -58,39 +58,14 @@ class OpenstackBackend:
         :param application_credential_secret: OpenStack application credential secret.
         :param auth_url: Openstack Auth URL
         """
-        try:
-            if application_credential_id and application_credential_secret:
-                # Try loading from parameters or fall back to env vars
-                self.credential_id = application_credential_id or os.getenv(
-                    "OS_APPLICATION_CREDENTIAL_ID"
-                )
-                self.credential_secret = application_credential_secret or os.getenv(
-                    "OS_APPLICATION_CREDENTIAL_SECRET"
-                )
-                self.auth_url = auth_url
-            else:
-                config = (
-                    OpenStackConfig()
-                )  # ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
-                # Get the default cloud if no name is specified
-                cloud = (
-                    config.get_one()
-                )  # It can be set with OS_CLOUD directly in Openstack
-                cloud_config = cloud.config.get("auth")
-                self.credential_id = cloud_config.get("application_credential_id")
-                self.credential_secret = cloud_config.get(
-                    "application_credential_secret"
-                )
-                self.auth_url = cloud_config.get("auth_url")
-
-        except (ConfigException, Exception) as e:
-            _LOGGER.error(
-                f"🔐 Missing OpenStack credentials.: {e}\n\n"
-                "❌ No config found. Run `ewc login` first or have a cloud.yaml"
-                " under ~/.config/openstack/clouds.yaml or set the following environment variables:\n"
-                "-OS_APPLICATION_CREDENTIAL_ID"
-                "-OS_APPLICATION_CREDENTIAL_SECRET"
-            )
+        # Try loading from parameters or fall back to env vars
+        self.credential_id = application_credential_id or os.getenv(
+            "OS_APPLICATION_CREDENTIAL_ID"
+        )
+        self.credential_secret = application_credential_secret or os.getenv(
+            "OS_APPLICATION_CREDENTIAL_SECRET"
+        )
+        self.auth_url = auth_url
 
     def connect(
         self,
