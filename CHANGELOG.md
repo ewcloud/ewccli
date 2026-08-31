@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.8.0](https://github.com/ewcloud/ewccli/compare/0.7.1...0.8.0) (2026-08-31)
+
+
+### Bug Fixes
+
+* Replace depleted default GPU flavour on CCI1 and CCI2 regions ([#155](https://github.com/ewcloud/ewccli/issues/155)) ([bced25b](https://github.com/ewcloud/ewccli/commit/bced25b8aa2bd29c0b74473336cc3dd683d439d4))
+* TypeError: option values must be strings during ewc login ([#158](https://github.com/ewcloud/ewccli/issues/158)) ([0274a31](https://github.com/ewcloud/ewccli/commit/0274a315feead80c597007fe73eb390834f6aaa7))
+* Use of OpenStack clouds.yaml file ([#160](https://github.com/ewcloud/ewccli/issues/160)) ([556851a](https://github.com/ewcloud/ewccli/commit/556851ae3efdef38cf7d98ecec4dd4b02dc87adf))
+
+
+### Features
+
+* reduce ansible version to release ewccli on conda-forge ([#161](https://github.com/ewcloud/ewccli/issues/161)) ([48e5d62](https://github.com/ewcloud/ewccli/commit/48e5d6283aba4abd3533b81f77e938d9652d5c96))
+
 ## [0.7.1](https://github.com/ewcloud/ewccli/compare/0.7.0...0.7.1) (2026-08-06)
 
 
