@@ -10,7 +10,7 @@
 
 import os
 import shutil
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict, Any
 
 import ansible_runner
 
@@ -23,15 +23,15 @@ _LOGGER = get_logger(__name__)
 class AnsibleBackend:
     """Ansible backend class."""
 
-    def run_ansible_live(
+    def run_ansible_live(  # noqa: CCR001, CFQ002
         self,
         working_directory_path: str,
         cmdline: List[str],
         description: Optional[str] = None,
         host: Optional[str] = None,
-        env: Optional[dict] = None,
+        env: Optional[Dict[str, str]] = None,
         extra_vars: Optional[str] = None,
-    ):
+    ) -> int:
         """
         Run an Ansible task (playbook or ad-hoc module) and stream output live.
 
@@ -52,17 +52,17 @@ class AnsibleBackend:
             host or "N/A",
         )
 
-        def _handle_event(event):
+        # --- typed event handler ---
+        def _handle_event(event: Dict[str, Any]) -> None:
             stdout = event.get("stdout")
             if stdout:
                 _LOGGER.debug(stdout)
-                pass
 
             if event.get("event") in ("runner_on_failed", "runner_on_unreachable"):
                 msg = f"❌ Task '{description}' failed on host '{host}'"
                 _LOGGER.error(msg)
 
-        run_args = dict(
+        run_args = dict(  # noqa: C408
             # Note:
             # The 'private_data_dir' parameter in ansible_runner becomes the base directory
             # for execution. Any relative paths in the cmdline (e.g., playbooks, inventories)
@@ -113,15 +113,16 @@ class AnsibleBackend:
             else:
                 _LOGGER.debug(f"Folder does not exist: {repo_path}")
 
-        return runner.rc
+        # mypy fix: runner.rc is Any → cast to int
+        return int(runner.rc)
 
-    def run_ansible(
+    def run_ansible(  # noqa: CFQ002
         self,
         description: str,
         command: List[str],
         timeout: Optional[int] = None,
         cwd: Optional[str] = None,
-        env: Optional[dict] = None,
+        env: Optional[Dict[str, str]] = None,
         dry_run: bool = False,
     ) -> tuple[int, str]:
         """Run ansible command."""
@@ -136,7 +137,9 @@ class AnsibleBackend:
 
         return return_code, message
 
-    def install_ansible_roles(self, requirements_path: str, dry_run: bool = False):
+    def install_ansible_roles(
+        self, requirements_path: str, dry_run: bool = False
+    ) -> Tuple[int, str]:
         """Install Ansible roles."""
         command = f"ansible-galaxy role install -r {requirements_path} --force"
         _LOGGER.info(f"Installing ansible roles from requirements: \n{command}\n")

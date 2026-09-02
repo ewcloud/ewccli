@@ -7,6 +7,7 @@
 
 import os
 from pathlib import Path
+from typing import List, Dict
 
 from ewccli.enums import Federee, Region, FedereeDNSMapping
 
@@ -68,21 +69,21 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "https://keystone.cloudferro.com:5000",
             Region.R1.value: "https://keystone.api.r1.cloud.eumetsat.int",
-            Region.R2.value: "https://keystone.api.r2.cloud.eumetsat.int"
+            Region.R2.value: "https://keystone.api.r2.cloud.eumetsat.int",
         },
     }
 
-    EWC_CLI_AUTH_URL_MAP: dict[str, Federee] = {
+    EWC_CLI_AUTH_URL_MAP: dict[str, str] = {
         url: federee
         for federee, regions in EWC_CLI_SITE_MAP.items()
         for url in regions.values()
     }
 
-    def allowed_regions(self, federee: str) -> list[str]:
-        return [region for region in self.EWC_CLI_SITE_MAP[federee].keys()]
+    def allowed_regions(self, federee: str) -> List[str]:
+        return list(self.EWC_CLI_SITE_MAP[federee].keys())
 
     # GPU images short custom names
-    EWC_CLI_GPU_IMAGES_SITE_MAP: dict[Federee, dict[Region, str]] = {
+    EWC_CLI_GPU_IMAGES_SITE_MAP: Dict[str, Dict[str, str]] = {
         Federee.ECMWF.value: {
             Region.CCI1.value: "Rocky-9-GPU",
             Region.CCI2.value: "Rocky-9-GPU",
@@ -91,7 +92,7 @@ class EWCCLIConfiguration:
             Region.WAW31.value: "Ubuntu-22.04-GPU",
             Region.R1.value: "Ubuntu-24.04-GPU",
             Region.R2.value: "Ubuntu-24.04-GPU",
-        }
+        },
     }
 
     # GPU images
@@ -102,7 +103,7 @@ class EWCCLIConfiguration:
     ]
 
     # Openstack value of the GPU images
-    EWC_CLI_OS_GPU_IMAGES_SITE_MAP: dict[Federee, dict[Region, str]] = {
+    EWC_CLI_OS_GPU_IMAGES_SITE_MAP: dict[str, dict[str, str]] = {
         Federee.ECMWF.value: {
             Region.CCI1.value: "Rocky-9.6-GPU",  # This can be find after normalization
             Region.CCI2.value: "Rocky-9.6-GPU",  # This can be find after normalization
@@ -117,7 +118,7 @@ class EWCCLIConfiguration:
     # Flavors
 
     # CPU
-    DEFAULT_CPU_FLAVOURS_MAP: dict[Federee, dict[Region, str]] = {
+    DEFAULT_CPU_FLAVOURS_MAP: dict[str, dict[str, str]] = {
         Federee.ECMWF.value: {
             Region.CCI1.value: "4cpu-4gbmem-30gbdisk",
             Region.CCI2.value: "4cpu-4gbmem-30gbdisk",
@@ -129,7 +130,7 @@ class EWCCLIConfiguration:
         },
     }
     # GPU
-    GPU_FLAVOURS_MAP: dict[Federee, dict[Region, list[str]]] = {
+    GPU_FLAVOURS_MAP: dict[str, dict[str, List[str]]] = {
         Federee.ECMWF.value: {
             Region.CCI1.value: [
                 "8cpu-64gbmem-30gbdisk-a100.1g.10gbgpu",
@@ -142,7 +143,6 @@ class EWCCLIConfiguration:
                 "16cpu-128gbmem-30gbdisk-40gbgpu",
             ],
         },
-
         Federee.EUMETSAT.value: {
             Region.WAW31.value: [
                 "vm.a6000.1",
@@ -163,12 +163,11 @@ class EWCCLIConfiguration:
         },
     }
 
-    DEFAULT_GPU_FLAVOURS_MAP: dict[Federee, dict[Region, str]] = {
+    DEFAULT_GPU_FLAVOURS_MAP: dict[str, dict[str, str]] = {
         Federee.ECMWF.value: {
             Region.CCI1.value: "8cpu-64gbmem-30gbdisk-a100.2g.20gbgpu",
             Region.CCI2.value: "8cpu-64gbmem-30gbdisk-a100.2g.20gbgpu",
         },
-
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "vm.a6000.2",
             Region.R1.value: "6cpu-32gbmem-h200.1g.18gb",
@@ -177,7 +176,7 @@ class EWCCLIConfiguration:
     }
 
     # Network
-    
+
     DEFAULT_NETWORK_MAP = {
         Federee.ECMWF.value: "private",
         Federee.EUMETSAT.value: "private",

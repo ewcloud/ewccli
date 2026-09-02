@@ -36,6 +36,7 @@ def make_volume(name="vol1", status="available", metadata=None):
         metadata=metadata or {},
     )
 
+
 def test_list_volumes_default_metadata(backend, fake_conn):
     vol1 = make_volume("v1", metadata={"ewccli": "true"})
     vol2 = make_volume("v2", metadata={"ewccli": "false"})
@@ -65,7 +66,6 @@ def test_create_volumes_dry_run(backend, fake_conn):
     assert res.changed is False
     assert vols == []
     assert "Dry Run" in msg
-
 
 
 def test_create_volumes_success(backend, fake_conn):
@@ -133,7 +133,9 @@ def test_delete_volumes_success(backend, fake_conn):
         base_name="server1",
     )
 
-    fake_conn.block_storage.delete_volume.assert_called_once_with(vol, ignore_missing=True)
+    fake_conn.block_storage.delete_volume.assert_called_once_with(
+        vol, ignore_missing=True
+    )
     fake_conn.block_storage.wait_for_delete.assert_called_once()
 
     assert res.success is True
@@ -163,6 +165,7 @@ def test_delete_volumes_failure(backend, fake_conn):
 
 #############################################################
 #############################################################
+
 
 def test_ssh_key_matches_openstack_true(tmp_path, backend):
     """

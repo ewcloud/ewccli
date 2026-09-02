@@ -2,23 +2,27 @@
 #
 # Package Name: ewccli
 # License: GPL-3.0-or-later
-# Copyright (c) 2025 EUMETSAT, ECMWF for European Weather Cloud
+# Copyright (c) 2025, 2026 EUMETSAT, ECMWF for European Weather Cloud
 # See the LICENSE file for more details
 
 
 """Openstack backend methods."""
 
+import re
 import time
 import sys
 import os
-from typing import Tuple, Optional, Any
+from typing import Tuple, Optional, Any, Dict, List
+from typing import Generator
+from typing import cast
+
 from collections import namedtuple
 from pathlib import Path
 
 import openstack
-from openstack.config import OpenStackConfig
-from openstack.exceptions import ConfigException
+from openstack.network.v2.network import Network
 from openstack.compute.v2.server import Server
+from openstack.compute.v2.image import Image
 
 from ewccli.logger import get_logger
 from ewccli.enums import Federee
@@ -34,8 +38,8 @@ _LOGGER = get_logger(__name__)
 ServerResult = namedtuple("ServerResult", "success changed failures")
 KeyPairResult = namedtuple("KeyPairResult", "success changed")
 ExtraVolumesResult = namedtuple("ExtraVolumesResult", "success changed")
-AttachVolumesResult = namedtuple("ExtraVolumesResult", "success changed")
-DetachVolumesResult = namedtuple("ExtraVolumesResult", "success changed")
+AttachVolumesResult = namedtuple("AttachVolumesResult", "success changed")
+DetachVolumesResult = namedtuple("DetachVolumesResult", "success changed")
 ExternalIPResult = namedtuple("ExternalIPResult", "success changed")
 NetworkResult = namedtuple("NetworkResult", "success changed")
 
@@ -49,7 +53,7 @@ class OpenstackBackend:
         self,
         application_credential_id: Optional[str] = None,
         application_credential_secret: Optional[str] = None,
-        auth_url: Optional[str] = None
+        auth_url: Optional[str] = None,
     ):
         """
         Initialize the OpenStack backend.
@@ -74,7 +78,7 @@ class OpenstackBackend:
         application_credential_secret: Optional[str] = None,
         app_version: str = "3",
         auth_type: str = "v3applicationcredential",
-    ):
+    ) -> openstack.connect:
         """Create connection to Openstack.
 
         :param auth_url: Openstack authorization URL
@@ -106,21 +110,21 @@ class OpenstackBackend:
 
         return os_connection
 
-    def create_server(
+    def create_server(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
         self,
         conn: openstack.connection.Connection,
         server_name: str,
         image_name: str,
         flavour_name: str,
-        networks: tuple,
+        networks: Optional[Tuple[str, ...]],
         keypair_name: str,
-        sec_groups: tuple,
+        sec_groups: Optional[Tuple[str, ...]],
         attempts: int = 1,
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
         boot_from_volume: bool = False,
         dry_run: bool = False,
-    ) -> Tuple[ServerResult, Optional[str], dict[Any, Any]]:
+    ) -> Tuple[ServerResult, Optional[str], Dict[str, Any]]:
         """Create an OpenStack server.
 
         Automatically deletes and retries the creation process until a server is available.
@@ -194,7 +198,12 @@ class OpenstackBackend:
 
         security_group_names = []
 
-        for security_group_name in sec_groups:
+        # Normalize sec_groups to a list[str]
+        normalized_sec_groups: list[str] = (
+            list(sec_groups) if sec_groups is not None else []
+        )
+
+        for security_group_name in normalized_sec_groups:
             sec_group_name = conn.get_security_group(security_group_name)
 
             if not sec_group_name:
@@ -314,7 +323,7 @@ class OpenstackBackend:
                                 "uuid": image.id,
                                 "source_type": "image",
                                 "destination_type": "volume",
-                                "volume_size": 30,  #TODO: max(image.min_disk, 30)
+                                "volume_size": 30,  # TODO: max(image.min_disk, 30)
                                 "delete_on_termination": True,
                             }
                         ],
@@ -392,8 +401,7 @@ class OpenstackBackend:
                 new_server,
             )
 
-
-    def create_volumes(
+    def create_volumes(  # noqa: C901, CCR001, CFQ002
         self,
         conn: openstack.connection.Connection,
         base_name: str,
@@ -403,7 +411,7 @@ class OpenstackBackend:
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
         dry_run: bool = False,
-        metadata=None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> tuple[ExtraVolumesResult, list[openstack.block_storage.v3.volume.Volume], str]:
         """
         Create multiple Cinder volumes with retry and wait logic.
@@ -419,21 +427,25 @@ class OpenstackBackend:
         :return: (ExtraVolumesResult, list of created volumes, message)
         """
         if dry_run:
-            _LOGGER.info(f"[Dry Run] Would create extra volumes with sizes: {volume_sizes}")
+            _LOGGER.info(
+                f"[Dry Run] Would create extra volumes with sizes: {volume_sizes}"
+            )
             return (
                 ExtraVolumesResult(True, False),
                 [],
                 f"[Dry Run] Would create extra volumes with sizes: {volume_sizes}",
             )
 
+        safe_metadata: Dict[str, Any] = metadata or {}
+
         attempt = 1
         error_message = ""
         final_metadata = {
             "ewccli": "true",
             "server_name": base_name,
-            **metadata,
+            **safe_metadata,
         }
-        created_volumes = []
+        created_volumes: List[Any] = []
 
         while attempt <= attempts:
             _LOGGER.info(f"Creating volumes (attempt {attempt}/{attempts})")
@@ -443,14 +455,14 @@ class OpenstackBackend:
                 # Create all volumes
                 for idx, size in enumerate(volume_sizes):
                     suffix = int(time.time())
-                    vol_name = f"{base_name}-vol-{idx+1}-{suffix}"
+                    vol_name = f"{base_name}-vol-{idx + 1}-{suffix}"
                     _LOGGER.info(f"Creating volume {vol_name} ({size} GB)")
 
                     vol = conn.block_storage.create_volume(
                         size=size,
                         name=vol_name,
                         volume_type=volume_type,
-                        metadata=final_metadata
+                        metadata=final_metadata,
                     )
                     created_volumes.append(vol)
 
@@ -482,13 +494,14 @@ class OpenstackBackend:
                         _LOGGER.warning(f"Deleting failed volume {vol.name}")
                         conn.block_storage.delete_volume(vol, ignore_missing=True)
                     except Exception as cleanup_ex:
-                        _LOGGER.error(f"Failed to delete volume {vol.name}: {cleanup_ex}")
+                        _LOGGER.error(
+                            f"Failed to delete volume {vol.name}: {cleanup_ex}"
+                        )
 
                 if attempt < attempts:
                     _LOGGER.info(f"Retrying in {retry_delay_s} seconds…")
                     time.sleep(retry_delay_s)
                 attempt += 1
-
 
         return (
             ExtraVolumesResult(False, False),
@@ -496,14 +509,13 @@ class OpenstackBackend:
             error_message,
         )
 
-
     def list_volumes(
         self,
-        conn,
-        metadata: dict[str, str] | None = None,
-        name: str | None = None,
-        status: str | None = None,
-    ):
+        conn: openstack.connection.Connection,
+        metadata: Optional[Dict[str, str]] = None,
+        name: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> List[Any]:
         """
         List Cinder volumes filtered by metadata (default: ewccli=true).
 
@@ -521,6 +533,8 @@ class OpenstackBackend:
         if metadata:
             base_metadata.update(metadata)
 
+        filters: Dict[str, Any] = {}
+
         filters = {
             "metadata": base_metadata,
         }
@@ -534,8 +548,7 @@ class OpenstackBackend:
         # Query volumes
         return list(conn.block_storage.volumes(details=True, **filters))
 
-
-    def delete_volumes(
+    def delete_volumes(  # noqa: CCR001, CFQ002
         self,
         conn: openstack.connection.Connection,
         base_name: str | None = None,
@@ -572,10 +585,16 @@ class OpenstackBackend:
         volumes = list(conn.block_storage.volumes(details=True, metadata=base_metadata))
 
         if not volumes:
-            return ExtraVolumesResult(True, False), [], "No volumes matched the filters."
+            return (
+                ExtraVolumesResult(True, False),
+                [],
+                "No volumes matched the filters.",
+            )
 
         if dry_run:
-            _LOGGER.info(f"[Dry Run] Would delete {len(volumes)} volumes: {[v.name for v in volumes]}")
+            _LOGGER.info(
+                f"[Dry Run] Would delete {len(volumes)} volumes: {[v.name for v in volumes]}"
+            )
             return (
                 ExtraVolumesResult(True, False),
                 [],
@@ -609,13 +628,13 @@ class OpenstackBackend:
             else f"Deleted {len(deleted)} volumes, {len(errors)} failed"
         )
 
-        return ExtraVolumesResult(
-            True if success else False,
-            True if success else False
-        ), deleted, msg
+        return (
+            ExtraVolumesResult(True if success else False, True if success else False),
+            deleted,
+            msg,
+        )
 
-
-    def attach_volumes_to_server(
+    def attach_volumes_to_server(  # noqa: C901, CCR001, CFQ002
         self,
         conn: openstack.connection.Connection,
         server_id: str,
@@ -624,7 +643,7 @@ class OpenstackBackend:
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
         dry_run: bool = False,
-    ) -> tuple[AttachVolumesResult, list, str]:
+    ) -> Tuple[AttachVolumesResult, List[Any], str]:
         """
         Attach multiple volumes to a server with retry and wait logic.
 
@@ -632,7 +651,9 @@ class OpenstackBackend:
         """
 
         if dry_run:
-            _LOGGER.info(f"[Dry Run] Would attach {len(volumes)} volumes to server {server_id}")
+            _LOGGER.info(
+                f"[Dry Run] Would attach {len(volumes)} volumes to server {server_id}"
+            )
             return (
                 AttachVolumesResult(True, False),
                 [],
@@ -641,16 +662,20 @@ class OpenstackBackend:
 
         attempt = 1
         error_message = ""
-        attachments = []
+        attachments: List[Any] = []
 
         while attempt <= attempts:
-            _LOGGER.info(f"Attaching volumes to server {server_id} (attempt {attempt}/{attempts})")
+            _LOGGER.info(
+                f"Attaching volumes to server {server_id} (attempt {attempt}/{attempts})"
+            )
             attachments = []
 
             try:
                 # Create attachments
                 for vol in volumes:
-                    _LOGGER.info(f"Creating attachment for volume {vol.name} ({vol.id})")
+                    _LOGGER.info(
+                        f"Creating attachment for volume {vol.name} ({vol.id})"
+                    )
                     attachment = conn.compute.create_volume_attachment(
                         server=server_id,
                         volumeId=vol.id,
@@ -705,8 +730,7 @@ class OpenstackBackend:
             error_message,
         )
 
-
-    def detach_volumes_from_server(
+    def detach_volumes_from_server(  # noqa: CCR001, CFQ002
         self,
         conn: openstack.connection.Connection,
         server_id: str,
@@ -723,7 +747,9 @@ class OpenstackBackend:
         """
 
         if dry_run:
-            _LOGGER.info(f"[Dry Run] Would detach and delete {len(volumes)} volumes from server {server_id}")
+            _LOGGER.info(
+                f"[Dry Run] Would detach and delete {len(volumes)} volumes from server {server_id}"
+            )
             return (
                 DetachVolumesResult(True, False),
                 [],
@@ -735,17 +761,23 @@ class OpenstackBackend:
         deleted_volume_ids: list[str] = []
 
         while attempt <= attempts:
-            _LOGGER.info(f"Detaching volumes from server {server_id} (attempt {attempt}/{attempts})")
+            _LOGGER.info(
+                f"Detaching volumes from server {server_id} (attempt {attempt}/{attempts})"
+            )
             deleted_volume_ids = []
 
             try:
                 # 1. DETACH
                 for vol in volumes:
-                    _LOGGER.info(f"Detaching volume {vol.name} ({vol.id}) from server {server_id}")
+                    _LOGGER.info(
+                        f"Detaching volume {vol.name} ({vol.id}) from server {server_id}"
+                    )
 
                     # Find attachment
                     attachments = conn.compute.volume_attachments(server_id)
-                    attachment = next((a for a in attachments if a.volume_id == vol.id), None)
+                    attachment = next(
+                        (a for a in attachments if a.volume_id == vol.id), None
+                    )
 
                     if attachment:
                         conn.compute.delete_volume_attachment(
@@ -755,7 +787,9 @@ class OpenstackBackend:
                         )
 
                     # Wait for detachment
-                    _LOGGER.info(f"Waiting for volume {vol.name} to return to 'available'")
+                    _LOGGER.info(
+                        f"Waiting for volume {vol.name} to return to 'available'"
+                    )
                     conn.block_storage.wait_for_status(
                         vol,
                         status="available",
@@ -794,103 +828,129 @@ class OpenstackBackend:
             error_message,
         )
 
-
-    def find_latest_image(
+    def find_latest_image(  # noqa: C901, CCR001, CFQ004
         self,
         conn: openstack.connection.Connection,
         prefix: str,
         federee: str,
-        region: str
-    ):
+        region: str,
+    ) -> Optional[str]:
         """
         Select the latest image for CPU or GPU families with special rules.
         """
-        import re
-        TIMESTAMP_RE = r"\d{14}"
 
-        def is_cpu_image(prefix: str, name: str):
-            # Rocky-8 → Rocky-8.<minor>-<timestamp>
+        timestamp_re = r"\d{14}"
+
+        def match_cpu_rocky(prefix: str, name: str) -> bool:
             if prefix.lower().startswith("rocky-8"):
-                return re.match(rf"^Rocky-8\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(
+                    re.match(rf"^Rocky-8\.\d+-{timestamp_re}$", name, re.IGNORECASE)
+                )
 
-            # Rocky-9 → Rocky-9.<minor>-<timestamp>
             if prefix.lower().startswith("rocky-9"):
-                return re.match(rf"^Rocky-9\.\d+-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(
+                    re.match(rf"^Rocky-9\.\d+-{timestamp_re}$", name, re.IGNORECASE)
+                )
 
-            # Ubuntu-22.04 → Ubuntu-22.04-<timestamp>
+            return False
+
+        def match_gpu_rocky(name: str) -> bool:
+            return bool(
+                re.match(
+                    rf"^Rocky-9\.\d+-GPU-{timestamp_re}$",
+                    name,
+                    re.IGNORECASE,
+                )
+            )
+
+        def match_cpu_ubuntu(prefix: str, name: str) -> bool:
             if prefix.lower() == "ubuntu-22.04":
-                return re.match(rf"^Ubuntu-22\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(
+                    re.match(rf"^Ubuntu-22\.04-{timestamp_re}$", name, re.IGNORECASE)
+                )
 
-            # Ubuntu-24.04 → Ubuntu-24.04-<timestamp>
             if prefix.lower() == "ubuntu-24.04":
-                return re.match(rf"^Ubuntu-24\.04-{TIMESTAMP_RE}$", name, re.IGNORECASE)
+                return bool(
+                    re.match(rf"^Ubuntu-24\.04-{timestamp_re}$", name, re.IGNORECASE)
+                )
 
-        def is_gpu_rocky(name: str):
-            # Prefix: Rocky-9-GPU
-            # Match: Rocky-9.<minor>-GPU-<timestamp>
-            return bool(re.match(
-                rf"^Rocky-9\.\d+-GPU-{TIMESTAMP_RE}$",
-                name,
-                re.IGNORECASE,
-            ))
+            return False
 
-        def is_gpu_ubuntu(name: str):
+        def match_gpu_ubuntu(name: str, federee: str, region: str) -> bool:
             # Prefix: Ubuntu 22.04 NVIDIA_AI
             # Match: Ubuntu 22.04 NVIDIA_AI
             if name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
                 return True
 
-        def image_matches(name: str, prefix: str):
+            return False
+
+        def is_image_match(name: str, prefix: str, region: str) -> bool:  # noqa: CFQ004
             if not name:
                 return False
 
-            # Rocky-9-GPU
+            # GPU Rocky
             if prefix == "Rocky-9.6-GPU":
-                return is_gpu_rocky(name)
+                return match_gpu_rocky(name)
 
-            # Ubuntu 22.04 NVIDIA_AI (EUMETSAT)
+            # GPU Ubuntu (fixed)
             if prefix == "Ubuntu 22.04 NVIDIA_AI":
-                return is_gpu_ubuntu(name)
+                return match_gpu_ubuntu(name=name, federee="EUMETSAT", region=region)
 
             # Ubuntu 24.04 NV_GRID_Open (EUMETSAT)
             if prefix == "Ubuntu 24.04 NV_GRID_Open":
-                return is_gpu_ubuntu(name)
+                return match_gpu_ubuntu(name=name, federee="EUMETSAT", region=region)
 
-            # CPU images
-            if prefix in ewc_hub_config.EWC_CLI_CPU_IMAGES:
-                return is_cpu_image(prefix=prefix, name=name)
+            # CPU Ubuntu
+            if prefix.lower() in ("ubuntu-22.04", "ubuntu-24.04"):
+                return match_cpu_ubuntu(prefix, name)
+
+            # CPU Rocky
+            if prefix.lower().startswith("rocky-8") or prefix.lower().startswith(
+                "rocky-9"
+            ):
+                return match_cpu_rocky(prefix, name)
 
             return False
 
-        matches = [img for img in conn.compute.images() if image_matches(name=img.name, prefix=prefix)]
+        matches: list[Image] = [
+            img
+            for img in conn.compute.images()
+            if is_image_match(name=img.name, prefix=prefix, region=region)
+        ]
 
         if not matches:
             return None
 
         # Sort by created_at
         matches.sort(key=lambda img: img.created_at, reverse=True)
-        return matches[0]
+        return cast(str, matches[0].name)
 
-
-    def check_server_inputs(
+    def check_server_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
         self,
         conn: openstack.connection.Connection,
         federee: str,
+        region: str,
         image_name: Optional[str] = None,
         flavour_name: Optional[str] = None,
-        networks: Optional[tuple] = None,
-        security_groups: Optional[tuple] = None,
+        networks: Optional[Tuple[str, ...]] = None,
+        security_groups: Optional[Tuple[str, ...]] = None,
     ) -> Tuple[bool, str]:
         """Check server inputs before creating the server."""
         image = conn.compute.find_image(image_name)
 
         if not image:
-            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee]]
+            # CPU images are already a list[str]
+            cpu_images = ewc_hub_config.EWC_CLI_CPU_IMAGES
+
+            # GPU image is a single string, not a dict
+            gpu_image = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]
+
+            total_images: list[str] = cpu_images + [gpu_image]
             error_message = (
                 f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
                 f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
                 "➡️ Please choose one of the supported OS images in short names or full name for similar OS.\n"
-                "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]"
+                "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]"  # noqa: E501
             )
 
             return False, error_message
@@ -939,13 +999,12 @@ class OpenstackBackend:
 
         return True, ""
 
-
-    def list_servers(
+    def list_servers(  # noqa: CCR001, C901
         self,
         conn: openstack.connection.Connection,
         show_all: bool = False,
         federee: Optional[str] = None,
-    ):
+    ) -> Dict[str, Any]:
         """List all OpenStack servers."""
         if show_all:
             _LOGGER.info("--show-all is enabled.")
@@ -955,13 +1014,12 @@ class OpenstackBackend:
             )
 
         # List all servers
-        servers = {}
+        servers: Dict[str, Any] = {}
 
         # Build a dict of image IDs to image names
         image_map = {image.id: image.name for image in conn.compute.images()}
 
         for server in conn.compute.servers():
-
             if (
                 not (
                     server.metadata.get("deployed")
@@ -979,13 +1037,13 @@ class OpenstackBackend:
 
             if federee == Federee.EUMETSAT.value:
                 if "private" in addresses:
-                    for c in addresses.get("private"):
+                    for c in addresses.get("private", []):
                         if c.get("OS-EXT-IPS:type"):
                             ip_type = c["OS-EXT-IPS:type"]
                             network_ip[f"private-{ip_type}"] = c.get("addr")
 
                 if "manila-network" in addresses:
-                    for c in addresses.get("manila-network"):
+                    for c in addresses.get("manila-network", []):
                         network_ip["sfs-manila-network"] = c.get("addr")
 
             if federee == Federee.ECMWF.value:
@@ -995,7 +1053,7 @@ class OpenstackBackend:
             if federee:
                 networks = "\n".join([f"{n} ({v})" for n, v in network_ip.items()])
             else:
-                networks = "\n".join([n for n in server.addresses])
+                networks = "\n".join([n for n in server.addresses])  # noqa: C416
 
             sec_groups = getattr(server, "security_groups") or []
 
@@ -1014,7 +1072,7 @@ class OpenstackBackend:
 
         return servers
 
-    def delete_server(
+    def delete_server(  # noqa: CFQ004
         self,
         conn: openstack.connection.Connection,
         server_name: str,
@@ -1108,14 +1166,17 @@ class OpenstackBackend:
             )
 
         except Exception as e:
-            _LOGGER.error(
-                f"Floating IP ({external_ip}) not detached/released due to: {e}"
-            )
-            return ExternalIPResult(False, False), f"Floating IP ({external_ip}) not detached/released due to: {e}"
+            error_msg = f"Floating IP ({external_ip}) not detached/released due to: {e}"
+            _LOGGER.error(error_msg)
+            return ExternalIPResult(False, False), error_msg
 
-        return ExternalIPResult(True, True), f"Finished detaching {external_ip} successfully."
+        return_value = (
+            ExternalIPResult(True, True),
+            f"Finished detaching {external_ip} successfully.",
+        )
+        return return_value
 
-    def add_external_ip(
+    def add_external_ip(  # noqa: CFQ004, CCR001
         self,
         conn: openstack.connection.Connection,
         server: Server,
@@ -1197,16 +1258,18 @@ class OpenstackBackend:
     def list_networks(
         self,
         conn: openstack.connection.Connection,
-    ):
+    ) -> Generator[Network, None, None]:
         """
         List all networks accessible via the OpenStack connection.
         """
-        networks = conn.network.networks()  # returns a generator of Network objects
+        networks: Generator[Network] = (
+            conn.network.networks()
+        )  # returns a generator of Network objects
         return networks
 
-    def remove_network(
+    def remove_network(  # noqa: CFQ004
         self, conn: openstack.connection.Connection, server: Server, network_name: str
-    ):
+    ) -> NetworkResult:
         """Add network to the machine.
 
         :param conn: The OpenStack connection
@@ -1225,7 +1288,7 @@ class OpenstackBackend:
             if network.name == network_name:
                 try:
                     conn.compute.delete_server_interface(server, iface.port_id)
-                    _LOGGER.info(
+                    _LOGGER.debug(
                         f"✅ Detached network {network.name} from server {server.name}"
                     )
                     detached = True
@@ -1241,11 +1304,9 @@ class OpenstackBackend:
             _LOGGER.warning(f"{network_name} not found for server {server.name}")
             return NetworkResult(True, False)
 
-    def ssh_key_matches_openstack(
-        self,
-        public_key_path: str,
-        keypair: dict
-    ) -> bool:
+        return NetworkResult(False, False)
+
+    def ssh_key_matches_openstack(self, public_key_path: str, keypair: Any) -> bool:
         """
         Check whether the local SSH public key matches the OpenStack keypair.
 
@@ -1265,16 +1326,20 @@ class OpenstackBackend:
         with open(public_key_path, "r") as f:
             local_key = " ".join(f.read().strip().split()[:2])
 
-        # Retrieve keypair from OpenStack
-        openstack_key = " ".join(keypair.public_key.strip().split()[:2])
+        # Retrieve keypair from OpenStack (dict access, not attribute access)
+        openstack_key_raw = keypair.public_key
+        if openstack_key_raw is None:
+            raise ValueError("OpenStack keypair does not contain 'public_key'")
+
+        openstack_key = " ".join(str(openstack_key_raw).strip().split()[:2])
 
         return local_key == openstack_key
 
-    def create_keypair(
+    def create_keypair(  # noqa: CCR001, CFQ004
         self,
         conn: openstack.connection.Connection,
         keypair_name: str,
-        public_key_path: Path,
+        public_key_path: str,
         dry_run: bool = False,
     ) -> Tuple[KeyPairResult, str]:
         """Create Keypair from SSH Public key.
@@ -1291,32 +1356,34 @@ class OpenstackBackend:
             )
 
         # Step: Upload the public key
-        with open(public_key_path, "r") as key_file:
+        with open(Path(public_key_path), "r") as key_file:
             public_key = key_file.read()
 
         # Check if the key already exists
         existing_key = conn.compute.find_keypair(keypair_name)
 
         if existing_key:
-
             match = OpenstackBackend.ssh_key_matches_openstack(
-                conn,
-                keypair=existing_key,
-                public_key_path=public_key_path
+                conn, keypair=existing_key, public_key_path=public_key_path
             )
 
             if not match:
                 return (
                     KeyPairResult(False, False),
-                    f"keypair ({keypair_name}) selected from OpenStack doesn't match the SSH public key at: {public_key_path}."
-                    "\nPlease make sure you have the correct SSH keys or you won't be able to login to the VM."
-                    "\nAlternatively, provide another name with the flag `--keypair-name` to create a new key keypair."
-                    f"\nOr use --force to remove the existing keypair {keypair_name} and let the EWCCLI recreate it with the SSH keys you have.",
+                    f"keypair ({keypair_name}) selected from OpenStack doesn't match"
+                    f" the SSH public key at: {public_key_path}."
+                    "\nPlease make sure you have the correct SSH keys or you won't be"
+                    " able to login to the VM."
+                    "\nAlternatively, provide another name with the flag `--keypair-name`"
+                    " to create a new key keypair."
+                    f"\nOr use --force to remove the existing keypair {keypair_name}"
+                    " and let the EWCCLI recreate it with the SSH keys you have.",
                 )
             else:
                 return (
                     KeyPairResult(True, False),
-                    f"Keypair '{keypair_name}' already exists on Openstack. Using this key to deploy the VM.",
+                    f"Keypair '{keypair_name}' already exists on Openstack."
+                    " Using this key to deploy the VM.",
                 )
         else:
             try:
@@ -1326,7 +1393,8 @@ class OpenstackBackend:
                 )
                 return (
                     KeyPairResult(True, True),
-                    f"Keypair '{keypair_name}' created successfully. This keypair will be used to deploy the VM.",
+                    f"Keypair '{keypair_name}' created successfully."
+                    " This keypair will be used to deploy the VM.",
                 )
             except openstack.exceptions.HttpException as ex:
                 # Something wrong creating the keypair.
@@ -1336,7 +1404,7 @@ class OpenstackBackend:
                     f"Failed to create keypair ({keypair_name}) due to: {ex}",
                 )
 
-    def delete_keypair(
+    def delete_keypair(  # noqa: CFQ004
         self,
         conn: openstack.connection.Connection,
         keypair_name: str,

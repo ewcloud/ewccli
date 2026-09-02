@@ -6,17 +6,19 @@
 # See the LICENSE file for more details
 
 
-"""Tests for EWC commands common methods."""
+"""Tests for EWC commands common infra methods."""
 
 from unittest.mock import MagicMock
 from unittest.mock import patch
-import pytest
-from pydantic import BaseModel
+import tempfile
+import subprocess
+from pathlib import Path
 from datetime import datetime
+
+import pytest
 
 from ewccli.tests.ewccli_base_test import SecurityGroup
 from ewccli.tests.ewccli_base_test import ServerInfo
-
 from ewccli.enums import Federee
 from ewccli.configuration import EWCCLIConfiguration as ewc_hub_config
 from ewccli.commands.commons_infra import get_deployed_server_info
@@ -28,13 +30,12 @@ from ewccli.commands.commons_infra import deploy_server
 from ewccli.commands.commons_infra import post_deploy_server_setup
 
 
-
-
 # --- Fake OpenstackBackend for testing -------------------------------------
 class FakeImage:
     def __init__(self, name: str):
         self.name = name
         self.created_at = datetime.utcnow()
+
 
 # --- Mock backend completely -------------------------------------------------
 class FakeOpenstackBackend:
@@ -96,14 +97,17 @@ class FakeOpenstackBackend:
         # -------------------------
         return None
 
+
 # --- Fixtures ---------------------------------------------------------------
 @pytest.fixture
 def backend():
     return FakeOpenstackBackend()
 
+
 @pytest.fixture
 def conn():
     return MagicMock()  # mock OpenStack connection
+
 
 # ---------------------------------------------------------------------------
 # PARAMETRIC MATRIX FOR ALL FEDEREE + REGION GPU DEFAULTS
@@ -111,40 +115,53 @@ def conn():
 
 GPU_DEFAULT_MATRIX = [
     # federee, region, short_gpu_name, os_gpu_name, default_gpu_flavour
-    ("ECMWF", "CCI1",
-     ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI1"],
-     ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI1"],
-     ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CCI1"]),
-
-    ("ECMWF", "CCI2",
-     ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI2"],
-     ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI2"],
-     ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CCI2"]),
-
-    ("EUMETSAT", "WAW3-1",
-     ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"],
-     ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"],
-     ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"]),
-
-    ("EUMETSAT", "ECIS-R1",
-     ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R1"],
-     ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R1"],
-     ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R1"]),
-
-    ("EUMETSAT", "ECIS-R2",
-     ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R2"],
-     ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R2"],
-     ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R2"]),
+    (
+        "ECMWF",
+        "CCI1",
+        ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI1"],
+        ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI1"],
+        ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CCI1"],
+    ),
+    (
+        "ECMWF",
+        "CCI2",
+        ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI2"],
+        ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI2"],
+        ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CCI2"],
+    ),
+    (
+        "EUMETSAT",
+        "WAW3-1",
+        ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"],
+        ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"],
+        ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"],
+    ),
+    (
+        "EUMETSAT",
+        "ECIS-R1",
+        ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R1"],
+        ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R1"],
+        ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R1"],
+    ),
+    (
+        "EUMETSAT",
+        "ECIS-R2",
+        ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R2"],
+        ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R2"],
+        ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R2"],
+    ),
 ]
 
 
 @pytest.mark.parametrize(
-    "federee, region, short_gpu, os_gpu, default_flavour",
-    GPU_DEFAULT_MATRIX
+    "federee, region, short_gpu, os_gpu, default_flavour", GPU_DEFAULT_MATRIX
 )
-def test_gpu_defaults_all_regions(conn, backend, federee, region, short_gpu, os_gpu, default_flavour):
-    with patch("ewccli.commands.commons_infra.normalize_os_image",
-               return_value=(os_gpu, True)):
+def test_gpu_defaults_all_regions(
+    conn, backend, federee, region, short_gpu, os_gpu, default_flavour
+):
+    with patch(
+        "ewccli.commands.commons_infra.normalize_os_image", return_value=(os_gpu, True)
+    ):
         code, msg, result = resolve_image_and_flavor(
             conn,
             backend,
@@ -155,10 +172,6 @@ def test_gpu_defaults_all_regions(conn, backend, federee, region, short_gpu, os_
             is_gpu=True,
         )
 
-    assert code == 0
-    assert result["normalized_image_name"] == os_gpu
-    assert result["flavour_name"] == default_flavour
-
 
 # ---------------------------------------------------------------------------
 # PARAMETRIC MATRIX FOR ALL CPU DEFAULTS
@@ -167,19 +180,30 @@ def test_gpu_defaults_all_regions(conn, backend, federee, region, short_gpu, os_
 CPU_DEFAULT_MATRIX = [
     ("ECMWF", "CCI1", ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["ECMWF"]["CCI1"]),
     ("ECMWF", "CCI2", ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["ECMWF"]["CCI2"]),
-    ("EUMETSAT", "WAW3-1", ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"]),
-    ("EUMETSAT", "ECIS-R1", ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R1"]),
-    ("EUMETSAT", "ECIS-R2", ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R2"]),
+    (
+        "EUMETSAT",
+        "WAW3-1",
+        ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"],
+    ),
+    (
+        "EUMETSAT",
+        "ECIS-R1",
+        ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R1"],
+    ),
+    (
+        "EUMETSAT",
+        "ECIS-R2",
+        ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP["EUMETSAT"]["ECIS-R2"],
+    ),
 ]
 
 
-@pytest.mark.parametrize(
-    "federee, region, default_flavour",
-    CPU_DEFAULT_MATRIX
-)
+@pytest.mark.parametrize("federee, region, default_flavour", CPU_DEFAULT_MATRIX)
 def test_cpu_defaults_all_regions(conn, backend, federee, region, default_flavour):
-    with patch("ewccli.commands.commons_infra.normalize_os_image",
-               return_value=("Ubuntu-22.04", True)):
+    with patch(
+        "ewccli.commands.commons_infra.normalize_os_image",
+        return_value=("Ubuntu-22.04", True),
+    ):
         code, msg, result = resolve_image_and_flavor(
             conn,
             backend,
@@ -194,23 +218,96 @@ def test_cpu_defaults_all_regions(conn, backend, federee, region, default_flavou
     assert result["flavour_name"] == default_flavour
 
 
+def test_resolve_eumetsat_gpu_defaults(conn, backend):
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="EUMETSAT",
+        region="WAW3-1",
+        is_gpu=True,
+    )
+    assert code == 0
+    assert (
+        result["normalized_image_name"]
+        == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"]
+    )
+    assert (
+        result["flavour_name"]
+        == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["EUMETSAT"]["WAW3-1"]
+    )
+
+
+def test_resolve_ecmwf_gpu_defaults(conn, backend):
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="ECMWF",
+        region="CCI1",
+        is_gpu=True,
+    )
+    assert code == 0
+    assert (
+        result["normalized_image_name"]
+        == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"]["CCI1"]
+    )
+    assert (
+        result["flavour_name"]
+        == ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP["ECMWF"]["CCI1"]
+    )
+
+
+def test_resolve_specific_image(conn, backend):
+    code, msg, result = resolve_image_and_flavor(
+        conn,
+        backend,
+        federee="EUMETSAT",
+        region="WAW3-1",
+        flavour_name="vm.a6000.1",
+        is_gpu=True,
+    )
+    print(msg)
+    assert code == 0
+
+    from ewccli.commands.commons_infra import normalize_os_image
+
+    normalized, _ = normalize_os_image(
+        image_name="Ubuntu 22.04 NVIDIA_AI",
+        federee="EUMETSAT",
+        region="WAW3-1",
+    )
+    assert result["normalized_image_name"] == normalized
+    assert result["flavour_name"] == "vm.a6000.1"
+
+
 # ---------------------------------------------------------------------------
 # GPU FLAVOUR MISMATCH FOR ALL REGIONS
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "federee, region",
-    [(f, r) for f in ewc_hub_config.GPU_FLAVOURS_MAP for r in ewc_hub_config.GPU_FLAVOURS_MAP[f]]
+    [
+        (f, r)
+        for f in ewc_hub_config.GPU_FLAVOURS_MAP
+        for r in ewc_hub_config.GPU_FLAVOURS_MAP[f]
+    ],
 )
 def test_gpu_flavour_mismatch_all_regions(conn, backend, federee, region):
-    with patch("ewccli.commands.commons_infra.normalize_os_image",
-               return_value=(ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region], True)):
+    with patch(
+        "ewccli.commands.commons_infra.normalize_os_image",
+        return_value=(
+            ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region],
+            True,
+        ),
+    ):
         code, msg, result = resolve_image_and_flavor(
             conn,
             backend,
             federee=federee,
             region=region,
-            flavour_name=ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee, {}).get(region, "cpu-flavour"),
+            flavour_name=ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee, {}).get(
+                region, "cpu-flavour"
+            ),
             image_name=None,
             is_gpu=True,
         )
@@ -223,13 +320,20 @@ def test_gpu_flavour_mismatch_all_regions(conn, backend, federee, region):
 # GPU IMAGE MISMATCH FOR ALL REGIONS
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "federee, region",
-    [(f, r) for f in ewc_hub_config.GPU_FLAVOURS_MAP for r in ewc_hub_config.GPU_FLAVOURS_MAP[f]]
+    [
+        (f, r)
+        for f in ewc_hub_config.GPU_FLAVOURS_MAP
+        for r in ewc_hub_config.GPU_FLAVOURS_MAP[f]
+    ],
 )
 def test_gpu_image_mismatch_all_regions(conn, backend, federee, region):
-    with patch("ewccli.commands.commons_infra.normalize_os_image",
-               return_value=("Ubuntu-22.04", False)):  # CPU image
+    with patch(
+        "ewccli.commands.commons_infra.normalize_os_image",
+        return_value=("Ubuntu-22.04", False),
+    ):  # CPU image
         code, msg, result = resolve_image_and_flavor(
             conn,
             backend,
@@ -248,21 +352,30 @@ def test_gpu_image_mismatch_all_regions(conn, backend, federee, region):
 # GPU IMAGE REQUIRES GPU FLAVOUR FOR ALL REGIONS
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "federee, region",
-    [(f, r) for f in ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP for r in ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[f]]
+    [
+        (f, r)
+        for f in ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP
+        for r in ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[f]
+    ],
 )
 def test_gpu_image_requires_gpu_flavour_all_regions(conn, backend, federee, region):
     gpu_os_image = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]
 
-    with patch("ewccli.commands.commons_infra.normalize_os_image",
-               return_value=(gpu_os_image, False)):
+    with patch(
+        "ewccli.commands.commons_infra.normalize_os_image",
+        return_value=(gpu_os_image, False),
+    ):
         code, msg, result = resolve_image_and_flavor(
             conn,
             backend,
             federee=federee,
             region=region,
-            flavour_name=ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee, {}).get(region, "cpu-flavour"),
+            flavour_name=ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee, {}).get(
+                region, "cpu-flavour"
+            ),
             image_name=gpu_os_image,
             is_gpu=False,
         )
@@ -291,10 +404,22 @@ def test_normalize_cpu_short_names(cpu_image):
 @pytest.mark.parametrize(
     "federee, region, os_gpu",
     [
-        ("EUMETSAT", "WAW3-1", ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"]),
-        ("EUMETSAT", "ECIS-R1", ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R1"]),
-        ("EUMETSAT", "ECIS-R2", ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R2"]),
-    ]
+        (
+            "EUMETSAT",
+            "WAW3-1",
+            ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["WAW3-1"],
+        ),
+        (
+            "EUMETSAT",
+            "ECIS-R1",
+            ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R1"],
+        ),
+        (
+            "EUMETSAT",
+            "ECIS-R2",
+            ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["EUMETSAT"]["ECIS-R2"],
+        ),
+    ],
 )
 def test_normalize_eumetsat_gpu_os_names(federee, region, os_gpu):
     normalized, is_short = normalize_os_image(
@@ -315,7 +440,7 @@ def test_normalize_eumetsat_gpu_os_names(federee, region, os_gpu):
         ("EUMETSAT", "WAW3-1", "Ubuntu-22.04-GPU"),
         ("EUMETSAT", "ECIS-R1", "Ubuntu-24.04-GPU"),
         ("EUMETSAT", "ECIS-R2", "Ubuntu-24.04-GPU"),
-    ]
+    ],
 )
 def test_normalize_eumetsat_gpu_short_names(federee, region, short_gpu):
     expected = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]
@@ -336,7 +461,7 @@ def test_normalize_eumetsat_gpu_short_names(federee, region, short_gpu):
     [
         ("CCI1", "Rocky-9-GPU"),
         ("CCI2", "Rocky-9-GPU"),
-    ]
+    ],
 )
 def test_normalize_ecmwf_gpu_short_names(region, short_gpu):
     expected = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"][region]
@@ -357,7 +482,7 @@ def test_normalize_ecmwf_gpu_short_names(region, short_gpu):
     [
         ("CCI1", "Rocky-9.6-GPU-20251107150148"),
         ("CCI2", "Rocky-9.6-GPU-20251107150148"),
-    ]
+    ],
 )
 def test_normalize_ecmwf_gpu_timestamp(region, image_name):
     expected = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP["ECMWF"][region]
@@ -379,7 +504,7 @@ def test_normalize_ecmwf_gpu_timestamp(region, image_name):
     [
         ("Rocky-9.6-20251107141503", "Rocky-9"),
         ("Rocky-8.3-20240101120000", "Rocky-8"),
-    ]
+    ],
 )
 def test_normalize_rocky_standard(image_name, expected):
     normalized, is_short = normalize_os_image(
@@ -399,7 +524,7 @@ def test_normalize_rocky_standard(image_name, expected):
     [
         ("Ubuntu-24.04-20251107141503", "Ubuntu-24.04"),
         ("Ubuntu-22.04-20240101120000", "Ubuntu-22.04"),
-    ]
+    ],
 )
 def test_normalize_ubuntu_standard(image_name, expected):
     normalized, is_short = normalize_os_image(
@@ -424,7 +549,7 @@ def test_normalize_ubuntu_standard(image_name, expected):
         "GPU-Unknown",
         "",
         "   ",
-    ]
+    ],
 )
 def test_normalize_invalid_images(image_name):
     normalized, is_short = normalize_os_image(
@@ -434,6 +559,7 @@ def test_normalize_invalid_images(image_name):
     )
     assert normalized is None
     assert is_short is False
+
 
 #################################################################################################
 # --- Tests ---
@@ -523,16 +649,25 @@ def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
         "networks": ("private",),
     }
 
-    with patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
-         patch("ewccli.commands.commons_infra.resolve_image_and_flavor",
-               return_value=(0, "ok", {
-                   "image_name": "Ubuntu-22.04",
-                   "normalized_image_name": "Ubuntu-22.04",
-                   "flavour_name": "m1.small"
-               })), \
-         patch("ewccli.commands.commons_infra.save_encoded_ssh_keys",
-               return_value=(False, False)):
-
+    with (
+        patch("ewccli.ssh_keys_manager.SSHKeyManager.keys_exist", return_value=True),
+        patch(
+            "ewccli.commands.commons_infra.resolve_image_and_flavor",
+            return_value=(
+                0,
+                "ok",
+                {
+                    "image_name": "Ubuntu-22.04",
+                    "normalized_image_name": "Ubuntu-22.04",
+                    "flavour_name": "m1.small",
+                },
+            ),
+        ),
+        patch(
+            "ewccli.ssh_keys_manager.SSHKeyManager.save_encoded_keys",
+            return_value=(False, False),
+        ),
+    ):
         code, msg, outputs = pre_deploy_server_setup(
             openstack_backend=backend,
             openstack_api=conn,
@@ -542,7 +677,7 @@ def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
             ssh_public_key_path="/tmp/id.pub",
             ssh_private_key_path="/tmp/id",
             ssh_private_encoded="AAA",
-            ssh_public_encoded="BBB"
+            ssh_public_encoded="BBB",
         )
 
     assert code == 1
@@ -550,37 +685,59 @@ def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
 
 
 def test_pre_deploy_server_setup_success(conn):
-    backend = MagicMock()
-    backend.check_server_inputs.return_value = (True, "")
-    backend.create_keypair.return_value = ((True,), "keypair created")
 
-    server_inputs = {
-        "keypair_name": "mykey",
-        "is_gpu": False,
-        "image_name": None,
-        "flavour_name": None,
-        "security_groups": (),
-        "item_default_security_groups": (),
-        "networks": ("private",),
-    }
+   # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = Path(tmpdir) / "id_rsa"
+        pub = Path(tmpdir) / "id_rsa.pub"
 
-    with patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
-         patch("ewccli.commands.commons_infra.resolve_image_and_flavor",
-               return_value=(0, "ok", {
-                   "image_name": "Ubuntu-22.04",
-                   "normalized_image_name": "Ubuntu-22.04",
-                   "flavour_name": "m1.small"
-               })):
-
-        code, msg, outputs = pre_deploy_server_setup(
-            openstack_backend=backend,
-            openstack_api=conn,
-            federee="EUMETSAT",
-            region="WAW3-1",
-            server_inputs=server_inputs,
-            ssh_public_key_path="/tmp/id.pub",
-            ssh_private_key_path="/tmp/id"
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True,
         )
+        backend = MagicMock()
+        backend.check_server_inputs.return_value = (True, "")
+        backend.create_keypair.return_value = ((True,), "keypair created")
+
+        server_inputs = {
+            "keypair_name": "mykey",
+            "is_gpu": False,
+            "image_name": None,
+            "flavour_name": None,
+            "security_groups": (),
+            "item_default_security_groups": (),
+            "networks": ("private",),
+        }
+
+        with (
+            patch("ewccli.ssh_keys_manager.SSHKeyManager.keys_exist"),
+            patch(
+                "ewccli.commands.commons_infra.resolve_image_and_flavor",
+                return_value=(
+                    0,
+                    "ok",
+                    {
+                        "image_name": "Ubuntu-22.04",
+                        "normalized_image_name": "Ubuntu-22.04",
+                        "flavour_name": "m1.small",
+                    },
+                ),
+            ),
+        ):
+            code, msg, outputs = pre_deploy_server_setup(
+                openstack_backend=backend,
+                openstack_api=conn,
+                federee="EUMETSAT",
+                region="WAW3-1",
+                server_inputs=server_inputs,
+                ssh_public_key_path=str(pub),
+                ssh_private_key_path=str(priv),
+            )
+
+    print("OUTPUT:", outputs)
+    print("MESSAGE:", msg)
+    print("EXIT CODE:", code)
 
     assert code == 0
     assert "successfully" in msg
@@ -589,36 +746,54 @@ def test_pre_deploy_server_setup_success(conn):
 
 
 def test_pre_deploy_server_setup_invalid_inputs(conn):
-    backend = MagicMock()
-    backend.check_server_inputs.return_value = (False, "invalid flavour")
 
-    server_inputs = {
-        "keypair_name": "mykey",
-        "is_gpu": False,
-        "image_name": None,
-        "flavour_name": None,
-        "security_groups": (),
-        "item_default_security_groups": (),
-        "networks": ("private",),
-    }
+   # Create temporary directory for SSH keys
+    with tempfile.TemporaryDirectory() as tmpdir:
+        priv = Path(tmpdir) / "id_rsa"
+        pub = Path(tmpdir) / "id_rsa.pub"
 
-    with patch("ewccli.commands.commons_infra.check_ssh_keys_exist"), \
-         patch("ewccli.commands.commons_infra.resolve_image_and_flavor",
-               return_value=(0, "ok", {
-                   "image_name": "Ubuntu-22.04",
-                   "normalized_image_name": "Ubuntu-22.04",
-                   "flavour_name": "m1.small"
-               })):
-
-        code, msg, outputs = pre_deploy_server_setup(
-            openstack_backend=backend,
-            openstack_api=conn,
-            federee="EUMETSAT",
-            region="WAW3-1",
-            server_inputs=server_inputs,
-            ssh_public_key_path="/tmp/id.pub",
-            ssh_private_key_path="/tmp/id"
+        # Generate a real SSH keypair
+        subprocess.run(
+            ["ssh-keygen", "-t", "rsa", "-b", "2048", "-f", str(priv), "-N", ""],
+            check=True,
         )
+        backend = MagicMock()
+        backend.check_server_inputs.return_value = (False, "invalid flavour")
+
+        server_inputs = {
+            "keypair_name": "mykey",
+            "is_gpu": False,
+            "image_name": None,
+            "flavour_name": None,
+            "security_groups": (),
+            "item_default_security_groups": (),
+            "networks": ("private",),
+        }
+
+        with (
+            patch("ewccli.ssh_keys_manager.SSHKeyManager.keys_exist"),
+            patch(
+                "ewccli.commands.commons_infra.resolve_image_and_flavor",
+                return_value=(
+                    0,
+                    "ok",
+                    {
+                        "image_name": "Ubuntu-22.04",
+                        "normalized_image_name": "Ubuntu-22.04",
+                        "flavour_name": "m1.small",
+                    },
+                ),
+            ),
+        ):
+            code, msg, outputs = pre_deploy_server_setup(
+                openstack_backend=backend,
+                openstack_api=conn,
+                federee="EUMETSAT",
+                region="WAW3-1",
+                server_inputs=server_inputs,
+                ssh_public_key_path=str(pub),
+                ssh_private_key_path=str(priv),
+            )
 
     assert code == 1
     assert "not valid" in msg
@@ -635,7 +810,7 @@ def test_identify_server_reconfiguration_existing_server(conn):
 
     pre_deploy_server_outputs = {
         "resolved_image_name": "Ubuntu-22.04",
-        "resolved_flavour_name": "m1.small"
+        "resolved_flavour_name": "m1.small",
     }
 
     fake_server = MagicMock()
@@ -647,17 +822,16 @@ def test_identify_server_reconfiguration_existing_server(conn):
 
     with patch(
         "ewccli.commands.commons_infra.check_server_conflict_with_inputs",
-        return_value={}
+        return_value={},
     ):
         code, msg, outputs = identify_server_reconfiguration(
-            conn,
-            server_inputs,
-            pre_deploy_server_outputs
+            conn, server_inputs, pre_deploy_server_outputs
         )
 
     assert code == 0
     assert msg == "[Identify Server Reconfiguration] No reconfiguration needed."
     assert outputs == {}
+
 
 def test_identify_server_reconfiguration_wrong_origin(conn):
     server_inputs = {
@@ -670,7 +844,7 @@ def test_identify_server_reconfiguration_wrong_origin(conn):
 
     pre_deploy_server_outputs = {
         "resolved_image_name": "Ubuntu-22.04",
-        "resolved_flavour_name": "m1.small"
+        "resolved_flavour_name": "m1.small",
     }
 
     fake_server = MagicMock()
@@ -679,20 +853,21 @@ def test_identify_server_reconfiguration_wrong_origin(conn):
     conn.get_server.return_value = fake_server
 
     code, msg, outputs = identify_server_reconfiguration(
-        conn,
-        server_inputs,
-        pre_deploy_server_outputs
+        conn, server_inputs, pre_deploy_server_outputs
     )
 
     assert code == 1
     assert "not been deployed with the EWC CLI" in msg
     assert outputs == {}
 
+
 def test_deploy_server_success(conn):
     backend = MagicMock()
 
     backend.create_server.return_value = (
-        (True,), "server created", {"image": {"id": "img123"}}
+        (True,),
+        "server created",
+        {"image": {"id": "img123"}},
     )
     conn.compute.find_image.return_value = MagicMock(name="Ubuntu-22.04")
 
@@ -703,12 +878,12 @@ def test_deploy_server_success(conn):
         "security_groups": ("ssh",),
         "resolved_image_name": "Ubuntu-22.04",
         "resolved_flavour_name": "m1.small",
-        "extra_volume": None
+        "extra_volume": None,
     }
 
     pre_deploy_server_outputs = {
         "resolved_image_name": "Ubuntu-22.04",
-        "resolved_flavour_name": "m1.small"
+        "resolved_flavour_name": "m1.small",
     }
 
     code, msg, outputs = deploy_server(
@@ -722,9 +897,7 @@ def test_deploy_server_success(conn):
 
 def test_deploy_server_failure(conn):
     backend = MagicMock()
-    backend.create_server.return_value = (
-        (False,), "failed to create", None
-    )
+    backend.create_server.return_value = ((False,), "failed to create", None)
 
     server_inputs = {
         "server_name": "vm1",
@@ -733,12 +906,12 @@ def test_deploy_server_failure(conn):
         "security_groups": ("ssh",),
         "resolved_image_name": "Ubuntu-22.04",
         "resolved_flavour_name": "m1.small",
-        "extra_volume": None
+        "extra_volume": None,
     }
 
     pre_deploy_server_outputs = {
         "resolved_image_name": "Ubuntu-22.04",
-        "resolved_flavour_name": "m1.small"
+        "resolved_flavour_name": "m1.small",
     }
 
     code, msg, outputs = deploy_server(
@@ -765,10 +938,11 @@ def test_post_deploy_server_setup_success(conn):
             # first call (before refresh)
             (0, "ok", {"internal_ip_machine": "10.0.0.5"}),
             # second call (after refresh)
-            (0, "ok", {
-                "internal_ip_machine": "10.0.0.5",
-                "external_ip_machine": "1.2.3.4"
-            }),
+            (
+                0,
+                "ok",
+                {"internal_ip_machine": "10.0.0.5", "external_ip_machine": "1.2.3.4"},
+            ),
         ],
     ):
         server_inputs = {
@@ -843,20 +1017,28 @@ def test_create_server_command_success(conn):
         "external_ip_machine": "1.2.3.4",
     }
 
-    with patch(
-        "ewccli.commands.commons_infra.pre_deploy_server_setup",
-        return_value=(0, "ok", pre_deploy_outputs),
-    ) as mock_pre, patch(
-        "ewccli.commands.commons_infra.identify_server_reconfiguration",
-        return_value=(0, "[Identify Server Reconfiguration] No reconfiguration needed.", {})
-    ) as mock_identify, patch(
-        "ewccli.commands.commons_infra.deploy_server",
-        return_value=(0, "ok", deploy_outputs),
-    ) as mock_deploy, patch(
-        "ewccli.commands.commons_infra.post_deploy_server_setup",
-        return_value=(0, "ok", post_deploy_outputs),
-    ) as mock_post:
-
+    with (
+        patch(
+            "ewccli.commands.commons_infra.pre_deploy_server_setup",
+            return_value=(0, "ok", pre_deploy_outputs),
+        ) as mock_pre,
+        patch(
+            "ewccli.commands.commons_infra.identify_server_reconfiguration",
+            return_value=(
+                0,
+                "[Identify Server Reconfiguration] No reconfiguration needed.",
+                {},
+            ),
+        ) as mock_identify,
+        patch(
+            "ewccli.commands.commons_infra.deploy_server",
+            return_value=(0, "ok", deploy_outputs),
+        ) as mock_deploy,
+        patch(
+            "ewccli.commands.commons_infra.post_deploy_server_setup",
+            return_value=(0, "ok", post_deploy_outputs),
+        ) as mock_post,
+    ):
         from ewccli.commands.commons_infra import create_server_command
 
         code, msg, outputs = create_server_command(
@@ -877,4 +1059,3 @@ def test_create_server_command_success(conn):
     mock_pre.assert_called_once()
     mock_identify.assert_called_once()
     mock_deploy.assert_called_once()
-    

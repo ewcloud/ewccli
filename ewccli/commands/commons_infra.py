@@ -11,7 +11,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List, Any
 from pydantic import BaseModel, validator
 from pydantic import ValidationError
 
@@ -23,9 +23,9 @@ from rich import box
 from click import ClickException
 from openstack import connection
 
-from ewccli.utils import save_encoded_ssh_keys, check_ssh_keys_match
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.enums import Federee, Region
+from ewccli.ssh_keys_manager import SSHKeyManager, SSHKeyError
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.logger import get_logger
 
@@ -35,7 +35,7 @@ _EWC_CLI_SLEEP_TIME = 30  # seconds
 console = Console()
 
 
-class CreateServerInputs(BaseModel):
+class CreateServerInputs(BaseModel):  # type: ignore[misc]
     server_name: str
     keypair_name: str
 
@@ -51,24 +51,51 @@ class CreateServerInputs(BaseModel):
 
     extra_volume: Optional[Tuple[int, ...]] = None
 
-    @validator("networks", "security_groups", "item_default_security_groups", pre=True)
-    def normalize_tuple(cls, v):
+    @validator("networks", "security_groups", "item_default_security_groups", pre=True)  # type: ignore[misc]
+    def normalize_tuple(cls: type, v: Any) -> Tuple[str, ...]:  # noqa: N805, CFQ004
+        """
+        Normalize network/security group fields into a tuple[str, ...].
+
+        Accepted inputs:
+        - None → ()
+        - tuple[str] → tuple[str]
+        - list[str] → tuple[str]
+        - str → (str,)
+        """
         if v is None:
             return ()
+
         if isinstance(v, tuple):
             return v
+
         if isinstance(v, list):
             return tuple(v)
+
         if isinstance(v, str):
             return (v,)
-        return v
 
-    @validator("extra_volume", pre=True)
-    def normalize_extra_volume(cls, v):
+        # Fallback: reject unsupported types
+        raise TypeError(f"Invalid type for tuple normalization: {type(v).__name__}")
+
+    @validator("extra_volume", pre=True)  # type: ignore[misc]
+    def normalize_extra_volume(cls, v: Any) -> Tuple[int, ...]:  # noqa: N805, CCR001
+        """
+        Normalize extra_volume into a tuple[int, ...].
+
+        Accepted inputs:
+        - None → ()
+        - int → (int,)
+        - list[int] → tuple[int]
+        - tuple[int] → tuple[int]
+
+        Validation:
+        - All sizes must be positive integers.
+        """
         if v is None:
             return ()
+
         if isinstance(v, tuple):
-            sizes = v
+            sizes: Tuple[Any, ...] = v
         elif isinstance(v, list):
             sizes = tuple(v)
         else:
@@ -81,100 +108,110 @@ class CreateServerInputs(BaseModel):
         return sizes
 
     @classmethod
-    def safe_create(cls, **data):
+    def safe_create(cls, **data: Any) -> "CreateServerInputs":
         try:
             return cls(**data)
         except ValidationError as e:
             err = e.errors()[0]
             loc = ".".join(str(x) for x in err["loc"])
             msg = err["msg"]
-
             raise ClickException(f"Invalid server inputs: {loc} → {msg}")
 
 
 def check_user_ssh_keys(
     ssh_public_key_path: Optional[str] = None,
     ssh_private_key_path: Optional[str] = None,
-    dry_run: bool = False
-):
+    dry_run: bool = False,
+) -> None:
     """Check if SSH keys are compatible or missing."""
     if dry_run:
-        _LOGGER.info("Dry Run enable: Skipping checking SSH private and public keys...")
+        _LOGGER.info("Dry run enabled: skipping SSH key validation.")
         return
 
-    # If still missing, raise exception
-    keys_exist = check_ssh_keys_exist(
-        ssh_private_key_path=Path(ssh_private_key_path),
-        ssh_public_key_path=Path(ssh_public_key_path)
-    )
+    if not ssh_public_key_path or not ssh_private_key_path:
+        raise ClickException("SSH key paths must be provided for validation.")
 
-    if not keys_exist:
-        raise ClickException(
-            f"\n Exiting."
-        )
+    manager = SSHKeyManager()
 
-    is_matching = check_ssh_keys_match(
-        ssh_private_key_path=ssh_private_key_path,
-        ssh_public_key_path=ssh_public_key_path
-    )
+    pub_path = Path(ssh_public_key_path).expanduser()
+    priv_path = Path(ssh_private_key_path).expanduser()
 
-    if not is_matching:
+    # 1. Check existence
+    try:
+        manager.keys_exist(priv_path, pub_path)
+    except SSHKeyError as exc:
+        console.print(Panel(str(exc), title="SSH Key Check Failed", style="red"))
+        raise ClickException("Exiting.")
+
+    # 2. Check matching
+    try:
+        matching = manager.keys_match(priv_path, pub_path)
+    except Exception as exc:
+        raise ClickException(f"Failed to validate SSH keys: {exc}") from exc
+
+    if not matching:
         raise ClickException(
             "SSH keys provided are not a correct keypair:"
             f"\nSSH public key path: {ssh_public_key_path}"
             f"\nSSH private key path: {ssh_private_key_path}"
-            "\nMake sure either you pass correct SSH keypair in the EWC login command through the following flags `--ssh-private-key-path` and `--ssh-public-key-path`"
+            "\nMake sure either you pass correct SSH keypair"
+            " in the EWC login command through the following flags"
+            " `--ssh-private-key-path` and `--ssh-public-key-path`"
             "or let the `ewc login` command create them for you. Exiting."
         )
-    else:
-        _LOGGER.info("SSH private and public keys are matching! Continuing...")
+
+    _LOGGER.info("SSH private and public keys are matching! Continuing...")
 
 
-def check_server_conflict_with_inputs(
-    server_info: dict,
+def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
+    server_info: Dict[str, Any],
     server_info_image: Optional[str] = None,
     image_name: Optional[str] = None,
     keypair_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
-    networks: Optional[tuple] = None,
-    security_groups: Optional[tuple] = None,
-):
+    networks: Optional[Tuple[str, ...]] = None,
+    security_groups: Optional[Tuple[str, ...]] = None,
+) -> Optional[List[Tuple[str, str, str]]]:
     """Check if user-provided values conflict with an existing server."""
+    # If server_info is empty, return an empty list (not None)
     if not server_info:
-        return  # Server does not exist yet
+        return None
 
-    diffs = []
+    diffs: List[Tuple[str, str, str]] = []
 
-    def compare(field, provided, actual):
+    def compare(field: str, provided: Any, actual: Any) -> None:
         actual_str = str(actual)
 
         if provided is None:
             return
 
         if isinstance(provided, list):
-            # Check if actual is in the list (as string comparison)
-            if actual_str not in map(str, provided):
-                diffs.append((field, actual_str, ", ".join(map(str, provided))))
+            provided_str_list = list(map(str, provided))
+            if actual_str not in provided_str_list:
+                diffs.append((field, actual_str, ", ".join(provided_str_list)))
         else:
-            # Direct value comparison
-            if actual_str != str(provided):
-                diffs.append((field, actual_str, str(provided)))
+            provided_str = str(provided)
+            if actual_str != provided_str:
+                diffs.append((field, actual_str, provided_str))
 
-    def _get_network_names(server_info):
-        if server_info.addresses:
-            return ", ".join(server_info.addresses.keys())
+    def _get_network_names(info: Any) -> str:
+        if getattr(info, "addresses", None):
+            return ", ".join(info.addresses.keys())
         return ""
 
-    def _get_security_groups_string(server_info):
-        groups = getattr(server_info, "security_groups", [])
-        return ",".join(sg.get("name") for sg in groups)
+    def _get_security_groups_string(info: Any) -> str:
+        groups = getattr(info, "security_groups", [])
+        return ",".join(str(sg.get("name")) for sg in groups)
 
+    # Image
     if image_name and server_info_image:
         compare("Image", image_name, server_info_image)
 
+    # Keypair
     if keypair_name:
         compare("Keypair", keypair_name, getattr(server_info, "key_name", None))
 
+    # Flavour
     if flavour_name:
         compare(
             "Flavour",
@@ -182,10 +219,11 @@ def check_server_conflict_with_inputs(
             getattr(getattr(server_info, "flavor", None), "original_name", None),
         )
 
-    # To be checked yet.
+    # Networks
     if networks:
         compare("Network", ",".join(networks), _get_network_names(server_info))
 
+    # Security groups
     if security_groups:
         compare(
             "Security Groups",
@@ -197,13 +235,13 @@ def check_server_conflict_with_inputs(
 
 
 def show_server_input_requested_summary(
-    security_groups: tuple,
-    networks: tuple,
+    security_groups: Optional[Tuple[str, ...]],
+    networks: Optional[Tuple[str, ...]],
     image_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
     keypair_name: Optional[str] = None,
-    extra_volumes: Optional[tuple] = None
-):
+    extra_volumes: Optional[Tuple[str, ...]] = None,
+) -> None:
     """Print table with inputs for the server."""
     table = Table(
         title="🧾 Server Configuration Inputs Summary", title_style="bold green"
@@ -214,8 +252,10 @@ def show_server_input_requested_summary(
 
     table.add_row("Image", image_name)
     table.add_row("Flavour", flavour_name)
-    table.add_row("Network", ", ".join(networks))
-    table.add_row("Security Groups", ", ".join(security_groups))
+    if networks:
+        table.add_row("Network", ", ".join(networks))
+    if security_groups:
+        table.add_row("Security Groups", ", ".join(security_groups))
     table.add_row("Keypair", keypair_name)
 
     if extra_volumes:
@@ -224,10 +264,12 @@ def show_server_input_requested_summary(
     console.print(table)
 
 
-def show_server_inputs_difference_table(server_name: str, diffs: dict):
+def show_server_inputs_difference_table(
+    server_name: str, diffs: Optional[List[Tuple[str, str, str]]]
+) -> Table:
     """Show table of inputs with differences requested."""
     if not diffs:
-        return False
+        return
 
     table = Table(
         title="❌ Configuration mismatch with existing server",
@@ -295,10 +337,8 @@ def check_ssh_keys_exist(ssh_public_key_path: Path, ssh_private_key_path: Path) 
     return True
 
 
-def normalize_os_image(
-    image_name: str,
-    federee: str,
-    region: str
+def normalize_os_image(  # noqa: C901, CCR001, CFQ004
+    image_name: Optional[str], federee: str, region: str
 ) -> tuple[str | None, bool]:
     """
     Normalize OS image names provided.
@@ -316,7 +356,11 @@ def normalize_os_image(
         normalized_value: str | None
         is_short_name: bool
     """
-    value_original = image_name.strip()
+    if image_name is None:
+        value_original = ""
+    else:
+        value_original = image_name.strip()
+
     image_name = value_original  # keep stripped
 
     total_cpu_images = ewc_hub_config.EWC_CLI_CPU_IMAGES
@@ -371,7 +415,113 @@ def normalize_os_image(
     return None, False
 
 
-def resolve_image_and_flavor(
+def safe_configuration_lookup(
+    configuration_mapping: Any,
+    federee: str,
+    region: str,
+    label: str,
+) -> Any:
+    outer = configuration_mapping.get(federee)
+    if outer is None:
+        raise ClickException(f"Invalid federee '{federee}' for {label}")
+
+    inner = outer.get(region)
+    if inner is None:
+        raise ClickException(
+            f"Invalid region '{region}' for federee '{region}' in {label}. "
+            f"Available: {', '.join(outer.keys())}"
+        )
+
+    return inner
+
+
+def _retrieve_image_flavour_defaults(
+    federee: str,
+    region: str,
+) -> Dict[str, Any]:
+    """
+    Retrieve all default image and flavour values for a given federee/region.
+
+    Returns a dictionary where keys are CLI‑style labels (lowercase, hyphenated)
+    and values are the resolved defaults.
+
+    Example output:
+    {
+        "gpu-image-name": "Ubuntu-24.04-GPU",
+        "gpu-flavours": ["vm.a6000.1", "vm.a6000.2"],
+        "default-gpu-flavour": "vm.a6000.2",
+        "default-cpu-flavour": "4cpu-4gbmem",
+        "cpu-image-name": "Ubuntu-22.04"
+    }
+    """
+    defaults: Dict[str, Any] = {}
+    # --- GPU image for this federee/region ---
+    label_gpu_image_name = "GPU image short name"
+    gpu_image_name = safe_configuration_lookup(
+        configuration_mapping=ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP,
+        federee=federee,
+        region=region,
+        label=label_gpu_image_name,
+    )
+    defaults["-".join(label_gpu_image_name.strip().lower().split())] = gpu_image_name
+
+    label_gpu_image_os_complete_name = "GPU image OS complete name"
+    gpu_image_os_complete_name = safe_configuration_lookup(
+        configuration_mapping=ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP,
+        federee=federee,
+        region=region,
+        label=label_gpu_image_os_complete_name,
+    )
+    defaults["-".join(label_gpu_image_os_complete_name.strip().lower().split())] = (
+        gpu_image_os_complete_name
+    )
+
+    label_gpu_flavours = "GPU flavours"
+    # --- GPU flavours for this federee/region ---
+    gpu_flavours_raw = safe_configuration_lookup(
+        configuration_mapping=ewc_hub_config.GPU_FLAVOURS_MAP,
+        federee=federee,
+        region=region,
+        label=label_gpu_flavours,
+    )
+    if isinstance(gpu_flavours_raw, str):
+        raise ClickException("GPU flavours must be a list, got string")
+
+    gpu_flavours: List[str] = gpu_flavours_raw
+    defaults["-".join(label_gpu_flavours.strip().lower().split())] = gpu_flavours
+
+    label_default_gpu_flavour = "default GPU flavour"
+    # --- Default GPU flavour ---
+    default_gpu_flavour = safe_configuration_lookup(
+        configuration_mapping=ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP,
+        federee=federee,
+        region=region,
+        label=label_default_gpu_flavour,
+    )
+    defaults["-".join(label_default_gpu_flavour.strip().lower().split())] = (
+        default_gpu_flavour
+    )
+
+    label_default_cpu_flavour = "default CPU flavour"
+    # --- Default CPU flavour ---
+    default_cpu_flavour = safe_configuration_lookup(
+        configuration_mapping=ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP,
+        federee=federee,
+        region=region,
+        label=label_default_cpu_flavour,
+    )
+    defaults["-".join(label_default_cpu_flavour.strip().lower().split())] = (
+        default_cpu_flavour
+    )
+
+    # --- CPU default image ---
+    cpu_image_name: str = ewc_hub_config.EWC_CLI_DEFAULT_IMAGE
+    defaults["cpu-image-name"] = cpu_image_name
+
+    return defaults
+
+
+def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     conn: connection.Connection,
     openstack_backend: OpenstackBackend,
     federee: str,
@@ -395,135 +545,143 @@ def resolve_image_and_flavor(
         Tuple[int, str, Optional[Dict[str, str]]]:
             - status_code: 0 for success, 1 for error
             - message: success or error message
-            - result: dict containing 'image_name (long name)', 'normalized_image_name', 'flavour_name', on success, None on error
+            - result: dict containing 'image_name (long name)', 'normalized_image_name',
+              'flavour_name', on success, None on error
     """
     result: Dict[str, str] = {}
     _LOGGER.debug("Resolve image name and flavour...")
 
+    defaults_image_flavour = _retrieve_image_flavour_defaults(
+        region=region, federee=federee
+    )
+
+    gpu_image_short_name = defaults_image_flavour["gpu-image-short-name"]
+    gpu_image_os_complete_name = defaults_image_flavour["gpu-image-os-complete-name"]
+    gpu_flavours = defaults_image_flavour["gpu-flavours"]
+    default_gpu_flavour = defaults_image_flavour["default-gpu-flavour"]
+    default_cpu_flavour = defaults_image_flavour["default-cpu-flavour"]
+    default_cpu_image = defaults_image_flavour["cpu-image-name"]
+
     try:
         # Assign default values if nothing is provided by the user or the catalog.
 
-        # If the catalogue item uses this flag then enter here
+        # ============================================================
+        #                     GPU CASES
+        # ============================================================
+
+        # Case 1: Item explicitly requires GPU
         if is_gpu:
-            # GPU case
             _LOGGER.info("The selected item requires a GPU flavor...")
 
-            # Assign Default GPU short name
+            # Image
             if not image_name:
-                image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
+                image_name = gpu_image_short_name
 
-            else:
-                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
-                gpu_image = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
+            elif image_name != gpu_image_short_name:
+                message = (
+                    "[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs.\n"
+                    f"[bold green]✔️ GPU image to use:[/bold green] {gpu_image_short_name}"
+                )
 
-                if image_name != gpu_image:
-                    message = (
-                        "[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs.\n"
-                        f"[bold green]✔️ GPU image to use:[/bold green] {gpu_image}"
-                    )
-                    return 1, message, result
+                return 1, message, result
 
-            # Assign Default GPU flavour (federee dependennt)
+            # Flavour
             if not flavour_name:
-                flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee).get(region)
-            else:
-                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
-                gpu_flavours = ewc_hub_config.GPU_FLAVOURS_MAP.get(federee).get(region)
+                flavour_name = default_gpu_flavour
 
-                if flavour_name not in gpu_flavours:
-                    gpu_list = ", ".join(gpu_flavours)
-                    message = (
-                        "[bold red]❌ Invalid flavour:[/bold red] The selected flavour does not support GPUs.\n"
-                        f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
-                    )
-                    return 1, message, result
-        elif flavour_name and flavour_name in ewc_hub_config.GPU_FLAVOURS_MAP[federee][region]:
-            # GPU case with flavour even if is_GPU is false, so not coming from items.
+            elif flavour_name not in gpu_flavours:
+                gpu_list = ", ".join(gpu_flavours)
+                message = (
+                    "[bold red]❌ Invalid flavour:[/bold red] The selected flavour does not support GPUs.\n"
+                    f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
+                )
+                return 1, message, result
 
-            # GPU case
+        # Case 2: GPU case with flavour even if is_GPU is false,
+        # so not coming from items, but from user inputs
+        if flavour_name and flavour_name in gpu_flavours:
             _LOGGER.info("The selected flavour requires a GPU image...")
 
-            # Assign Default GPU short name
+            # Image
             if not image_name:
-                image_name = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
-            else:
-                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
-                gpu_image = ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP.get(federee).get(region)
+                image_name = gpu_image_short_name
 
-                if image_name != gpu_image:
-                    message = (
-                        "[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs.\n"
-                        f"[bold green]✔️ GPU image to use:[/bold green] {gpu_image}"
-                    )
-                    return 1, message, result
+                # Validate user-provided image
+                # Check if the GPU flavour is in the list of flavours, otherwise stop,
+                # because user might deploy CPU when GPU is needed for an item.
+            elif image_name != gpu_image_short_name:
+                raise ClickException(
+                    f"❌ Invalid image: {image_name}\n✔ GPU image: {gpu_image_short_name}"
+                )
 
-        elif image_name and image_name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
-            # GPU case with image even if is_GPU is false, so not coming from items.
-
-            # GPU case
+        # Case 3: GPU case with image even if is_GPU is false,
+        # so not coming from items, but from user inputs
+        if image_name and image_name == gpu_image_os_complete_name:
             _LOGGER.info("The selected image requires a GPU flavour...")
 
-            # Assign Default GPU flavour (federee dependennt)
             if not flavour_name:
-                flavour_name = ewc_hub_config.DEFAULT_GPU_FLAVOURS_MAP.get(federee).get(region)
-            else:
-                # Check if the GPU flavour is in the list of flavours, otherwise stop, because user might deploy CPU when GPU is needed for an item.
-                gpu_flavours = ewc_hub_config.GPU_FLAVOURS_MAP.get(federee).get(region)
+                flavour_name = default_gpu_flavour
 
-                if flavour_name not in gpu_flavours:
-                    gpu_list = ", ".join(gpu_flavours)
-                    message = (
-                        "[bold red]❌ Invalid flavour:[/bold red] The selected flavour does not support GPUs.\n"
-                        f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
-                    )
-                    return 1, message, result
+            elif flavour_name not in gpu_flavours:
+                gpu_list = ", ".join(gpu_flavours)
+                message = (
+                    "[bold red]❌ Invalid flavour:[/bold red] "
+                    f"The selected flavour {flavour_name} does not support GPUs.\n"
+                    f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
+                )
+                return 1, message, result
 
         else:
-            # CPU case
-            # Assign Default CPU short name
+            # ============================================================
+            #                     CPU CASE
+            # ============================================================
+
             if not image_name:
-                image_name = ewc_hub_config.EWC_CLI_DEFAULT_IMAGE
-                _LOGGER.info(f"Using default CPU image {image_name}...")
+                image_name = default_cpu_image
 
             # Assign Default CPU flavour (federee dependennt)
             # TODO: Change once we have the same flavours
             if not flavour_name:
-                flavour_name = ewc_hub_config.DEFAULT_CPU_FLAVOURS_MAP.get(federee).get(region)
+                flavour_name = default_cpu_flavour
+                _LOGGER.info(
+                    f"No flavour provided. Using default flavour {flavour_name}..."
+                )
 
         # Normalize the image name
         normalized_image_name, is_short_name = normalize_os_image(
-            image_name=image_name,
-            federee=federee,
-            region=region
+            image_name=image_name, federee=federee, region=region
         )
 
         # Now check the image provided and verify is supported.
         if not normalized_image_name:
-
-            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]]
+            total_images = ewc_hub_config.EWC_CLI_CPU_IMAGES + [
+                ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]
+            ]
             error_message = (
                 f"❌ Unsupported OS image for the EWC CLI: {image_name}\n\n"
                 f"🖥️ EWC Supported images (short names): [bold green]{', '.join(total_images)}[/bold green]\n"
                 "➡️ Please choose one of the supported OS images in short names or full name for similar OS.\n"
-                "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]\n"
+                "You can find the full names here: [link=https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available]https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+Virtual+Images+Available[/link]\n"  # noqa: E501
             )
 
             return 1, f"Error [resolve_image_and_flavor]: {error_message}", result
 
         # Retrieve the latest image
         latest_image = openstack_backend.find_latest_image(
-            conn=conn,
-            prefix=normalized_image_name,
-            federee=federee,
-            region=region
+            conn=conn, prefix=normalized_image_name, federee=federee, region=region
         )
 
         # if users use long names, let's check if they are using the latest known image and give them a warning in case.
-        if image_name not in [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]] and not is_short_name and latest_image:
-            if latest_image.name != image_name:
+        if (
+            image_name
+            not in [ewc_hub_config.EWC_CLI_GPU_IMAGES_SITE_MAP[federee][region]]
+            and not is_short_name
+            and latest_image
+        ):
+            if latest_image != image_name:
                 _LOGGER.warning(
                     f"You are not using latest image for {image_name}."
-                    f"\nPlease consider using {normalized_image_name} or {latest_image.name} as image name."
+                    f"\nPlease consider using {normalized_image_name} or {latest_image} as image name."
                 )
         else:
             # Make sure if user uses short name, we can verify if that image exists always, otherwise fail here.
@@ -535,7 +693,7 @@ def resolve_image_and_flavor(
                 )
 
         # Always provide the name that is in Openstack.
-        provided_image_name = image_name if not is_short_name else latest_image.name
+        provided_image_name = image_name if not is_short_name else latest_image
 
         # Extra check to avoid issues in case the configuration is missing.
         if not provided_image_name or not flavour_name:
@@ -557,9 +715,9 @@ def resolve_image_and_flavor(
         return 1, f"Unexpected error: {str(e)}", result
 
 
-def resolve_machine_ip(
+def resolve_machine_ip(  # noqa: C901, CCR001, CFQ004
     federee: str,
-    server_info: dict,
+    server_info: Any,
 ) -> Tuple[int, str, Optional[Dict[str, Optional[str]]]]:
     """
     Resolve the internal and external IPs of a machine.
@@ -636,16 +794,16 @@ def resolve_machine_ip(
         return 1, message, None
 
 
-def get_deployed_server_info(
+def get_deployed_server_info(  # noqa: CCR001
     federee: str,
-    server_info: dict,
+    server_info: Dict[str, Any],
     image_name: Optional[str] = None,
     root_volume: Optional[str] = None,
-    extra_volumes: Optional[list] = None
-):
+    extra_volumes: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Get deployed server info."""
     _LOGGER.debug(server_info)
-    vm_info = {}
+    vm_info: Dict[str, Any] = {}
     vm_info["id"] = server_info.get("id")
     vm_info["name"] = server_info.get("name")
     flavor = server_info.get("flavor")
@@ -693,9 +851,9 @@ def get_deployed_server_info(
     return vm_info
 
 
-def list_server_details(
-    vm_info: dict,
-):
+def list_server_details(  # noqa: CCR001
+    vm_info: Dict[str, Any],
+) -> None:
     """Print detailed info of a single server in a two-column table."""
     console = Console()
 
@@ -738,7 +896,7 @@ def list_server_details(
     console.print(table)
 
 
-def pre_deploy_server_setup(
+def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
@@ -749,62 +907,85 @@ def pre_deploy_server_setup(
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
     dry_run: bool = False,
-    force: bool = False,       
-):
+    force: bool = False,
+) -> Tuple[int, Optional[str], Optional[Dict[str, Any]]]:
     """Pre deploy server setup steps:
 
-        - check SSH keys
-        - select correct image and flavour
-        - select correct network
-        - verify all inputs for the resources are valid
-        - get or create keypair
-    
+    - check SSH keys
+    - select correct image and flavour
+    - select correct network
+    - verify all inputs for the resources are valid
+    - get or create keypair
+
     """
-    outputs: dict[str, Optional[str]] = {}
+    outputs: dict[str, Any] = {}
 
     keypair_name: str = server_inputs["keypair_name"]
     is_gpu: bool = server_inputs["is_gpu"]
     image_name: Optional[str] = server_inputs["image_name"]
     flavour_name: Optional[str] = server_inputs["flavour_name"]
-    security_groups: Optional[tuple] = server_inputs["security_groups"]
-    item_default_security_groups: Optional[tuple] = server_inputs["item_default_security_groups"]
+    security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
+    item_default_security_groups: Optional[Tuple[str, ...]] = server_inputs[
+        "item_default_security_groups"
+    ]
 
     if dry_run:
         return 0, "[Dry Run] skipping pre deploy server setup...", outputs
 
-    _LOGGER.info(f"Pre deploy server setup starting...")
+    _LOGGER.info("Pre deploy server setup starting...")
+
+    manager = SSHKeyManager()
 
     if ssh_public_encoded or ssh_private_encoded:
         if ssh_public_encoded:
-            ssh_public_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"tmp_encoded_public_key_{keypair_name}"
-
+            ssh_public_key_path = (
+                str(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH)
+                + "/tmp_encoded_public_key_"
+                + keypair_name
+            )
         if ssh_private_encoded:
-            ssh_private_key_path = ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"tmp_encoded_private_key_{keypair_name}"
+            ssh_private_key_path = (
+                str(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH)
+                + "/tmp_encoded_private_key_"
+                + keypair_name
+            )
 
-        public_written, private_written = save_encoded_ssh_keys(
-            ssh_public_key_path=ssh_public_key_path,
-            ssh_private_key_path=ssh_private_key_path,
+        public_written, private_written = manager.save_encoded_keys(
+            ssh_public_key_path=Path(ssh_public_key_path),
+            ssh_private_key_path=Path(ssh_private_key_path),
             ssh_public_encoded=ssh_public_encoded,
-            ssh_private_encoded=ssh_private_encoded
+            ssh_private_encoded=ssh_private_encoded,
         )
 
         # Only validate keys if both were successfully written
         if public_written and private_written:
             check_user_ssh_keys(
                 ssh_public_key_path=ssh_public_key_path,
-                ssh_private_key_path=ssh_private_key_path
+                ssh_private_key_path=ssh_private_key_path,
             )
 
         # Casw 2: one valid → tell me which one
         elif public_written and not private_written:
-            return 1, f"[Pre deploy server setup] Invalid encoded private key: could not decode or write private key.", outputs
+            return (
+                1,
+                "[Pre deploy server setup] Invalid encoded private key: could not decode or write private key.",
+                outputs,
+            )
 
         elif private_written and not public_written:
-            return 1, f"[Pre deploy server setup] Invalid encoded public key: could not decode or write public key.", outputs
+            return (
+                1,
+                "[Pre deploy server setup] Invalid encoded public key: could not decode or write public key.",
+                outputs,
+            )
 
         # Case 3: None valid → fail.
         else:
-            return 1, f"[Pre deploy server setup] Both encoded SSH keys are invalid: cannot decode or write either key.", outputs
+            return (
+                1,
+                "[Pre deploy server setup] Both encoded SSH keys are invalid: cannot decode or write either key.",
+                outputs,
+            )
 
     keys_exist = check_ssh_keys_exist(
         ssh_public_key_path=Path(ssh_public_key_path),
@@ -812,7 +993,8 @@ def pre_deploy_server_setup(
     )
 
     if not keys_exist:
-        return 1, f"\n[Pre deploy server setup] Exiting.", outputs
+        return 1, "\n[Pre deploy server setup] Exiting.", outputs
+
     ##################################################################################
     # Flavour and Image
     ##################################################################################
@@ -823,7 +1005,7 @@ def pre_deploy_server_setup(
         region=region,
         flavour_name=flavour_name,
         image_name=image_name,
-        is_gpu=is_gpu
+        is_gpu=is_gpu,
     )
     if sc != 0 or not resolved_info:
         return 1, f"[Pre deploy server setup] {resolve_message}", outputs
@@ -832,7 +1014,7 @@ def pre_deploy_server_setup(
     resolved_image_name: str = resolved_info["image_name"]
     normalized_image_name: str = resolved_info["normalized_image_name"]
     resolved_flavour_name: str = resolved_info["flavour_name"]
-    networks: Optional[tuple] = server_inputs["networks"]
+    networks: Optional[Tuple[str, ...]] = server_inputs["networks"]
 
     outputs["resolved_image_name"] = resolved_image_name
     outputs["normalized_image_name"] = normalized_image_name
@@ -841,7 +1023,7 @@ def pre_deploy_server_setup(
     ##################################################################################
     # Network (private) and security groups
     ##################################################################################
-    security_groups_inputs = ()
+    security_groups_inputs: Tuple[str, ...] = ()
 
     if security_groups:
         security_groups_inputs += security_groups
@@ -852,16 +1034,20 @@ def pre_deploy_server_setup(
 
     if not networks:
         default_network = ewc_hub_config.DEFAULT_NETWORK_MAP.get(federee)
+
+        if default_network is None:
+            raise ValueError(f"No default network configured for federee {federee}")
+
         if federee == Federee.ECMWF.value:
             networks_identified = [n.name for n in openstack_api.list_networks()]
-            networks = tuple([n for n in networks_identified if default_network in n])
+            networks = tuple(n for n in networks_identified if default_network in n)
         else:
-            networks = tuple([default_network])
+            networks = (default_network,)
 
         outputs["networks"] = networks
 
-    security_groups = security_groups_inputs or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(
-        federee
+    security_groups = (
+        security_groups_inputs or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(federee)
     )
 
     if not security_groups:
@@ -869,13 +1055,12 @@ def pre_deploy_server_setup(
 
     outputs["security_groups"] = security_groups
 
-    ##################################################################################
-    ### Check server inputs are valid
-    ##################################################################################
+    # Check server inputs are valid
     try:
         is_valid, message = openstack_backend.check_server_inputs(
             conn=openstack_api,
             federee=federee,
+            region=region,
             image_name=resolved_image_name,
             flavour_name=resolved_flavour_name,
             networks=networks,
@@ -885,11 +1070,16 @@ def pre_deploy_server_setup(
         if not is_valid:
             return (
                 1,
-                f"[Pre deploy server setup] Server creation inputs are not valid: {message}. Please check the input parameters and try again.",
+                "[Pre deploy server setup] Server creation inputs"
+                f" are not valid: {message}. Please check the input parameters and try again.",
                 outputs,
             )
     except Exception as e:
-        return 1, f"[Pre deploy server setup] Could not check inputs from Openstack due to {e}", outputs
+        return (
+            1,
+            f"[Pre deploy server setup] Could not check inputs from Openstack due to {e}",
+            outputs,
+        )
 
     #################################################################################
     # Get or Create keypair
@@ -907,7 +1097,7 @@ def pre_deploy_server_setup(
     keypair_status, key_pair_message = openstack_backend.create_keypair(
         conn=openstack_api,
         keypair_name=keypair_name,
-        public_key_path=Path(ssh_public_key_path),
+        public_key_path=ssh_public_key_path,
     )
 
     if not keypair_status[0]:
@@ -915,14 +1105,14 @@ def pre_deploy_server_setup(
     else:
         _LOGGER.info(key_pair_message)
 
-    return 0, f"Pre deploy server setup finished successfully.", outputs
+    return 0, "Pre deploy server setup finished successfully.", outputs
 
 
-def identify_server_reconfiguration(
+def identify_server_reconfiguration(  # noqa: CCR001, CFQ004, CFQ001
     openstack_api: connection.Connection,
-    server_inputs: dict,
-    pre_deploy_server_outputs: dict
-):
+    server_inputs: Dict[str, Any],
+    pre_deploy_server_outputs: Dict[str, Any],
+) -> Tuple[int, Optional[str], Optional[Dict[str, Any]]]:
     """Identify resources to be reconfigured."""
     outputs: dict[str, Optional[str]] = {}
 
@@ -931,8 +1121,8 @@ def identify_server_reconfiguration(
     flavour_name: Optional[str] = pre_deploy_server_outputs["resolved_flavour_name"]
     resolved_image_name: str = pre_deploy_server_outputs["resolved_image_name"]
 
-    networks: Optional[tuple] = server_inputs["networks"]
-    security_groups: Optional[tuple] = server_inputs["security_groups"]
+    networks: Optional[Tuple[str, ...]] = server_inputs["networks"]
+    security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
 
     # Retrive machine if exists
     try:
@@ -954,8 +1144,9 @@ def identify_server_reconfiguration(
     status = existing_server_info.status  # usually "ACTIVE", "ERROR", "BUILD", etc.
 
     if status == "ERROR":
-
-        parts = [f"[Identify Server Reconfiguration] Server '{server_name}' is in ERROR state."]
+        parts = [
+            f"[Identify Server Reconfiguration] Server '{server_name}' is in ERROR state."
+        ]
 
         # Always add the guidance text
         parts.append(
@@ -964,7 +1155,7 @@ def identify_server_reconfiguration(
             "or you can delete the VM first (you can use `ewc infra delete VM_NAME`) and retry the deployment."
         )
 
-        error_state_message = "\n".join(parts)   
+        error_state_message = "\n".join(parts)
         return (
             1,
             f"{error_state_message}",
@@ -977,7 +1168,8 @@ def identify_server_reconfiguration(
     ):
         return (
             1,
-            f"[Identify Server Reconfiguration] Server {server_name} already exists and it has not been deployed with the EWC CLI. Exiting.",
+            f"[Identify Server Reconfiguration] Server {server_name} already exists"
+            " and it has not been deployed with the EWC CLI. Exiting.",
             outputs,
         )
 
@@ -1012,7 +1204,8 @@ def identify_server_reconfiguration(
             console.print(table)
 
             diff_table_message = (
-                f"[Identify Server Reconfiguration] The server '{server_name}' already exists with different configuration."
+                f"[Identify Server Reconfiguration] The server '{server_name}'"
+                " already exists with different configuration."
                 " Use a different --server-name or use --force to redeploy."
             )
             return (
@@ -1028,29 +1221,29 @@ def identify_server_reconfiguration(
     )
 
 
-def deploy_server(
+def deploy_server(  # noqa: CCR001, CFQ004, CFQ002
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
-    server_inputs: dict,
-    pre_deploy_server_outputs: dict,
+    server_inputs: Dict[str, Any],
+    pre_deploy_server_outputs: Dict[str, Any],
     boot_from_volume: bool = False,
     dry_run: bool = False,
     force: bool = False,
-):
+) -> Tuple[int, Optional[str], Optional[Dict[str, Any]]]:
     """Deploy Server in Openstack."""
-    outputs: dict[str, Optional[str]] = {}
+    outputs: Optional[Dict[str, Any]] = {}
 
     if dry_run:
         return 0, "Dry run: skipping deploy server...", outputs
 
     server_name: str = server_inputs["server_name"]
     keypair_name: str = server_inputs["keypair_name"]
-    networks: Optional[tuple] = server_inputs["networks"]
-    security_groups: Optional[tuple] = server_inputs["security_groups"]
+    networks: Optional[Tuple[str, ...]] = server_inputs["networks"]
+    security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
     resolved_image_name: str = pre_deploy_server_outputs["resolved_image_name"]
     resolved_flavour_name: str = pre_deploy_server_outputs["resolved_flavour_name"]
-    extra_volumes: tuple = server_inputs["extra_volume"]
+    extra_volumes: Optional[Tuple[str, ...]] = server_inputs["extra_volume"]
 
     _LOGGER.info(f"Deploy server {server_name} starting...")
 
@@ -1060,14 +1253,16 @@ def deploy_server(
         networks=networks,
         security_groups=security_groups,
         keypair_name=keypair_name,
-        extra_volumes=extra_volumes
+        extra_volumes=extra_volumes,
     )
 
     #################################################################################
     # Get or Create Server
     #################################################################################
     if force:
-        _LOGGER.warning("[Deploy server] Force enabled, server will be deleted first, if existing.")
+        _LOGGER.warning(
+            "[Deploy server] Force enabled, server will be deleted first, if existing."
+        )
 
         openstack_server_status, delete_server_message = (
             openstack_backend.delete_server(conn=openstack_api, server_name=server_name)
@@ -1090,7 +1285,7 @@ def deploy_server(
             networks=networks,
             sec_groups=security_groups,
             keypair_name=keypair_name,
-            boot_from_volume=boot_from_volume
+            boot_from_volume=boot_from_volume,
         )
     )
     if not openstack_server_status[0]:
@@ -1130,26 +1325,26 @@ def deploy_server(
     return 0, "Deploy server finished successfully", outputs
 
 
-def post_deploy_server_setup(
+def post_deploy_server_setup(  # noqa: CCR001, CFQ004, CFQ001, C901
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
-    server_inputs: dict,
-    server_info: dict,
+    server_inputs: Dict[str, Any],
+    server_info: Dict[str, Any],
     dry_run: bool = False,
-):
+) -> Tuple[int, str, Optional[Dict[str, Any]]]:
     """Post deploy server setup steps:
 
-        - attach floating IP
-        - attach volume
-    
+    - attach floating IP
+    - attach volume
+
     """
-    outputs: dict[str, Optional[str]] = {}
+    outputs: Optional[Dict[str, Any]] = {}
 
     if dry_run:
         return 0, "[Dry Run] skipping post deploy server setup...", outputs
 
-    _LOGGER.info(f"Post deploy server setup starting...")
+    _LOGGER.info("Post deploy server setup starting...")
 
     server_name: str = server_inputs["server_name"]
 
@@ -1172,7 +1367,9 @@ def post_deploy_server_setup(
         return 1, "[Post deploy server setup] No IPs identified.", outputs
 
     # Get external IP if existing
-    external_ip_machine = resolve_ip_outputs.get("external_ip_machine") if resolve_ip_outputs else None
+    external_ip_machine = (
+        resolve_ip_outputs.get("external_ip_machine") if resolve_ip_outputs else None
+    )
 
     # Add external IP if requested and not already present
     if external_ip and not external_ip_machine:
@@ -1187,10 +1384,10 @@ def post_deploy_server_setup(
             _LOGGER.info(message)
 
     # Get info of the server again, because the object changed.
-    server_info = openstack_api.get_server(name_or_id=server_name)
+    server_info_with_ip: Any = openstack_api.get_server(name_or_id=server_name)
 
     sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
-        federee=federee, server_info=server_info
+        federee=federee, server_info=server_info_with_ip
     )
     if sc_resolve_ip != 0:
         return 1, resolve_ip_message, outputs
@@ -1213,7 +1410,7 @@ def post_deploy_server_setup(
     outputs = {
         "internal_ip_machine": internal_ip_machine,
         "external_ip_machine": external_ip_machine,
-        "server_info": server_info,
+        "server_info": server_info_with_ip,
     }
 
     ############################################################
@@ -1223,14 +1420,16 @@ def post_deploy_server_setup(
     extra_volume_sizes = server_inputs.get("extra_volume", None)
 
     if extra_volume_sizes:
-        _LOGGER.info(f"Post deploy: creating and attaching extra volumes: {extra_volume_sizes}")
+        _LOGGER.info(
+            f"Post deploy: creating and attaching extra volumes: {extra_volume_sizes}"
+        )
 
         # 1. Create volumes (volume_type=None → default backend)
         vol_result, created_volumes, msg = openstack_backend.create_volumes(
             conn=openstack_api,
             base_name=server_name,
             volume_sizes=tuple(extra_volume_sizes),
-            volume_type=None,        # <── default volume type TODO: Add volume type performance
+            volume_type=None,  # <── default volume type TODO: Add volume type performance
             attempts=2,
             retry_delay_s=30,
             wait_time_s=600,
@@ -1243,15 +1442,25 @@ def post_deploy_server_setup(
 
         _LOGGER.info(msg)
 
+        server_id = server_info.get("id")
+        if server_id is None:
+            return (
+                1,
+                "[Post deploy] Volume attachment failed: Server info missing 'id'",
+                outputs,
+            )
+
         # 2. Attach volumes
-        attach_result, attachments, attach_msg = openstack_backend.attach_volumes_to_server(
-            conn=openstack_api,
-            server_id=server_info.id,
-            volumes=created_volumes,
-            attempts=2,
-            retry_delay_s=30,
-            wait_time_s=600,
-            dry_run=dry_run,
+        attach_result, attachments, attach_msg = (
+            openstack_backend.attach_volumes_to_server(
+                conn=openstack_api,
+                server_id=server_id,
+                volumes=created_volumes,
+                attempts=2,
+                retry_delay_s=30,
+                wait_time_s=600,
+                dry_run=dry_run,
+            )
         )
 
         if not attach_result.success:
@@ -1264,7 +1473,7 @@ def post_deploy_server_setup(
     return 0, "Post deploy server setup finished successfully", outputs
 
 
-def create_server_command(
+def create_server_command(  # noqa: CCR001, CFQ002
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
@@ -1275,15 +1484,14 @@ def create_server_command(
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
     dry_run: bool = False,
-    force: bool = False, 
-):
+    force: bool = False,
+) -> Tuple[int, str, Dict[str, Any]]:
     """Create Server command."""
     # Accept both dict and Pydantic model
     if hasattr(server_inputs, "model_dump"):
         server_inputs = server_inputs.model_dump()
 
-
-    #### PRE DEPLOY SERVER ACTION
+    # PRE DEPLOY SERVER ACTION
     os_status_code, os_message, pre_deploy_server_outputs = pre_deploy_server_setup(
         openstack_backend=openstack_backend,
         openstack_api=openstack_api,
@@ -1295,7 +1503,7 @@ def create_server_command(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         dry_run=dry_run,
-        force=force,  
+        force=force,
     )
 
     boot_from_volume = False
@@ -1308,32 +1516,29 @@ def create_server_command(
         # Exit with a non-zero status
         sys.exit(1)
 
-    server_inputs["normalized_image_name"] = pre_deploy_server_outputs["normalized_image_name"]
+    server_inputs["normalized_image_name"] = pre_deploy_server_outputs[
+        "normalized_image_name"
+    ]
     if "networks" in pre_deploy_server_outputs:
         server_inputs["networks"] = pre_deploy_server_outputs["networks"]
 
     server_inputs["security_groups"] = pre_deploy_server_outputs["security_groups"]
     normalized_image_name = pre_deploy_server_outputs["normalized_image_name"]
 
-    #### VERIFY IF SERVER RECONFIGURATION IS NEEDED
+    # VERIFY IF SERVER RECONFIGURATION IS NEEDED
     if not force:
         sr_status_code, sr_message, _ = identify_server_reconfiguration(
             openstack_api=openstack_api,
             server_inputs=server_inputs,
-            pre_deploy_server_outputs=pre_deploy_server_outputs  
+            pre_deploy_server_outputs=pre_deploy_server_outputs,
         )
         if sr_status_code != 0:
-            console.print(
-                Panel(sr_message, title="Error", style="red")
-            )
+            console.print(Panel(sr_message, title="Error", style="red"))
             sys.exit(1)
 
-        console.print(
-            Panel(sr_message, title="OK", style="green")
-        )
+        console.print(Panel(sr_message, title="OK", style="green"))
 
-
-    #### DEPLOY SERVER ACTION
+    # DEPLOY SERVER ACTION
     os_status_code, os_message, deploy_server_outputs = deploy_server(
         openstack_backend=openstack_backend,
         openstack_api=openstack_api,
@@ -1350,7 +1555,7 @@ def create_server_command(
         # Exit with a non-zero status
         sys.exit(1)
 
-    #### POST DEPLOY SERVER ACTION
+    # POST DEPLOY SERVER ACTION
     os_status_code, os_message, post_deploy_server_outputs = post_deploy_server_setup(
         openstack_backend=openstack_backend,
         openstack_api=openstack_api,
@@ -1359,6 +1564,11 @@ def create_server_command(
         server_info=deploy_server_outputs["server_info"],
         dry_run=dry_run,
     )
+
+    if not post_deploy_server_outputs:
+        console.print(Panel(os_message, title="Error", style="red"))
+        # Exit with a non-zero status
+        sys.exit(1)
 
     internal_ip_machine = post_deploy_server_outputs["internal_ip_machine"]
     external_ip_machine = post_deploy_server_outputs["external_ip_machine"]

@@ -10,15 +10,17 @@
 
 import os
 import re
-from typing import Optional, Tuple
+from typing import Optional
 from pathlib import Path
+from typing import Callable, Any
+from typing import NoReturn
 
 import rich_click as click
 from rich.console import Console
+from rich.panel import Panel
 from click import ClickException
 
-from configparser import ConfigParser
-
+from prompt_toolkit.key_binding import KeyPressEvent
 from prompt_toolkit.application import Application
 from prompt_toolkit.widgets import RadioList, Box, Frame
 from prompt_toolkit.layout import Layout
@@ -32,21 +34,39 @@ from openstack.config import OpenStackConfig
 from openstack.exceptions import (  # noqa: N813
     ConfigException as openstack_config_exception,
 )
+from pydantic import BaseModel
 
 from ewccli.configuration import config as ewc_hub_config
-from ewccli.utils import save_cli_profile, _resolve_profile
-from ewccli.utils import generate_ssh_keypair, check_ssh_keys_match
-from ewccli.utils import save_default_login_profile
+from ewccli.profile import ProfileData, ProfileStore
+from ewccli.ssh_keys_manager import SSHKeyManager, SSHKeyError
 from ewccli.enums import Federee, Region
 from ewccli.logger import get_logger
 
 _LOGGER = get_logger(__name__)
-
+_DEFAULT_OPENSTACK_CLOUD_CONFIG_PATH = "~/.config/openstack/clouds.yaml"
 
 console = Console()
 
 
-def kubeconfig_available():
+class LoginInput(BaseModel):  # type: ignore[misc]
+    """
+    Raw login input provided by the user before resolution.
+    """
+
+    tenant_name: str
+    federee: str
+    region: str
+
+    application_credential_id: Optional[str] = None
+    application_credential_secret: Optional[str] = None
+
+    ssh_public_key_path: Optional[str] = None
+    ssh_private_key_path: Optional[str] = None
+
+    profile: Optional[str] = None
+
+
+def kubeconfig_available() -> bool:
     """Verify if kubeconfig is available."""
     try:
         config.load_kube_config()
@@ -59,12 +79,12 @@ def kubeconfig_available():
         return False
 
 
-def cloud_yaml_exists():
+def cloud_yaml_exists() -> bool:
     """Check if OpenStack clouds.yaml file exists."""
     # Default OpenStack config paths (can vary by environment)
     default_paths = [
         Path(
-            os.getenv("OS_CLIENT_CONFIG_FILE", "~/.config/openstack/clouds.yaml")
+            os.getenv("OS_CLIENT_CONFIG_FILE", _DEFAULT_OPENSTACK_CLOUD_CONFIG_PATH)
         ).expanduser(),
         Path("/etc/openstack/clouds.yaml"),
     ]
@@ -72,7 +92,7 @@ def cloud_yaml_exists():
     return any(p.exists() for p in default_paths)
 
 
-def openstack_config_available(cloud_name: str = "openstack"):
+def openstack_config_available(cloud_name: str = "openstack") -> bool:  # noqa: CFQ004
     """Verify if OpenStack cloud config is available."""
     try:
         os_config = OpenStackConfig()
@@ -81,7 +101,7 @@ def openstack_config_available(cloud_name: str = "openstack"):
 
             if cloud_name not in cloud_names:
                 _LOGGER.warning(
-                    "OpenStack cloud config found at '~/.config/openstack/cloud.yaml'\n"
+                    "OpenStack cloud config found at '~/.config/openstack/clouds.yaml'\n"
                     f"But no clouds match the cloud name '{cloud_name}'\n"
                     f"{cloud_names}\n\n"
                     "You can choose the cloud you want with the --cloud-name flag.\n"
@@ -95,7 +115,7 @@ def openstack_config_available(cloud_name: str = "openstack"):
             return True
         else:
             _LOGGER.warning(
-                "⚠️ OpenStack cloud config not found at '~/.config/openstack/cloud.yaml'\n"
+                "⚠️ OpenStack cloud config not found at '~/.config/openstack/clouds.yaml'\n"
                 "You can set the config path with the environment variable:\n"
                 "  OS_CLIENT_CONFIG_FILE=/path/to/clouds.yaml\n"
                 "Alternatively, provide your credentials using:\n"
@@ -111,7 +131,11 @@ def openstack_config_available(cloud_name: str = "openstack"):
         return False
 
 
-def validate_tenant_name(ctx, param, value):
+def validate_tenant_name(
+    ctx: click.Context,
+    param: click.Parameter,
+    value: str,
+) -> str:
     """Validate tenant name."""
     pattern = r"^[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+$"
     if not re.match(pattern, value):
@@ -121,7 +145,10 @@ def validate_tenant_name(ctx, param, value):
     return value
 
 
-def validate_region(ctx, param, value):
+def validate_region(
+    ctx: click.Context, param: click.Parameter, value: Optional[str]
+) -> str | None:
+    """Validate region."""
     federee = ctx.params.get("federee")
     if federee is None or value is None:
         return value
@@ -137,7 +164,7 @@ def validate_region(ctx, param, value):
     return value
 
 
-def init_options(func):
+def init_options(func: Callable[..., Any]) -> Callable[..., Any]:
     """Login options for the CLI login command."""
     func = click.option(
         "--tenant-name",
@@ -182,7 +209,7 @@ def init_options(func):
         help=(
             "OpenStack Application Credential ID. "
             "Ignored if environment variable OS_APPLICATION_CREDENTIAL_ID is set, "
-            "or if a clouds.yaml config is found at '~/.config/openstack/cloud.yaml' "
+            f"or if a clouds.yaml config is found at '{_DEFAULT_OPENSTACK_CLOUD_CONFIG_PATH}' "
             "or at the path specified by OS_CLIENT_CONFIG_FILE."
         ),
     )(func)
@@ -193,7 +220,7 @@ def init_options(func):
         help=(
             "OpenStack Application Credential Secret. "
             "Ignored if environment variable OS_APPLICATION_CREDENTIAL_SECRET is set, "
-            "or if a clouds.yaml config is found at '~/.config/openstack/cloud.yaml' "
+            f"or if a clouds.yaml config is found at '{_DEFAULT_OPENSTACK_CLOUD_CONFIG_PATH}' "
             "or at the path specified by OS_CLIENT_CONFIG_FILE."
         ),
     )(func)
@@ -203,23 +230,12 @@ def init_options(func):
         default="openstack",
         show_default=True,
         help=(
-            "OpenStack cloud name from OpenStack cloud config file available at '~/.config/openstack/cloud.yaml' "
+            "OpenStack cloud name from OpenStack cloud config"
+            f" file available at '{_DEFAULT_OPENSTACK_CLOUD_CONFIG_PATH}' "
             "or at the path specified by OS_CLIENT_CONFIG_FILE."
             " This flag is ignored if the cloud config file is not present."
         ),
     )(func)
-    # func = click.option(
-    #     "--token",
-    #     hide_input=True,
-    #     required=False,
-    #     default="",
-    #     help=(
-    #         "Kubernetes token (leave blank if not needed).\n"
-    #         "Provide this only if you plan to use Kubernetes services and "
-    #         "do not have a kubeconfig file available "
-    #         "(e.g. ~/.kube/config or via the KUBECONFIG environment variable)."
-    #     ),
-    # )(func)
     func = click.option(
         "--ssh-public-key-path",
         required=False,
@@ -245,7 +261,7 @@ def init_options(func):
     return func
 
 
-def select_federee():
+def select_provider() -> Any:
     """Select provider."""
     choices = [
         ("EUMETSAT", "EUMETSAT"),
@@ -257,8 +273,8 @@ def select_federee():
     # Use the widget's own default key bindings
     kb = radio_list.control.key_bindings
 
-    @kb.add("enter")
-    def _(event):
+    @kb.add("enter")  # type: ignore[misc]
+    def _(event: KeyPressEvent) -> None:
         index = radio_list._selected_index
         selected_value = radio_list.values[index][
             1
@@ -266,9 +282,9 @@ def select_federee():
         event.app.exit(result=selected_value)
 
     # Add quit keys as well
-    @kb.add("c-c")
-    @kb.add("c-q")
-    def _(event):
+    @kb.add("c-c")  # type: ignore[misc]
+    @kb.add("c-q")  # type: ignore[misc]
+    def _(event: KeyPressEvent) -> None:
         event.app.exit(None)
 
     root_container = Box(Frame(radio_list, title="Select Federee"), padding=1)
@@ -290,7 +306,7 @@ def select_federee():
     return selected
 
 
-def select_region(federee: str):
+def select_region(federee: str) -> str:
     """Select region based on the chosen federee."""
 
     # Load allowed regions from your config
@@ -302,18 +318,20 @@ def select_region(federee: str):
     radio_list = RadioList(choices)
     kb = radio_list.control.key_bindings
 
-    @kb.add("enter")
-    def _(event):
+    @kb.add("enter")  # type: ignore[misc]
+    def _(event: click.Event) -> None:
         index = radio_list._selected_index
         selected_value = radio_list.values[index][1]
         event.app.exit(result=selected_value)
 
-    @kb.add("c-c")
-    @kb.add("c-q")
-    def _(event):
+    @kb.add("c-c")  # type: ignore[misc]
+    @kb.add("c-q")  # type: ignore[misc]
+    def _(event: click.Event) -> None:
         event.app.exit(None)
 
-    root_container = Box(Frame(radio_list, title=f"Select Region for {federee}"), padding=1)
+    root_container = Box(
+        Frame(radio_list, title=f"Select Region for {federee}"), padding=1
+    )
     layout = Layout(root_container)
 
     app = Application(
@@ -324,118 +342,167 @@ def select_region(federee: str):
         style=Style.from_dict({"frame.label": "bold"}),
     )
 
-    selected = app.run()
+    selected: str = app.run()
     return selected
 
 
 def check_and_generate_ssh_keys(
     ssh_public_key_path: Optional[str],
     ssh_private_key_path: Optional[str],
-    resolved_profile: str
-) -> Tuple[str, str]:
-    """Check for SSH keys, prompt to generate if missing"""
-    if not ssh_private_key_path:
-        ssh_private_key_path = str(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa")
+    resolved_profile: str,
+) -> tuple[str, str]:
+    """
+    Ensure SSH keys exist and match, or generate them if missing.
+    """
+    manager = SSHKeyManager()
+    priv, pub = _resolve_default_paths(
+        ssh_public_key_path,
+        ssh_private_key_path,
+        resolved_profile,
+    )
 
-    if not ssh_public_key_path:
-        ssh_public_key_path = str(ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa.pub")
-
-    private_exists = Path(ssh_private_key_path).exists()
-    public_exists = Path(ssh_public_key_path).exists()
+    private_exists = priv.exists()
+    public_exists = pub.exists()
 
     if private_exists and public_exists:
-        # case 1: both exist
-        console.print(
-            "Using the following path for the SSH keypair:"
-            f"\nSSH public key path: {ssh_public_key_path}"
-            f"\nSSH private key path: {ssh_private_key_path}\n"
+        return _handle_existing_keys(manager, priv, pub)
+
+    if not private_exists and not public_exists:
+        return _handle_missing_keys(manager, priv, pub, resolved_profile)
+
+    return _handle_partial_keys(priv, pub)
+
+
+def _handle_existing_keys(
+    manager: SSHKeyManager, priv: Path, pub: Path
+) -> tuple[str, str]:
+    """
+    Validate an existing SSH keypair and return their paths.
+    """
+    console.print(
+        Panel(
+            f"Using existing SSH keypair:\n"
+            f"[green]Public:[/green]  {pub}\n"
+            f"[green]Private:[/green] {priv}",
+            title="SSH Keys Found",
+            style="cyan",
         )
-        console.print("SSH key pair exists, checking consistency...")
+    )
 
-        is_matching = check_ssh_keys_match(
-            ssh_private_key_path=ssh_private_key_path,
-            ssh_public_key_path=ssh_public_key_path
-        )
+    console.print("Checking SSH keypair consistency...")
 
-        if not is_matching:
-            raise ClickException(
-                "SSH keys provided are not a correct keypair:"
-                f"\nSSH public key path: {ssh_public_key_path}"
-                f"\nSSH private key path: {ssh_private_key_path}"
-                "\nMake sure either you pass correct SSH keypair in the EWC login command through the following flags `--ssh-private-key-path` and `--ssh-public-key-path`"
-                "or let the `ewc login` command create them for you. Exiting."
-            )
-        else:
-            click.secho("SSH private and public keys are matching! Continuing...", fg="green")
-        
-        return ssh_private_key_path, ssh_public_key_path
-
-    elif not private_exists and not public_exists:
-        # case 2: neither exists
-        console.print(
-            "SSH keypair is missing:"
-            f"\nSSH public key path: {ssh_public_key_path}"
-            f"\nSSH private key path: {ssh_private_key_path}\n"
-        )
-
-        if click.confirm("Do you want to generate a new SSH key pair?", default=False):
-            ssh_custom_private_key_path, ssh_custom_public_key_path = generate_ssh_keypair(
-                resolved_profile=resolved_profile
-            )
-            return ssh_custom_private_key_path, ssh_custom_public_key_path
-        else:
-            raise ClickException(
-                "SSH key generation skipped but SSH keys are mandatory to deploy VMs or hub items."
-                " Make sure either you pass SSH keys in the EWC login command through the following flags `--ssh-private-key-path` and `--ssh-public-key-path`"
-                "or let the `ewc login` command create them for you. Exiting."
-            )
-
-    else:
-        # case 3: exactly one exists
-        if private_exists and not public_exists:
-            key_exists = "public"
-            key_path = ssh_public_key_path
-
-        if not private_exists and public_exists:
-            key_exists = "private"
-            key_path = ssh_private_key_path
-
+    try:
+        manager.keys_match(priv, pub)
+    except SSHKeyError as exc:
         raise ClickException(
-            f"SSH {key_exists} key is missing at: {key_path}."
-            " Make sure the keypair is passed!"
-            " You can pass SSH keys in the EWC login command through the following flags `--ssh-private-key-path` or `--ssh-public-key-path`"
-            "or let the `ewc login` command create them for you. Exiting."
+            f"SSH keys are invalid or mismatched:\n{exc}\n"
+            "Provide a correct keypair or let `ewc login` generate one."
         )
 
+    console.print("[green]SSH keypair is valid. Continuing...[/green]")
+    return str(priv), str(pub)
 
-def init_command(
-    application_credential_id: str,
-    application_credential_secret: str,
-    ssh_public_key_path: str,
-    ssh_private_key_path: str,
-    tenant_name: str,
-    federee: str,
-    region: str,
-    profile: Optional[str] = None,
-    cloud_name: str = "openstack"
-    # token: str,
-):
-    """EWC CLI Login."""
-    if not federee:
-        # If --federee is not passed, ask interactively
-        federee = select_federee()
+
+def _handle_missing_keys(
+    manager: SSHKeyManager, priv: Path, pub: Path, resolved_profile: str
+) -> tuple[str, str]:
+    """
+    Handle the case where no SSH keys exist.
+    """
+    console.print(
+        Panel(
+            f"SSH keypair not found:\nPublic:  {pub}\nPrivate: {priv}",
+            title="SSH Keys Missing",
+            style="yellow",
+        )
+    )
+
+    if click.confirm("Generate a new SSH keypair?", default=False):
+        new_priv, new_pub = manager.generate_keypair(resolved_profile)
+        return str(new_priv), str(new_pub)
+
+    raise ClickException(
+        "SSH keys are required. Provide them via:\n"
+        "  --ssh-private-key-path\n"
+        "  --ssh-public-key-path\n"
+        "or allow `ewc login` to generate them."
+    )
+
+
+def _handle_partial_keys(priv: Path, pub: Path) -> NoReturn:
+    """
+    Raise an error when only one of the SSH keys exists.
+    """
+    if priv.exists() and not pub.exists():
+        missing = "public"
+        missing_path = pub
+    else:
+        missing = "private"
+        missing_path = priv
+
+    raise ClickException(
+        f"SSH {missing} key is missing at: {missing_path}\n"
+        "Provide a complete keypair or let `ewc login` generate one."
+    )
+
+
+def _resolve_default_paths(
+    ssh_public_key_path: Optional[str],
+    ssh_private_key_path: Optional[str],
+    resolved_profile: str,
+) -> tuple[Path, Path]:
+    """
+    Resolve SSH key paths, falling back to profile-based defaults.
+    """
+    if not ssh_private_key_path:
+        ssh_private_key_path = str(
+            ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa"
+        )
+
+    if not ssh_public_key_path:
+        ssh_public_key_path = str(
+            ewc_hub_config.EWC_CLI_HUB_SSH_REPO_PATH / f"{resolved_profile}_id_rsa.pub"
+        )
+
+    return (
+        Path(ssh_private_key_path).expanduser(),
+        Path(ssh_public_key_path).expanduser(),
+    )
+
+
+def init_command(data: LoginInput) -> None:
+    """
+    Initialize an EWC CLI login session.
+
+    This orchestrates:
+    - federee selection
+    - region selection
+    - profile resolution
+    - SSH key validation or generation
+    - OpenStack credential resolution
+    - persistence of the login profile
+    """
+    # 1.1 Resolve federee
+    if not data.federee:
+        federee = select_provider()
         if not federee:
             console.print("No federee selection made. Exiting.")
             return
+    else:
+        federee = data.federee
 
     console.print(f"Considering federee: {federee}")
 
+    # 1.2 Resolve region
+    region = data.region  # always initialize
+
     if not region:
-        # If --federee is not passed, ask interactively
+        # If --region is not passed, ask interactively
         region = select_region(federee=federee)
-        if not region:
-            console.print("No region selection made. Exiting.")
-            return
+
+    if not region:
+        console.print("No region selection made. Exiting.")
+        return
 
     allowed_regions = ewc_hub_config.allowed_regions(federee)
 
@@ -447,56 +514,134 @@ def init_command(
 
     console.print(f"Considering region: {region}\n")
 
-    resolved_profile = _resolve_profile(profile, federee, region, tenant_name)
+    # 2. Resolve profile name
+    store = ProfileStore()
+    resolved_profile = store.resolve_name(
+        profile=data.profile,
+        federee=federee,
+        tenant_name=data.tenant_name,
+        region=region,
+    )
 
-    profiles_file_path = ewc_hub_config.EWC_CLI_PROFILES_PATH
-    cfg = ConfigParser()
-    cfg.read(profiles_file_path)
+    # 3. Ensure profile does not already exist
+    _ensure_profile_not_exists(store, resolved_profile)
 
-    if not os.path.exists(profiles_file_path) or not cfg.sections():
-        pass
-    else:
-        # Check only when the profile path exist
-        if resolved_profile and resolved_profile in cfg:
-            click.secho(
-                f"❌ Profile '{resolved_profile}' already exists in {ewc_hub_config.EWC_CLI_PROFILES_PATH}",
-                fg="red",
-                bold=True,
-            )
-            click.secho(
-                "Use a different profile name or delete the existing profile first.",
-                fg="yellow",
-            )
-            raise click.Abort()
+    # 4. Resolve SSH keys
+    priv_path, pub_path = _resolve_ssh_keys(
+        ssh_public_key_path=data.ssh_public_key_path,
+        ssh_private_key_path=data.ssh_private_key_path,
+        resolved_profile=resolved_profile,
+    )
 
-    ssh_private_key_path_to_save, ssh_public_key_path_to_save = check_and_generate_ssh_keys(
+    # 5. Resolve OpenStack credentials
+    application_credential_id, application_credential_secret = (
+        _resolve_openstack_credentials(
+            data.application_credential_id,
+            data.application_credential_secret,
+        )
+    )
+
+    # TODO: token not available in the profile
+    # if kubeconfig_available():
+    #     click.echo("🔑 kubeconfig found – skipping token requirement.")
+    #     token = None
+    # elif not token:
+    #     token = click.prompt(
+    #         "Enter Kubernetes token (leave blank if not needed)",
+    #         hide_input=True,
+    #         default="",
+    #         show_default=False,
+    #         prompt_suffix=": ",
+    #     )
+    #     if token == "":
+    #         token = None
+
+    # 6. Build the Pydantic model
+    profile_data = ProfileData(
+        federee=federee,
+        tenant_name=data.tenant_name,
+        region=data.region,
+        profile=resolved_profile,
+        ssh_private_key_path_to_save=str(priv_path),
+        ssh_public_key_path_to_save=str(pub_path),
+        # token=None,
+        application_credential_id=application_credential_id,
+        application_credential_secret=application_credential_secret,
+    )
+
+    # 7. Save profile
+    store.save_default(profile_data)
+    store.save(profile_data)
+
+    console.print(
+        f"✅ Profile '[bold cyan]{resolved_profile}[/bold cyan]' saved in {store.path}"
+    )
+
+
+def _resolve_ssh_keys(
+    ssh_public_key_path: Optional[str],
+    ssh_private_key_path: Optional[str],
+    resolved_profile: str,
+) -> tuple[str, str]:
+    """
+    Resolve SSH keypair for the login flow.
+
+    Delegates all SSH key validation and generation logic to
+    `check_and_generate_ssh_keys`, which uses SSHKeyManager internally.
+
+    Returns
+    -------
+    tuple[str, str]
+        The resolved private and public SSH key paths.
+    """
+    return check_and_generate_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         resolved_profile=resolved_profile,
     )
-    
 
+
+def _resolve_openstack_credentials(  # noqa: CCR001
+    application_credential_id: Optional[str] = None,
+    application_credential_secret: Optional[str] = None,
+    cloud_name: str = "openstack",
+) -> tuple[str, str]:
+    """
+    Resolve OpenStack application credentials.
+
+    If a valid OpenStack clouds.yaml is detected, credentials are skipped.
+    Otherwise, missing values are retrieved from environment variables
+    or prompted interactively.
+
+    Returns
+    -------
+    tuple[str, str]
+        The resolved (ID, secret) pair.
+    """
     if openstack_config_available(cloud_name=cloud_name):
         os_cloud_config_file_path = os.getenv("OS_CLIENT_CONFIG_FILE")
 
-        os_cloud_config_selected_path = os_cloud_config_file_path if os_cloud_config_file_path else "~/.config/openstack/clouds.yaml"
+        os_cloud_config_selected_path = (
+            os_cloud_config_file_path
+            if os_cloud_config_file_path
+            else _DEFAULT_OPENSTACK_CLOUD_CONFIG_PATH
+        )
         console.print(
             f"🔑 [bold green]Openstack cloud config found at {os_cloud_config_selected_path} [/bold green]"
             " – skipping Openstack ID and secret requirement prompt."
         )
-        config = (
-            OpenStackConfig()
-        )   # default to ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
-    
-        cloud = (
-            config.get_one(cloud=cloud_name)
-        )
+
+        # default to ~/.config/openstack/clouds.yaml, to change use OS_CLIENT_CONFIG_FILE
+        config = OpenStackConfig()
+        cloud = config.get_one(cloud=cloud_name)
 
         cloud_config = cloud.config.get("auth")
         application_credential_id = cloud_config.get("application_credential_id")
         application_credential_secret = cloud_config.get(
             "application_credential_secret"
         )
+
+        return application_credential_id, application_credential_secret
 
     elif not application_credential_id or not application_credential_secret:
         if not application_credential_id:
@@ -519,6 +664,8 @@ def init_command(
                 )
             )
 
+        return application_credential_id, application_credential_secret
+
     else:
         if not application_credential_id:
             # Handle OpenStack credential ID
@@ -540,47 +687,26 @@ def init_command(
                 )
             )
 
-    # if kubeconfig_available():
-    #     click.echo("🔑 kubeconfig found – skipping token requirement.")
-    #     token = None
-    # elif not token:
-    #     token = click.prompt(
-    #         "Enter Kubernetes token (leave blank if not needed)",
-    #         hide_input=True,
-    #         default="",
-    #         show_default=False,
-    #         prompt_suffix=": ",
-    #     )
-    #     if token == "":
-    #         token = None
+        return application_credential_id, application_credential_secret
 
-    save_default_login_profile(
-        federee=federee,
-        region=region,
-        tenant_name=tenant_name,
-        ssh_private_key_path_to_save=ssh_private_key_path_to_save,
-        ssh_public_key_path_to_save=ssh_public_key_path_to_save,
-        # token=token,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
-    )
 
-    # Save config
-    save_cli_profile(
-        federee=federee,
-        region=region,
-        tenant_name=tenant_name,
-        ssh_private_key_path_to_save=ssh_private_key_path_to_save,
-        ssh_public_key_path_to_save=ssh_public_key_path_to_save,
-        profile=profile,
-        # token=token,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
-    )
+def _ensure_profile_not_exists(store: ProfileStore, resolved_profile: str) -> None:
+    """
+    Ensure that a profile with the given name does not already exist.
 
-    console.print(
-        f"✅ Profile '[bold cyan]{resolved_profile}[/bold cyan]' saved "
-        f"in the following file {ewc_hub_config.EWC_CLI_PROFILES_PATH}"
-    )
-
-    return 0
+    Raises
+    ------
+    click.Abort
+        If the profile already exists.
+    """
+    if store.exists(resolved_profile):
+        click.secho(
+            f"❌ Profile '{resolved_profile}' already exists in {store.path}",
+            fg="red",
+            bold=True,
+        )
+        click.secho(
+            "Use a different profile name or delete the existing profile first.",
+            fg="yellow",
+        )
+        raise click.Abort()

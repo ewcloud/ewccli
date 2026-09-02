@@ -17,6 +17,7 @@ class Federee(Enum):
     ECMWF = "ECMWF"
     EUMETSAT = "EUMETSAT"
 
+
 class Region(Enum):
     """EWC Region."""
 
@@ -25,6 +26,7 @@ class Region(Enum):
     WAW31 = "WAW3-1"
     R1 = "ECIS-R1"
     R2 = "ECIS-R2"
+
 
 class HubItemTechnologyAnnotation(Enum):
     """EWC Hub Item Technology Annotation (deployable)."""

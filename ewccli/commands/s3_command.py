@@ -118,7 +118,7 @@ def delete(ctx, bucket_name: str):
 )
 @click.option("--geo-enabled", is_flag=True, help="Enable georedundancy")
 @click.option("--dry-run", is_flag=True, help="Simulate creation without applying")
-def create(  # noqa: CFQ002
+def create(  # noqa: CFQ002, CCR001
     ctx,
     bucket_name: str,
     access_id: str,
