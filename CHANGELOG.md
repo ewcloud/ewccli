@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.9.0](https://github.com/ewcloud/ewccli/compare/0.8.0...0.9.0) (2026-09-02)
+
+
+### Features
+
+* Enable installation on Python 3.13 ([#166](https://github.com/ewcloud/ewccli/issues/166)) ([03bbbc3](https://github.com/ewcloud/ewccli/commit/03bbbc3dfbbd3b39172c0a07fc35170a72de53e5))
+
 # [0.8.0](https://github.com/ewcloud/ewccli/compare/0.7.1...0.8.0) (2026-08-31)
 
 
