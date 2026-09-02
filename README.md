@@ -386,14 +386,20 @@ or submit changes.
 git clone https://github.com/ewcloud/ewccli.git && cd ewccli
 ```
 
-2. Install the package for testing
+2. Activate the virtual environment
+
 ```bash
-pip install --user -e .[test]
+source ./ewcclienv/bin/activate
 ```
 
-3. Modify the local code and test changes.
+3. Install the package for testing
+```bash
+pip install -e .[test]
+```
 
-4. Push code to your fork and open a pull request.
+5. Modify the local code and test changes.
+
+6. Push code to your fork and open a pull request.
 
 ## Code Styling
 Execute all linting tests by running:
