@@ -24,7 +24,7 @@ dependencies = [
     "prompt_toolkit==3.0.52",
     "pyyaml==6.0.3",
     "cryptography==46.0.2",
-    "openstacksdk==4.6.0,<5",
+    "openstacksdk>=4.6.0,<5",
     "ansible==10.5.0",
     "ansible-runner==2.4.0",
     "kubernetes==34.1.0",
