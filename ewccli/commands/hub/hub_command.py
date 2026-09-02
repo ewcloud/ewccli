@@ -20,6 +20,7 @@ from rich.console import Console
 from rich.panel import Panel
 from click import ClickException
 from click import get_current_context
+from click.core import ParameterSource
 from pydantic import ValidationError, create_model
 
 from ewccli.configuration import config as ewc_hub_config
@@ -216,29 +217,52 @@ def validate_item_input_types(
 
 
 class KeyValueType(click.ParamType):
-    """Class for key=value pairs."""
+    """Class for key=value pairs, supporting envvar expansion."""
 
     name = "key=value"
 
     def convert(self, value, param, ctx):
-        """Conver key value pairs inputs to Python literals."""
+        """
+        Convert key=value inputs to Python literals.
+        Supports envvar case where multiple pairs are passed as a single string.
+        """
+
+        # ENVVAR CASE: multiple pairs in one string
+        if "," in value and "=" in value:
+            expanded = []
+            parts = value.split(",")
+            for part in parts:
+                part = part.strip()
+                if "=" not in part:
+                    self.fail(f"'{part}' is not in key=value format", param, ctx)
+
+                key, raw_value = part.split("=", 1)
+                key = key.strip()
+                raw_value = raw_value.strip()
+
+                try:
+                    parsed_value = yaml.safe_load(raw_value)
+                except Exception:
+                    parsed_value = raw_value
+
+                expanded.append((key, parsed_value))
+
+            return expanded  # <-- return list of pairs
+
+        # NORMAL CASE: single key=value
         if "=" not in value:
             self.fail(f"'{value}' is not in key=value format", param, ctx)
 
         key, raw_value = value.split("=", 1)
         key = key.strip()
         raw_value = raw_value.strip()
-        _LOGGER.debug(f"Input name: {key}")
-        _LOGGER.debug("Raw value datatype (taken from CLI)")
-        _LOGGER.debug(type(raw_value))
+
         try:
-            # Parse value using YAML syntax
             parsed_value = yaml.safe_load(raw_value)
         except Exception:
-            parsed_value = raw_value  # fallback to string
-        _LOGGER.debug("Parsed value datatype (using yaml.safe_load in Python)")
-        _LOGGER.debug(type(parsed_value))
-        return key, parsed_value
+            parsed_value = raw_value
+
+        return [(key, parsed_value)]  # <-- return list for consistency
 
 
 _ITEM_INPUT_MESSAGE = (
@@ -258,8 +282,22 @@ def _validate_item_inputs_format(ctx, param, values):
 
     parsed = {}
 
-    for key, val in values:
-        parsed[key] = val
+    # Detect envvar usage
+    source = ctx.get_parameter_source(param.name)
+    is_envvar = source == ParameterSource.ENVIRONMENT
+
+    if is_envvar:
+        # Click gives ONE tuple when envvar is used
+        for part in values[0]:
+            parsed[part[0]] = part[1]
+
+        return parsed
+
+    # Normal case: flags
+    for part in values:
+
+        part = part[0]
+        parsed[part[0]] = part[1]
 
     return parsed
 
@@ -617,7 +655,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         #####################################################################################
         # Deploy Server (Openstack)
         #####################################################################################
-
         server_inputs = CreateServerInputs.safe_create(
             server_name=server_name,
             is_gpu=is_gpu,
