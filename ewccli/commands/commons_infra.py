@@ -571,7 +571,7 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
 
         # Case 1: Item explicitly requires GPU
         if is_gpu:
-            _LOGGER.info("The selected item requires a GPU flavor...")
+            _LOGGER.info("The selected item requires a GPU image and flavor...")
 
             # Image
             if not image_name:
@@ -599,7 +599,7 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
 
         # Case 2: GPU case with flavour even if is_GPU is false,
         # so not coming from items, but from user inputs
-        if flavour_name and flavour_name in gpu_flavours:
+        elif flavour_name and flavour_name in gpu_flavours:
             _LOGGER.info("The selected flavour requires a GPU image...")
 
             # Image
@@ -616,7 +616,7 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
 
         # Case 3: GPU case with image even if is_GPU is false,
         # so not coming from items, but from user inputs
-        if image_name and image_name == gpu_image_os_complete_name:
+        elif image_name and image_name == gpu_image_os_complete_name:
             _LOGGER.info("The selected image requires a GPU flavour...")
 
             if not flavour_name:

@@ -56,7 +56,7 @@ class EWCCLIConfiguration:
         "Ubuntu-24.04": "ubuntu",
         "Rocky-8": "cloud-user",
         "Rocky-9": "cloud-user",
-        "Rocky-9-GPU": "cloud-user",
+        "Rocky-9.8-GPU": "cloud-user",
         "Ubuntu 22.04 NVIDIA_AI": "eouser",
         "Ubuntu 24.04 NV_GRID_Open": "eouser",
     }
@@ -105,8 +105,8 @@ class EWCCLIConfiguration:
     # Openstack value of the GPU images
     EWC_CLI_OS_GPU_IMAGES_SITE_MAP: dict[str, dict[str, str]] = {
         Federee.ECMWF.value: {
-            Region.CCI1.value: "Rocky-9.6-GPU",  # This can be find after normalization
-            Region.CCI2.value: "Rocky-9.6-GPU",  # This can be find after normalization
+            Region.CCI1.value: "Rocky-9.8-GPU",  # This can be find after normalization
+            Region.CCI2.value: "Rocky-9.8-GPU",  # This can be find after normalization
         },
         Federee.EUMETSAT.value: {
             Region.WAW31.value: "Ubuntu 22.04 NVIDIA_AI",  # ( usually fixed)
