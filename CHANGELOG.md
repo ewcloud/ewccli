@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.9.1](https://github.com/ewcloud/ewccli/compare/0.9.0...0.9.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* Missing username for the selected GPU image ([#169](https://github.com/ewcloud/ewccli/issues/169)) ([33a708a](https://github.com/ewcloud/ewccli/commit/33a708ae34a2fde9154377d5fce7ba248f81ebdd))
+
 # [0.9.0](https://github.com/ewcloud/ewccli/compare/0.8.0...0.9.0) (2026-09-02)
 
 
