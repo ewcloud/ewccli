@@ -14,12 +14,13 @@ from pathlib import Path
 from typing import Optional, Dict
 
 from configparser import ConfigParser, SectionProxy
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import rich_click as click
 
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.logger import get_logger
+from ewccli.enums import Federee
 
 _LOGGER = get_logger(__name__)
 
@@ -48,6 +49,54 @@ class ProfileData(BaseModel):  # type: ignore[misc]
     class Config:
         validate_by_name = True
 
+    # ---------------------------------------------------------
+    # VALIDATION RULES
+    # ---------------------------------------------------------
+
+    @field_validator("federee", mode="after")
+    def validate_federee(cls, v):
+        allowed = [f.value for f in Federee]
+        if v not in allowed:
+            raise ValueError(
+                f"Invalid federee '{v}'. Allowed: {allowed}"
+            )
+        return v
+
+
+    @field_validator("region", mode="after")
+    def validate_region(cls, v, info):
+        federee = info.data.get("federee")
+        if not federee:
+            return v
+
+        allowed = ewc_hub_config.allowed_regions(federee)
+        if v not in allowed:
+            raise ValueError(
+                f"Region '{v}' is not valid for federee '{federee}'. Allowed: {allowed}"
+            )
+        return v
+
+    @field_validator("ssh_private_key_path", "ssh_public_key_path", mode="after")
+    def validate_paths(cls, v):
+        p = Path(v)
+        if not p.exists():
+            raise ValueError(f"Path does not exist: {v}")
+        return v
+
+
+    @field_validator("application_credential_id", "application_credential_secret", mode="after")
+    def validate_credentials(cls, v, info):
+        id_ = info.data.get("application_credential_id")
+        secret = info.data.get("application_credential_secret")
+
+        # XOR → exactly one provided
+        if bool(id_) ^ bool(secret):
+            raise ValueError(
+                "Both application_credential_id and application_credential_secret must be provided together."
+            )
+
+        return v
+
     # ------------------------------------------------------------------
     # Conversion helpers
     # ------------------------------------------------------------------
@@ -72,7 +121,9 @@ class ProfileData(BaseModel):  # type: ignore[misc]
                 ),
             )
         except ValidationError as exc:
-            raise click.ClickException(f"Invalid profile '{name}': {exc}") from exc
+            # Remove the Pydantic help URL
+            clean = exc.errors()[0]["msg"]
+            raise click.ClickException(f"Invalid profile '{name}': {clean}")
 
     def to_section(self) -> Dict[str, str]:
         """
