@@ -94,11 +94,22 @@ We recommend installing **ewccli** inside a **virtual environment** to avoid dep
 
 ### Installing with PIP from PyPI
 
-The EWC CLI Python package is available through [PyPI](https://pypi.org/):
+The EWC CLI Python package is available through [PyPI](https://pypi.org/project/ewccli/):
 
 ```bash
 pip install ewccli
 ```
+
+### Installing with conda from conda-forge
+
+> Available since version 0.9.1
+
+The EWC CLI Python package is available through [conda-forge](https://anaconda.org/channels/conda-forge/packages/ewccli/overview):
+
+```bash
+conda install conda-forge::ewccli
+```
+
 
 ### Installing from source
 
