@@ -26,7 +26,46 @@ from ewccli.configuration import config as ewc_hub_config
 from ewccli.commands.login_command import check_and_generate_ssh_keys, init_command
 from ewccli.profile import ProfileStore
 from ewccli.commands.login_command import LoginInput
+from pydantic import ValidationError
 
+
+
+def test_login_input_requires_all_fields():
+    """Ensure LoginInput fails fast when required fields are missing."""
+
+    valid = {
+        "tenant_name": "test-tenant",
+        "federee": "eumetsat",
+        "application_credential_id": "id123",
+        "application_credential_secret": "secret123",
+        "ssh_public_key_path": "/tmp/key.pub",
+        "ssh_private_key_path": "/tmp/key",
+        "profile": "default",
+        "region": "r1",
+        "cloud_name": "ewc",
+    }
+
+    # Should succeed
+    obj = LoginInput(**valid)
+    assert obj.tenant_name == "test-tenant"
+
+    # Only tenant_name must raise
+    broken = valid.copy()
+    broken["tenant_name"] = None
+
+    with pytest.raises(ValidationError):
+        LoginInput(**broken)
+
+    # All other fields may be None
+    for field in valid.keys():
+        if field == "tenant_name":
+            continue
+
+        broken = valid.copy()
+        broken[field] = None
+
+        # Should NOT raise
+        LoginInput(**broken)
 
 # -----------------------------
 # Case 1: both keys exist & match
