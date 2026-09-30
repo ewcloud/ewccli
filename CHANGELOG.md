@@ -3,6 +3,13 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.9.2](https://github.com/ewcloud/ewccli/compare/0.9.1...0.9.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* login refactoring ([#178](https://github.com/ewcloud/ewccli/issues/178)) ([1764f67](https://github.com/ewcloud/ewccli/commit/1764f67d651876821a1bba911472658bf6fc7599))
+
 ## [0.9.1](https://github.com/ewcloud/ewccli/compare/0.9.0...0.9.1) (2026-09-03)
 
 
