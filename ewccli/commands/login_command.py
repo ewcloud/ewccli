@@ -54,8 +54,8 @@ class LoginInput(BaseModel):  # type: ignore[misc]
     """
 
     tenant_name: str
-    federee: str
-    region: str
+    federee: Optional[str] = None
+    region: Optional[str] = None
 
     application_credential_id: Optional[str] = None
     application_credential_secret: Optional[str] = None
@@ -319,14 +319,14 @@ def select_region(federee: str) -> str:
     kb = radio_list.control.key_bindings
 
     @kb.add("enter")  # type: ignore[misc]
-    def _(event: click.Event) -> None:
+    def _(event: KeyPressEvent) -> None:
         index = radio_list._selected_index
         selected_value = radio_list.values[index][1]
         event.app.exit(result=selected_value)
 
     @kb.add("c-c")  # type: ignore[misc]
     @kb.add("c-q")  # type: ignore[misc]
-    def _(event: click.Event) -> None:
+    def _(event: KeyPressEvent) -> None:
         event.app.exit(None)
 
     root_container = Box(
@@ -560,7 +560,7 @@ def init_command(data: LoginInput) -> None:
     profile_data = ProfileData(
         federee=federee,
         tenant_name=data.tenant_name,
-        region=data.region,
+        region=region,
         profile=resolved_profile,
         ssh_private_key_path_to_save=str(priv_path),
         ssh_public_key_path_to_save=str(pub_path),
