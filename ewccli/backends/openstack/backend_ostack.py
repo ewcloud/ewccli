@@ -832,20 +832,32 @@ class OpenstackBackend:
         region: str,
     ) -> Optional[str]:
         """
-        Select the latest image for CPU or GPU families with special rules.
+        Select the latest matching image.
         """
 
         timestamp_re = r"\d{14}"
 
+        gpu_image = ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP.get(federee, {}).get(
+            region
+        )
+
         def match_cpu_rocky(prefix: str, name: str) -> bool:
             if prefix.lower().startswith("rocky-8"):
                 return bool(
-                    re.match(rf"^Rocky-8\.\d+-{timestamp_re}$", name, re.IGNORECASE)
+                    re.match(
+                        rf"^Rocky-8\.\d+-{timestamp_re}$",
+                        name,
+                        re.IGNORECASE,
+                    )
                 )
 
             if prefix.lower().startswith("rocky-9"):
                 return bool(
-                    re.match(rf"^Rocky-9\.\d+-{timestamp_re}$", name, re.IGNORECASE)
+                    re.match(
+                        rf"^Rocky-9\.\d+-{timestamp_re}$",
+                        name,
+                        re.IGNORECASE,
+                    )
                 )
 
             return False
@@ -862,48 +874,44 @@ class OpenstackBackend:
         def match_cpu_ubuntu(prefix: str, name: str) -> bool:
             if prefix.lower() == "ubuntu-22.04":
                 return bool(
-                    re.match(rf"^Ubuntu-22\.04-{timestamp_re}$", name, re.IGNORECASE)
+                    re.match(
+                        rf"^Ubuntu-22\.04-{timestamp_re}$",
+                        name,
+                        re.IGNORECASE,
+                    )
                 )
 
             if prefix.lower() == "ubuntu-24.04":
                 return bool(
-                    re.match(rf"^Ubuntu-24\.04-{timestamp_re}$", name, re.IGNORECASE)
+                    re.match(
+                        rf"^Ubuntu-24\.04-{timestamp_re}$",
+                        name,
+                        re.IGNORECASE,
+                    )
                 )
 
             return False
 
-        def match_gpu_ubuntu(name: str, federee: str, region: str) -> bool:
-            # Prefix: Ubuntu 22.04 NVIDIA_AI
-            # Match: Ubuntu 22.04 NVIDIA_AI
-            if name == ewc_hub_config.EWC_CLI_OS_GPU_IMAGES_SITE_MAP[federee][region]:
-                return True
-
-            return False
+        def match_gpu_ubuntu(name: str) -> bool:
+            return name == gpu_image
 
         def is_image_match(name: str, prefix: str, region: str) -> bool:  # noqa: CFQ004
             if not name:
                 return False
 
-            # GPU Rocky
-            if prefix == "Rocky-9.6-GPU":
-                return match_gpu_rocky(name)
+            # GPU images
+            if gpu_image and prefix == gpu_image:
+                if gpu_image.lower().startswith("rocky"):
+                    return match_gpu_rocky(name)
 
-            # GPU Ubuntu (fixed)
-            if prefix == "Ubuntu 22.04 NVIDIA_AI":
-                return match_gpu_ubuntu(name=name, federee="EUMETSAT", region=region)
-
-            # Ubuntu 24.04 NV_GRID_Open (EUMETSAT)
-            if prefix == "Ubuntu 24.04 NV_GRID_Open":
-                return match_gpu_ubuntu(name=name, federee="EUMETSAT", region=region)
+                return match_gpu_ubuntu(name)
 
             # CPU Ubuntu
-            if prefix.lower() in ("ubuntu-22.04", "ubuntu-24.04"):
+            if prefix.lower() in {"ubuntu-22.04", "ubuntu-24.04"}:
                 return match_cpu_ubuntu(prefix, name)
 
             # CPU Rocky
-            if prefix.lower().startswith("rocky-8") or prefix.lower().startswith(
-                "rocky-9"
-            ):
+            if prefix.lower().startswith(("rocky-8", "rocky-9")):
                 return match_cpu_rocky(prefix, name)
 
             return False
@@ -917,7 +925,6 @@ class OpenstackBackend:
         if not matches:
             return None
 
-        # Sort by created_at
         matches.sort(key=lambda img: img.created_at, reverse=True)
         return cast(str, matches[0].name)
 
