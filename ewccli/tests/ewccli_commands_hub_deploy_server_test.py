@@ -46,6 +46,23 @@ def finder():
     """Use find_latest_image as unbound method, no backend instance needed."""
     return OpenstackBackend.find_latest_image
 
+@pytest.fixture(autouse=True)
+def clean_config(monkeypatch):
+    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", set())
+    monkeypatch.setattr(
+        ewc_hub_config,
+        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
+        {
+            "ECMWF": {
+                "CCI1": "Rocky-9.8-GPU",
+            },
+            "EUMETSAT": {
+                "WAW3-1": "Ubuntu 22.04 NVIDIA_AI",
+            },
+        },
+    )
+
+
 
 # ---------------------------------------------------------------------------
 # CPU: Rocky-8
@@ -104,7 +121,7 @@ def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
     img1 = FakeImage(
         name="Rocky-9.6-GPU-20250101010101", created_at=now - timedelta(days=3)
     )
-    img2 = FakeImage(name="Rocky-9.6-GPU-20250303030303", created_at=now)
+    img2 = FakeImage(name="Rocky-9.8-GPU-20250303030303", created_at=now)
 
     conn.compute.images.return_value = [img1, img2]
 
@@ -113,7 +130,7 @@ def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    result = finder(None, conn, "Rocky-9.6-GPU", "ECMWF", "CCI1")
+    result = finder(None, conn, "Rocky-9.8-GPU", "ECMWF", "CCI1")
     assert result == img2.name
 
 
@@ -166,7 +183,7 @@ def test_no_matching_images(finder, conn, monkeypatch):
         {"Rocky-8", "Rocky-9", "Ubuntu-22.04", "Ubuntu-24.04"},
     )
 
-    assert finder(None, conn, "Rocky-8", "EUMETSAT", "WAW3-1") is None
+    assert finder(None, conn=conn, prefix="Rocky-8", federee="EUMETSAT", region="WAW3-1") is None
 
 
 # Pydantic models
@@ -303,20 +320,6 @@ def test_resolve_machine_ip(federee, server_info, expected_status, expected_resu
 # ======================================================================
 # Tests
 # ======================================================================
-
-
-@pytest.fixture(autouse=True)
-def clean_config(monkeypatch):
-    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_CPU_IMAGES", set())
-    monkeypatch.setattr(
-        ewc_hub_config,
-        "EWC_CLI_OS_GPU_IMAGES_SITE_MAP",
-        {
-            "ECMWF": "Rocky-9.6-GPU",
-            "EUMETSAT": "Ubuntu-22.04-NVIDIA_AI",
-        },
-    )
-
 
 # ----------------------- CPU Tests -----------------------
 
