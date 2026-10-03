@@ -568,6 +568,9 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
         # ============================================================
         #                     GPU CASES
         # ============================================================
+        _LOGGER.debug(f"Check requested image_name: {image_name}")
+        _LOGGER.debug(f"Check requested flavour_name: {flavour_name}")
+        _LOGGER.debug(f"Check if requires GPU: {is_gpu}")
 
         # Case 1: Item explicitly requires GPU
         if is_gpu:
@@ -651,6 +654,10 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
         normalized_image_name, is_short_name = normalize_os_image(
             image_name=image_name, federee=federee, region=region
         )
+
+        _LOGGER.debug(f"Selected image_name after checks: {image_name}")
+        _LOGGER.debug(f"Selected flavour_name after checks: {flavour_name}")
+        _LOGGER.debug(f"Normalized image_name for mapping: {normalized_image_name}")
 
         # Now check the image provided and verify is supported.
         if not normalized_image_name:
