@@ -23,6 +23,7 @@ import openstack
 from openstack.network.v2.network import Network
 from openstack.compute.v2.server import Server
 from openstack.compute.v2.image import Image
+from openstack.connection import Connection
 
 from ewccli.logger import get_logger
 from ewccli.enums import Federee
@@ -82,10 +83,9 @@ class OpenstackBackend:
         """Create connection to Openstack.
 
         :param auth_url: Openstack authorization URL
-        :param application_credential_id=application_credential_id
-        :param application_credential_secret=application_credential_secret
-        :param user_domain_name == domain_name
-        :param project_domain_name == domain_id
+        :param application_credential_id: OpenStack Application Credential ID
+        :param application_credential_secret: OpenStack Application Credential Secret
+        :param auth_type: OpenStack authentication type
 
         """
         os_app_credential_id = application_credential_id or self.credential_id
@@ -94,18 +94,14 @@ class OpenstackBackend:
         )
         os_auth_url = auth_url or self.auth_url
 
-        os_connection = openstack.connect(
-            auth_url=os_auth_url,
+        os_connection = Connection(
+            auth={
+                "auth_url": os_auth_url,
+                "application_credential_id": os_app_credential_id,
+                "application_credential_secret": os_app_credential_secret,
+            },
             auth_type=auth_type,
-            # tenant_name=tenant_name,
-            application_credential_id=os_app_credential_id,
-            application_credential_secret=os_app_credential_secret,
-            # username=username,
-            # password=password,
-            # region_name=region,
-            # user_domain_name=user_domain_name,
-            # project_domain_name=project_domain_name,
-            app_version=app_version,
+            # app_version=app_version
         )
 
         return os_connection
