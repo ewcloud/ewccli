@@ -68,4 +68,4 @@ You'll be prompted for your PyPI username & password.
 
 ## Release on conda-forge (only admins)
 
-Every time you create a new release on PyPI, open a PR in ewccli [conda-forge feedstock](https://github.com/conda-forge/ewccli-feedstock). Once tests pass and PR is merged, a new release will be created on conda-forge. Check [README](https://github.com/conda-forge/ewccli-feedstock#updating-ewccli-feedstock) in the feedstock.
+Every time you create a new release on PyPI, an automatic PR is opened on the ewccli [conda-forge feedstock](https://github.com/conda-forge/ewccli-feedstock). Once tests pass and PR is merged, a new release will be created on conda-forge automatically in few seconds. Check [README](https://github.com/conda-forge/ewccli-feedstock#updating-ewccli-feedstock) in the feedstock.
