@@ -3,6 +3,14 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.9.3](https://github.com/ewcloud/ewccli/compare/0.9.2...0.9.3) (2026-10-05)
+
+
+### Bug Fixes
+
+* avoid overriding profile ([#181](https://github.com/ewcloud/ewccli/issues/181)) ([810e15c](https://github.com/ewcloud/ewccli/commit/810e15c9525f1ba8d4ac6b1f9e2675f12c3b6899))
+* Move hardcoded values to configuration ([#182](https://github.com/ewcloud/ewccli/issues/182)) ([cd3bd52](https://github.com/ewcloud/ewccli/commit/cd3bd5234a8679cd49d154a01366b4c6a1d5e5f2))
+
 ## [0.9.2](https://github.com/ewcloud/ewccli/compare/0.9.1...0.9.2) (2026-09-30)
 
 
