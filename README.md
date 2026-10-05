@@ -435,10 +435,25 @@ To resolve those, check the logs from the `pre-commit` execution, understand the
 
 ## Code Unittesting
 
-Execute all tests by running:
+Execute all tests in all test files by running:
 
 ```bash
 pytest
+```
+
+Execute all tests in a test file
+```bash
+pytest ewccli/tests/ewccli_commands_hub_deploy_server_test.py
+```
+
+Execute a specific test in a file
+```bash
+pytest ewccli/tests/ewccli_commands_hub_deploy_server_test.py::test_no_matching_images
+```
+
+Execute a specific test in a file with verbose
+```bash
+pytest -vv ewccli/tests/ewccli_commands_hub_deploy_server_test.py::test_no_matching_images
 ```
 
 ### Coverage Reporting

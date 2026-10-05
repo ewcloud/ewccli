@@ -561,13 +561,15 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     default_gpu_flavour = defaults_image_flavour["default-gpu-flavour"]
     default_cpu_flavour = defaults_image_flavour["default-cpu-flavour"]
     default_cpu_image = defaults_image_flavour["cpu-image-name"]
-
     try:
         # Assign default values if nothing is provided by the user or the catalog.
 
         # ============================================================
         #                     GPU CASES
         # ============================================================
+        _LOGGER.debug(f"Check requested image_name: {image_name}")
+        _LOGGER.debug(f"Check requested flavour_name: {flavour_name}")
+        _LOGGER.debug(f"Check if requires GPU: {is_gpu}")
 
         # Case 1: Item explicitly requires GPU
         if is_gpu:
@@ -579,7 +581,8 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
 
             elif image_name != gpu_image_short_name:
                 message = (
-                    "[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs.\n"
+                    f"[bold red]❌ Invalid image:[/bold red] The selected image does not support GPUs"
+                    f" on {federee} ({region}).\n"
                     f"[bold green]✔️ GPU image to use:[/bold green] {gpu_image_short_name}"
                 )
 
@@ -592,7 +595,8 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
             elif flavour_name not in gpu_flavours:
                 gpu_list = ", ".join(gpu_flavours)
                 message = (
-                    "[bold red]❌ Invalid flavour:[/bold red] The selected flavour does not support GPUs.\n"
+                    "[bold red]❌ Invalid flavour:[/bold red] The selected flavour does not support GPUs"
+                    f" on {federee} ({region}).\n"
                     f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
                 )
                 return 1, message, result
@@ -611,12 +615,16 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
                 # because user might deploy CPU when GPU is needed for an item.
             elif image_name != gpu_image_short_name:
                 raise ClickException(
-                    f"❌ Invalid image: {image_name}\n✔ GPU image: {gpu_image_short_name}"
+                    f"❌ Invalid image: {image_name} for selected flavour {flavour_name}\n"
+                    f"✔ GPU image to use: {gpu_image_short_name}"
                 )
 
         # Case 3: GPU case with image even if is_GPU is false,
         # so not coming from items, but from user inputs
-        elif image_name and image_name == gpu_image_os_complete_name:
+        elif image_name and (
+            image_name == gpu_image_os_complete_name
+            or image_name == gpu_image_short_name
+        ):
             _LOGGER.info("The selected image requires a GPU flavour...")
 
             if not flavour_name:
@@ -626,7 +634,8 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
                 gpu_list = ", ".join(gpu_flavours)
                 message = (
                     "[bold red]❌ Invalid flavour:[/bold red] "
-                    f"The selected flavour {flavour_name} does not support GPUs.\n"
+                    f"The selected flavour {flavour_name} does not support GPUs"
+                    f" on {federee} ({region}).\n"
                     f"[bold green]✔️ Available GPU flavours:[/bold green] {gpu_list}"
                 )
                 return 1, message, result
@@ -640,17 +649,23 @@ def resolve_image_and_flavor(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
                 image_name = default_cpu_image
 
             # Assign Default CPU flavour (federee dependennt)
-            # TODO: Change once we have the same flavours
             if not flavour_name:
                 flavour_name = default_cpu_flavour
                 _LOGGER.info(
                     f"No flavour provided. Using default flavour {flavour_name}..."
                 )
 
+            if image_name and flavour_name:
+                _LOGGER.debug(f"Selected for CPU {image_name} and {flavour_name}...")
+
         # Normalize the image name
         normalized_image_name, is_short_name = normalize_os_image(
             image_name=image_name, federee=federee, region=region
         )
+
+        _LOGGER.debug(f"Selected image_name after checks: {image_name}")
+        _LOGGER.debug(f"Selected flavour_name after checks: {flavour_name}")
+        _LOGGER.debug(f"Normalized image_name for mapping: {normalized_image_name}")
 
         # Now check the image provided and verify is supported.
         if not normalized_image_name:

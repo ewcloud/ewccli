@@ -154,11 +154,13 @@ class EWCCLIConfiguration:
                 "6cpu-32gbmem-h200.1g.18gb",
                 "11cpu-64gbmem-h200.2g.35gb",
                 "17cpu-128gbmem-h200.3g.71gb",
+                "40cpu-256gbmem-h200.7g.141gb",
             ],
             Region.R2.value: [
                 "6cpu-32gbmem-h200.1g.18gb",
                 "11cpu-64gbmem-h200.2g.35gb",
                 "17cpu-128gbmem-h200.3g.71gb",
+                "40cpu-256gbmem-h200.7g.141gb",
             ],
         },
     }
