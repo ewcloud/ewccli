@@ -105,17 +105,17 @@ def ewc_hub_command(
 def categorize_item_inputs(  # noqa CCR001
     ctx: click.Context,
     item_info: Dict[str, str],
-    item_info_inputs: List[Dict[str, str]],
+    item_info_input_spec: List[Dict[str, str]],
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     """Categorize item inputs into default and mandatory."""
     default_inputs: List[Dict[str, str]] = []
     required_inputs: List[Dict[str, str]] = []
 
     # if no inputs exist for the item, no inputs are requested from the user
-    if not item_info_inputs:
+    if not item_info_input_spec:
         return required_inputs, default_inputs
 
-    for item_input in item_info_inputs:
+    for item_input in item_info_input_spec:
         # If there is a default, the item is part of the default inputs -> not required by the user
         if "default" in item_input:
             # default value exists
@@ -167,7 +167,7 @@ def check_missing_required_inputs(
 
 def validate_item_input_types(  # noqa: CCR001
     parsed_inputs: Optional[Dict[str, str]],
-    item_info_inputs: Optional[List[Dict[str, str]]],
+    item_info_input_spec: Optional[List[Dict[str, str]]],
 ) -> str:
     """
     Validate parsed_inputs against a schema using Pydantic.
@@ -183,7 +183,7 @@ def validate_item_input_types(  # noqa: CCR001
     Returns:
         "" if all inputs are valid, otherwise a string describing invalid inputs.
     """
-    if not item_info_inputs or not parsed_inputs:
+    if not item_info_input_spec or not parsed_inputs:
         return ""
 
     # # Prepare safe globals with all typing names
@@ -194,7 +194,7 @@ def validate_item_input_types(  # noqa: CCR001
     fields = {}
     expected_types_map = {}  # Keep original type strings for error messages
 
-    for entry in item_info_inputs:
+    for entry in item_info_input_spec:
         name = entry["name"]
         type_expr = entry["type"]
         expected_types_map[name] = type_expr  # Save for later display
@@ -433,12 +433,13 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     item_info = ctx.obj["items"][item]
 
     # Retrieve item inputs of the selected item from the catalogue
-    item_info_ewccli = item_info.get(HubItemCLIKeys.ROOT.value, {})
-    item_info_inputs = item_info_ewccli.get(HubItemCLIKeys.INPUTS.value, [])
+    item_info_values = item_info.get(HubItemCLIKeys.VALUES.value, {})
+    item_info_ewccli = item_info.get(HubItemCLIKeys.EWCCLI.value, {})
+    item_info_input_spec = item_info_values.get(HubItemCLIKeys.INPUT_SPEC.value, [])
 
     # Categorize items inputs from the item info in the catalog (Required and Default)
     required_item_inputs, default_item_inputs = categorize_item_inputs(
-        ctx, item_info=item_info, item_info_inputs=item_info_inputs
+        ctx, item_info=item_info, item_info_input_spec=item_info_input_spec
     )
 
     # If no item inputs provided by the user, make default as empty dictionary
@@ -639,7 +640,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         # (D) Validate default inputs provided by user (overwritten) or from default section of the catalog
         validation_message = validate_item_input_types(
             parsed_inputs=item_inputs,
-            item_info_inputs=item_info_inputs,
+            item_info_input_spec=item_info_input_spec,
         )
 
         if validation_message:
@@ -653,7 +654,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             server_name=server_name,
             is_gpu=is_gpu,
             image_name=image_name
-            or item_info_ewccli.get(HubItemCLIKeys.DEFAULT_IMAGE_NAME.value),
+            or item_info_values.get(HubItemCLIKeys.OS_IMAGE_NAME.value),
             keypair_name=keypair_name,
             flavour_name=flavour_name,
             external_ip=(
@@ -742,18 +743,18 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             sys.exit(1)
 
         # Install requirements for ansible playbook
-        requirements_file_relative_path = item_info_ewccli.get(
-            HubItemCLIKeys.ITEM_PATH_TO_REQUIREMENTS_FILE.value, "requirements.yml"
+        requirements_file_relative_path = item_info_values.get(
+            HubItemCLIKeys.PATH_TO_REQUIREMENTS_FILE.value, "requirements.yml"
         )
 
         # Run main ansible playbook
-        main_file_relative_path = item_info_ewccli.get(
-            HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value
+        main_file_relative_path = item_info_values.get(
+            HubItemCLIKeys.PATH_TO_MAIN_FILE.value
         )
 
         if not main_file_relative_path:
             raise ClickException(
-                f"{HubItemCLIKeys.ITEM_PATH_TO_MAIN_FILE.value} key for {item} is not set."
+                f"{HubItemCLIKeys.PATH_TO_MAIN_FILE.value} key for {item} is not set."
                 " The Ansible playbook item cannot be installed."
             )
 

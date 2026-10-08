@@ -57,7 +57,7 @@ def sample_hub_item():
                     "description": "Second parameter",
                 },
             ],
-            "defaultImageName": "ubuntu:22.04",
+            "osImageName": "ubuntu:22.04",
             "defaultSecurityGroups": ["sg-123", "sg-456"],
         },
     }

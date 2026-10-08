@@ -48,14 +48,17 @@ class HubItemOherAnnotation(Enum):
 
 
 class HubItemCLIKeys(Enum):
-    """EWC Hub Item EWCCLI specific keys under `ewccli`."""
+    """EWC Hub Item Values specific keys."""
 
-    ROOT = "ewccli"
-    INPUTS = "inputs"
-    DEFAULT_IMAGE_NAME = "defaultImageName"
+    VALUES = "values"
+    INPUT_SPEC = "inputSpec"
+    OUTPUT_SPEC = "outputSpec"
+    PATH_TO_MAIN_FILE = "pathToMainFile"
+    PATH_TO_REQUIREMENTS_FILE = "pathToRequirementsFile"
+    OS_IMAGE_NAME = "osImageName"
+
+    EWCCLI = "ewccli"
     DEFAULT_SECURITY_GROUPS = "defaultSecurityGroups"
-    ITEM_PATH_TO_MAIN_FILE = "pathToMainFile"
-    ITEM_PATH_TO_REQUIREMENTS_FILE = "pathToRequirementsFile"
     EXTERNAL_IP = "externalIP"
     CHECK_DNS = "checkDNS"
 
