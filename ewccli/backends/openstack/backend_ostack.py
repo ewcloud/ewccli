@@ -119,6 +119,7 @@ class OpenstackBackend:
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
         boot_from_volume: bool = False,
+        root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
         dry_run: bool = False,
     ) -> Tuple[ServerResult, Optional[str], Dict[str, Any]]:
         """Create an OpenStack server.
@@ -319,7 +320,7 @@ class OpenstackBackend:
                                 "uuid": image.id,
                                 "source_type": "image",
                                 "destination_type": "volume",
-                                "volume_size": 30,  # TODO: max(image.min_disk, 30)
+                                "volume_size": root_volume,
                                 "delete_on_termination": True,
                             }
                         ],

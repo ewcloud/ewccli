@@ -281,6 +281,13 @@ def openstack_optional_options(func: Callable[..., Any]) -> Callable[..., Any]:
         help="Add External IP to the machine.",
     )(func)
     func = click.option(
+        "--root-volume",
+        type=int,
+        default=ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
+        show_default=True,
+        help="Root volume given size in GB. Only if OpenStack boot from volume is enabled.",
+    )(func)
+    func = click.option(
         "--extra-volume",
         type=int,
         multiple=True,

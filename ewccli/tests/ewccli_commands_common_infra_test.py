@@ -641,6 +641,7 @@ def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
 
     server_inputs = {
         "keypair_name": "mykey",
+        "root_volume": 30,
         "is_gpu": False,
         "image_name": None,
         "flavour_name": None,
@@ -702,6 +703,7 @@ def test_pre_deploy_server_setup_success(conn):
 
         server_inputs = {
             "keypair_name": "mykey",
+            "root_volume": 30,
             "is_gpu": False,
             "image_name": None,
             "flavour_name": None,
@@ -761,6 +763,7 @@ def test_pre_deploy_server_setup_invalid_inputs(conn):
         backend.check_server_inputs.return_value = (False, "invalid flavour")
 
         server_inputs = {
+            "root_volume": 30,
             "keypair_name": "mykey",
             "is_gpu": False,
             "image_name": None,
@@ -801,6 +804,7 @@ def test_pre_deploy_server_setup_invalid_inputs(conn):
 
 def test_identify_server_reconfiguration_existing_server(conn):
     server_inputs = {
+        "root_volume": 30,
         "server_name": "vm1",
         "keypair_name": "mykey",
         "flavour_name": "m1.small",
@@ -836,6 +840,7 @@ def test_identify_server_reconfiguration_existing_server(conn):
 def test_identify_server_reconfiguration_wrong_origin(conn):
     server_inputs = {
         "server_name": "vm1",
+        "root_volume": 30,
         "keypair_name": "mykey",
         "flavour_name": "m1.small",
         "networks": ("private",),
@@ -873,6 +878,7 @@ def test_deploy_server_success(conn):
 
     server_inputs = {
         "server_name": "vm1",
+        "root_volume": 30,
         "keypair_name": "mykey",
         "networks": ("private",),
         "security_groups": ("ssh",),
@@ -901,6 +907,7 @@ def test_deploy_server_failure(conn):
 
     server_inputs = {
         "server_name": "vm1",
+        "root_volume": 30,
         "keypair_name": "mykey",
         "networks": ("private",),
         "security_groups": ("ssh",),
@@ -946,6 +953,7 @@ def test_post_deploy_server_setup_success(conn):
         ],
     ):
         server_inputs = {
+            "root_volume": 30,
             "server_name": "vm1",
             "external_ip": False,
         }
@@ -975,6 +983,7 @@ def test_post_deploy_server_setup_missing_ip(conn):
     ):
         server_inputs = {
             "server_name": "vm1",
+            "root_volume": 30,
             "internal_ip": "10.0.0.56",
             "external_ip": False,
         }
@@ -996,6 +1005,7 @@ def test_create_server_command_success(conn):
 
     server_inputs = {
         "server_name": "vm1",
+        "root_volume": 30,
         "keypair_name": "mykey",
         "external_ip": False,
         "networks": ("private",),
@@ -1012,9 +1022,25 @@ def test_create_server_command_success(conn):
         "server_info": {"id": "123", "name": "vm1"},
     }
 
+    from unittest.mock import Mock
+
+    server_info_test = Mock()
+    server_info_test = {
+        "id": "123",
+        "name": "vm1",
+            "addresses": {
+        "private": [{"addr": "10.0.0.5"}]
+        },
+        "os-extended-volumes:volumes_attached": [
+            {"id": "vol1", "delete_on_termination" : True},
+            {"id": "vol2", "delete_on_termination" : True},
+        ]
+    }
+
     post_deploy_outputs = {
         "internal_ip_machine": "10.0.0.5",
         "external_ip_machine": "1.2.3.4",
+        "server_info": server_info_test
     }
 
     with (
