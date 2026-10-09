@@ -940,9 +940,7 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     image_name: Optional[str] = server_inputs["image_name"]
     flavour_name: Optional[str] = server_inputs["flavour_name"]
     security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
-    os_security_groups: Optional[Tuple[str, ...]] = server_inputs[
-        "os_security_groups"
-    ]
+    os_security_groups: Optional[Tuple[str, ...]] = server_inputs["os_security_groups"]
 
     if dry_run:
         return 0, "[Dry Run] skipping pre deploy server setup...", outputs
