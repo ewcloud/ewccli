@@ -501,7 +501,7 @@ def _render_defaults(item_info: Dict[str, Any]) -> str:
     if image:
         defaults.append(f"Image Name: {image}")
 
-    sgs = item_info.get("defaultSecurityGroups", [])
+    sgs = item_info.get("osSecurityGroups", [])
     if sgs:
         defaults.append(f"Security Group/s: {','.join(sgs)}")
 

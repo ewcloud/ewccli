@@ -664,8 +664,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             ),
             networks=networks,
             security_groups=security_groups,
-            item_default_security_groups=item_info_ewccli.get(
-                HubItemCLIKeys.DEFAULT_SECURITY_GROUPS.value
+            os_security_groups=item_info_values.get(
+                HubItemCLIKeys.OS_SECURITY_GROUPS.value
             ),
             extra_volume=extra_volume,
         )

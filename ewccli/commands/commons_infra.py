@@ -47,11 +47,11 @@ class CreateServerInputs(BaseModel):  # type: ignore[misc]
 
     networks: Optional[Tuple[str, ...]] = None
     security_groups: Optional[Tuple[str, ...]] = None
-    item_default_security_groups: Optional[Tuple[str, ...]] = None
+    os_security_groups: Optional[Tuple[str, ...]] = None
 
     extra_volume: Optional[Tuple[int, ...]] = None
 
-    @validator("networks", "security_groups", "item_default_security_groups", pre=True)  # type: ignore[misc]
+    @validator("networks", "security_groups", "os_security_groups", pre=True)  # type: ignore[misc]
     def normalize_tuple(cls: type, v: Any) -> Tuple[str, ...]:  # noqa: N805, CFQ004
         """
         Normalize network/security group fields into a tuple[str, ...].
@@ -940,8 +940,8 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     image_name: Optional[str] = server_inputs["image_name"]
     flavour_name: Optional[str] = server_inputs["flavour_name"]
     security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
-    item_default_security_groups: Optional[Tuple[str, ...]] = server_inputs[
-        "item_default_security_groups"
+    os_security_groups: Optional[Tuple[str, ...]] = server_inputs[
+        "os_security_groups"
     ]
 
     if dry_run:
@@ -1043,9 +1043,9 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     if security_groups:
         security_groups_inputs += security_groups
 
-    if item_default_security_groups:
-        _LOGGER.debug(f"Adding default security group: {item_default_security_groups}")
-        security_groups_inputs += tuple(dsc for dsc in item_default_security_groups)
+    if os_security_groups:
+        _LOGGER.debug(f"Adding default security group: {os_security_groups}")
+        security_groups_inputs += tuple(dsc for dsc in os_security_groups)
 
     if not networks:
         default_network = ewc_hub_config.DEFAULT_NETWORK_MAP.get(federee)

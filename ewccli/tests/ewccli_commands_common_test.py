@@ -58,7 +58,7 @@ def sample_hub_item():
                 },
             ],
             "osImageName": "ubuntu:22.04",
-            "defaultSecurityGroups": ["sg-123", "sg-456"],
+            "osSecurityGroups": ["sg-123", "sg-456"],
         },
     }
 
