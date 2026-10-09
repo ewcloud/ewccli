@@ -33,6 +33,7 @@
     <li><a href="#installing">Installing</a></li>
       <ul>
         <li><a href="#installing-with-pip-from-pypi">Installing with PIP from PyPI</a></li>
+        <li><a href="#installing-with-conda-from-conda-forge">Installing with conda from conda-forge</a></li>
         <li><a href="#installing-from-source">Installing from source</a></li>
         <li><a href="#installing-in-a-container">Installing in a container</a></li>
       </ul>
