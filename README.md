@@ -258,53 +258,62 @@ apiVersion: communityhub.europeanweather.cloud/v1alpha1
 kind: CommunityHubCatalog
 spec:
   items:
-    my-test-item:
-      name: "my-test-item"
-      version: "0.0.1"
+    my-item:
+      annotations:
+        category: "My Category"
+        licenseType: "My Open Source License (in SPDX format)"
+        others: "Deployable,EWCCLI-compatible"
+        supportLevel: "Community"
+        technology: "My Technology"
+      displayName:  My Item
       description: |
-        My first Item in EWC Community Hub
+        My first ever Item contributed to...
+        the EWC Community Hub.
 
       ewccli:
-        pathToRequirementsFile: path_to_your_requirements_file
-        pathToMainFile: path_to_your_main_ansible_playbook_file
-        publicIP: true
-        inputs:
-          - name: myoptionalinput
-            description: "myoptionalinput"
-            type: str
-            default: Add default key if you want this input to be optional. If this key is not set, the ewccli will expect this value to be provided by the user (mandatory input)
-          - name: mymandatoryinput
-            description: "mymandatoryinput: cli will complain if this is not provided as --item-inputs"
-            type: str
-      home: https://github.com/your-repo
-      sources:
-        - https://github.com/your-repo.git OR /home/murdaca/custom-items/new-item
+        externalIP: false
+      home: https://my-public-git-server.com/my-repo
+      license: https://my-public-git-server.com/my-repo/blob/main/LICENSE
+      icon: https://raw.my-public-git-server.com/my-repo/refs/heads/main/icon.png
       maintainers:
-        - name: your name or your org
-          email: youremail
-          url: https://github.com/your-repo/issues
-      icon: https://raw.githubusercontent.com/ewcloud/ewc-community-hub/refs/heads/main/logos/EWCLogo.png
-      annotations:
-        technology: "Ansible Playbook"
-        category: "Test Item"
-        supportLevel: "Community"
-        licenseType: "Apache License 2.0"
-        others: "Deployable,EWCCLI-compatible"
-      displayName: My First EWC Community hub Item
-      summary: My test Item
-      license: https://github.com/your-repo/blob/main/LICENSE
+        - email: name@organization.com
+          name: my name or my organization
+          url: https://my-public-git-server.com/my-repo/issues
+      name: "my-item"
       published: true
+      sources:
+        - https://my-public-git-server.com/my-repo.git OR /local/path/to/custom/catalog/item
+      summary:  My 1st EWC Community Hub Item
+      values:
+        inputSpec:
+          - name: my_required_input
+            description: "My required input."
+            type: str
+          - name: my_optional_input
+            description: "My optional input. The default value implies this input is optional."
+            type: str
+            default: "my default value"
+        osImageName: Full VM image name, like "Ubuntu-24.04-20260519071420" or its short name, like "Ubuntu-24.04"
+        osSecurityGroups:
+          - ssh
+        pathToRequirementsFile: path/to/my/requirements/file
+        pathToMainFile: path/to/my/main/file
+      version: "0.0.1"
 ```
 
-where
+Attributes of particular interest during Item development and testing include:
+- `ewccli.externalIP` is a flag used to assign a public floating IP address to the target VM
+- `sources`, which can be:
+    - Public GIT repository URI
+    - Absolute path to a local directory with the Item. The path needs to point to an existing non-empty directory
+- `values.inputSpec` is the list of inputs you want the user to be able to provide. Any input without default values is treated as required; users can set them when prompted during deployment, or by passing the `--item-inputs` arg as part of the deploy command.
+- `values.osImageName`, which can be:
+    - The full name of one of the OpenStack image listed on the [EWC Knowledge Base](https://confluence.ecmwf.int/x/pU2xG)
+    - The short name of the the OpenStack image; the EWCCLI will auto-resolve to the latest available minor version for the specified operative system
+- `values.osSecurityGroups` is a list of OpenStack Security Groups assigned to the target VM such that network traffic can reach it on certain ports.
+- `values.pathToMainFile` is the relative path to your directory or repository
+- `values.pathToRequirementsFile` is the relative path to your directory or repository
 
-- `sources` can be (only the first element in the list is considered):
-    - Public repo URL (e.g. https://github.com/your-repo.git) if your repository is public already
-    - Absolute path to a directory with the Item (e.g. `/home/murdaca/custom-items/new-item`). The path needs to point to a directory that needs to exists an not be empty. (WARNING: No local path are accepted!)
-- `pathToMainFile` is the relattive path to your directory or repository
-- `pathToRequirementsFile` is the relattive path to your directory or repository
-- `publicIP` is a flag used to enable deployment of
-- `ewccli.inputs` is the list of inputs you want the user to be able to provide, they can be mandatory or optional, respecively with default key not set or set.
 
 ### Running a test
 Once metadata is correct and complete, execute `list`, `show` or `deploy` commands as needed:
