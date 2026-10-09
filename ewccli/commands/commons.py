@@ -388,7 +388,7 @@ def list_items_table(hub_items: Dict[str, Any]) -> None:
 
         # Filter items not EWCCLI compatible
         if HubItemOherAnnotation.EWCCLI_COMPATIBLE.value not in others_annotations:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 f"Filtering {item} as this is not compatible with the EWCCLI according to the catalog:"
                 f"\n`{HubItemOherAnnotation.EWCCLI_COMPATIBLE.value}` annotation is not in `others` annotations list."
             )
