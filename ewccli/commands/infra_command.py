@@ -279,7 +279,7 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
         flavour_name=flavour_name,
         networks=networks,
         security_groups=security_groups,
-        item_default_security_groups=ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee],
+        os_security_groups=ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee],
         extra_volume=extra_volume,
     )
 

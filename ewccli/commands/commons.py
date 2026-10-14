@@ -497,11 +497,11 @@ def _render_inputs(
 def _render_defaults(item_info: Dict[str, Any]) -> str:
     defaults = []
 
-    image = item_info.get("defaultImageName")
+    image = item_info.get("osImageName")
     if image:
         defaults.append(f"Image Name: {image}")
 
-    sgs = item_info.get("defaultSecurityGroups", [])
+    sgs = item_info.get("osSecurityGroups", [])
     if sgs:
         defaults.append(f"Security Group/s: {','.join(sgs)}")
 
