@@ -2,6 +2,10 @@ name: Validation
 
 on:
   push:
+   paths:
+      - '**.py'
+      - 'pyproject.toml'
+      - './.github/*'
 
 jobs:
 
