@@ -28,6 +28,7 @@ from ewccli.commands.commons_infra import pre_deploy_server_setup
 from ewccli.commands.commons_infra import identify_server_reconfiguration
 from ewccli.commands.commons_infra import deploy_server
 from ewccli.commands.commons_infra import post_deploy_server_setup
+from ewccli.commands.commons_infra import check_server_conflict_with_inputs
 
 
 # --- Fake OpenstackBackend for testing -------------------------------------
@@ -859,6 +860,43 @@ def test_identify_server_reconfiguration_wrong_origin(conn):
     assert code == 1
     assert "not been deployed with the EWC CLI" in msg
     assert outputs == {}
+
+
+def test_check_server_conflict_security_groups_order_insensitive():
+    server_info = MagicMock()
+    server_info.security_groups = [
+        {"name": "http-https-only"},
+        {"name": "8080"},
+        {"name": "ssh"},
+    ]
+
+    diffs = check_server_conflict_with_inputs(
+        server_info,
+        security_groups=("ssh", "http-https-only", "8080"),
+    )
+
+    assert diffs == []
+
+
+def test_check_server_conflict_security_groups_reports_real_mismatch():
+    server_info = MagicMock()
+    server_info.security_groups = [
+        {"name": "http-https-only"},
+        {"name": "8080"},
+    ]
+
+    diffs = check_server_conflict_with_inputs(
+        server_info,
+        security_groups=("ssh", "http-https-only", "8080"),
+    )
+
+    assert diffs == [
+        (
+            "Security Groups",
+            "http-https-only,8080",
+            "ssh,http-https-only,8080",
+        )
+    ]
 
 
 def test_deploy_server_success(conn):
