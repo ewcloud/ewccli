@@ -206,5 +206,8 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: "",
     }
 
+    # Default GB
+    ROOT_VOLUME_DEFAULT_SIZE = 50
+
 
 config = EWCCLIConfiguration()

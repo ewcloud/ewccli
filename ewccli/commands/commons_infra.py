@@ -49,6 +49,8 @@ class CreateServerInputs(BaseModel):  # type: ignore[misc]
     security_groups: Optional[Tuple[str, ...]] = None
     os_security_groups: Optional[Tuple[str, ...]] = None
 
+    root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE
+
     extra_volume: Optional[Tuple[int, ...]] = None
 
     @validator("networks", "security_groups", "os_security_groups", pre=True)  # type: ignore[misc]
@@ -165,6 +167,10 @@ def check_user_ssh_keys(
 
 def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
     server_info: Dict[str, Any],
+    root_volume: int,
+    server_info_root_volume: int,
+    extra_volume: Optional[Tuple[str, str]] = None,
+    server_info_extra_volume: Optional[Tuple[str, str]] = None,
     server_info_image: Optional[str] = None,
     image_name: Optional[str] = None,
     keypair_name: Optional[str] = None,
@@ -185,14 +191,22 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
         if provided is None:
             return
 
+        # Special handling for collections where order doesn't matter
         if isinstance(provided, list):
-            provided_str_list = list(map(str, provided))
-            if actual_str not in provided_str_list:
-                diffs.append((field, actual_str, ", ".join(provided_str_list)))
+            actual_set = {s.strip() for s in actual_str.split(",")}
+            provided_set = {str(s).strip() for s in provided}
+
+            if actual_set != provided_set:
+                diffs.append(
+                    (
+                        field,
+                        ", ".join(sorted(actual_set)),
+                        ", ".join(sorted(provided_set)),
+                    )
+                )
         else:
-            provided_str = str(provided)
-            if actual_str != provided_str:
-                diffs.append((field, actual_str, provided_str))
+            if actual_str != str(provided):
+                diffs.append((field, actual_str, str(provided)))
 
     def _get_network_names(info: Any) -> str:
         if getattr(info, "addresses", None):
@@ -227,14 +241,18 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
     if security_groups:
         compare(
             "Security Groups",
-            ",".join(security_groups),
+            ",".join(set(security_groups)),
             _get_security_groups_string(server_info),
         )
+
+    # Root Volume
+    compare("Root volume [GB]", server_info_root_volume, root_volume)
 
     return diffs
 
 
-def show_server_input_requested_summary(
+def show_server_input_requested_summary(  # noqa: CFQ002
+    root_volume: int,
     security_groups: Optional[Tuple[str, ...]],
     networks: Optional[Tuple[str, ...]],
     image_name: Optional[str] = None,
@@ -257,6 +275,8 @@ def show_server_input_requested_summary(
     if security_groups:
         table.add_row("Security Groups", ", ".join(security_groups))
     table.add_row("Keypair", keypair_name)
+
+    table.add_row("Root Volume [GB]", str(root_volume))
 
     if extra_volumes:
         table.add_row("Extra Volumes [GB]", ", ".join(str(v) for v in extra_volumes))
@@ -900,8 +920,8 @@ def list_server_details(  # noqa: CCR001
     root_volume = vm_info.get("root-volume")
     extra_volumes = vm_info.get("extra-volumes") or []
 
-    root_volume_str = "\n".join([root_volume] if root_volume else [])
-    extra_volumes_str = "\n".join(extra_volumes)
+    root_volume_str = "\n".join([str(root_volume)] if root_volume else [])
+    extra_volumes_str = ", ".join([str(r) for r in extra_volumes])
 
     table.add_row("Root volume [GB]", root_volume_str)
     table.add_row("Extra volumes [GB]", extra_volumes_str)
@@ -1121,7 +1141,7 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     return 0, "Pre deploy server setup finished successfully.", outputs
 
 
-def identify_server_reconfiguration(  # noqa: CCR001, CFQ004, CFQ001
+def identify_server_reconfiguration(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ001
     openstack_api: connection.Connection,
     server_inputs: Dict[str, Any],
     pre_deploy_server_outputs: Dict[str, Any],
@@ -1136,6 +1156,9 @@ def identify_server_reconfiguration(  # noqa: CCR001, CFQ004, CFQ001
 
     networks: Optional[Tuple[str, ...]] = server_inputs["networks"]
     security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
+
+    root_volume: int = server_inputs["root_volume"]
+    extra_volume: Optional[Tuple[str, str]] = server_inputs.get("extra_volume")
 
     # Retrive machine if exists
     try:
@@ -1199,8 +1222,33 @@ def identify_server_reconfiguration(  # noqa: CCR001, CFQ004, CFQ001
             outputs,
         )
 
+    server_info_root_volume = 0
+    server_info_extra_volume = []
+
+    volumes = existing_server_info._body.get("os-extended-volumes:volumes_attached", [])
+
+    try:
+        for volume in volumes:
+            volume_id = volume["id"]
+            volume_info = openstack_api.block_storage.get_volume(volume_id)
+
+            if volume["delete_on_termination"]:
+                server_info_root_volume = volume_info.size
+            else:
+                server_info_extra_volume.append(volume_info.size)
+    except Exception as e:
+        return (
+            1,
+            f"[Identify Server Reconfiguration] Could not retrieve volumes of {server_name} due to {e}",
+            outputs,
+        )
+
     diffs = check_server_conflict_with_inputs(
         server_info=existing_server_info,
+        root_volume=root_volume,
+        extra_volume=extra_volume,
+        server_info_root_volume=server_info_root_volume,
+        server_info_extra_volume=tuple(server_info_extra_volume),
         server_info_image=server_info_image,
         image_name=resolved_image_name,
         keypair_name=keypair_name,
@@ -1256,6 +1304,7 @@ def deploy_server(  # noqa: CCR001, CFQ004, CFQ002
     security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
     resolved_image_name: str = pre_deploy_server_outputs["resolved_image_name"]
     resolved_flavour_name: str = pre_deploy_server_outputs["resolved_flavour_name"]
+    root_volume: int = server_inputs["root_volume"]
     extra_volumes: Optional[Tuple[str, ...]] = server_inputs["extra_volume"]
 
     _LOGGER.info(f"Deploy server {server_name} starting...")
@@ -1266,6 +1315,7 @@ def deploy_server(  # noqa: CCR001, CFQ004, CFQ002
         networks=networks,
         security_groups=security_groups,
         keypair_name=keypair_name,
+        root_volume=root_volume,
         extra_volumes=extra_volumes,
     )
 
@@ -1299,37 +1349,13 @@ def deploy_server(  # noqa: CCR001, CFQ004, CFQ002
             sec_groups=security_groups,
             keypair_name=keypair_name,
             boot_from_volume=boot_from_volume,
+            root_volume=root_volume,
         )
     )
     if not openstack_server_status[0]:
         return 1, create_server_message, outputs
     else:
         _LOGGER.info(create_server_message)
-
-    # Extract image ID (usually a dict with id field)
-    server_info_image = server_info.get("image")
-
-    if server_info_image is None:
-        image_id = None
-    elif isinstance(server_info_image, dict):
-        image_id = server_info_image.get("id")
-    else:
-        image_id = getattr(server_info_image, "id", None)
-
-    try:
-        # Fetch image name from the image ID
-        image = openstack_api.compute.find_image(image_id)
-        image_name_used = image.name if image else "Unknown"
-    except Exception as e:
-        return 1, f"[Deploy server] Could not retrieve image due to {e}", outputs
-
-    vm_info = get_deployed_server_info(
-        federee=federee,
-        server_info=server_info,
-        image_name=image_name_used,
-    )
-
-    list_server_details(vm_info)
 
     outputs = {
         "server_info": server_info,
@@ -1429,10 +1455,20 @@ def post_deploy_server_setup(  # noqa: CCR001, CFQ004, CFQ001, C901
     ############################################################
     # Attach extra volumes (if provided)
     ############################################################
+    # Check existing volumes
+    volumes = server_info_with_ip._body.get("os-extended-volumes:volumes_attached", [])
+    number_extra_volumes = sum(
+        1 for v in volumes if not v.get("delete_on_termination", False)
+    )
+    extra_volume_sizes = server_inputs.get("extra_volume", [])
 
-    extra_volume_sizes = server_inputs.get("extra_volume", None)
+    extra_volumes = ", ".join([f"{s} GB" for s in extra_volume_sizes])
+    _LOGGER.info(
+        f"Requested number of extra volumes: {len(extra_volume_sizes)} ({extra_volumes})"
+    )
+    _LOGGER.info(f"Current number of extra volumes: {number_extra_volumes}")
 
-    if extra_volume_sizes:
+    if len(extra_volume_sizes) < number_extra_volumes:
         _LOGGER.info(
             f"Post deploy: creating and attaching extra volumes: {extra_volume_sizes}"
         )
@@ -1482,11 +1518,14 @@ def post_deploy_server_setup(  # noqa: CCR001, CFQ004, CFQ001, C901
         _LOGGER.info(attach_msg)
 
         outputs["attached_volumes"] = [v.id for v in created_volumes]
+    else:
+        _LOGGER.info("Skipping creationg of new volumes.")
+        outputs["attached_volumes"] = [v["id"] for v in volumes]
 
     return 0, "Post deploy server setup finished successfully", outputs
 
 
-def create_server_command(  # noqa: CCR001, CFQ002
+def create_server_command(  # noqa: CCR001, CFQ002, C901, CFQ004, CFQ001
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
@@ -1582,6 +1621,55 @@ def create_server_command(  # noqa: CCR001, CFQ002
         console.print(Panel(os_message, title="Error", style="red"))
         # Exit with a non-zero status
         sys.exit(1)
+
+    server_info = post_deploy_server_outputs["server_info"]
+
+    # Extract image ID (usually a dict with id field)
+    server_info_image = server_info.get("image")
+
+    if server_info_image is None:
+        image_id = None
+    elif isinstance(server_info_image, dict):
+        image_id = server_info_image.get("id")
+    else:
+        image_id = getattr(server_info_image, "id", None)
+
+    try:
+        # Fetch image name from the image ID
+        image = openstack_api.compute.find_image(image_id)
+        image_name_used = image.name if image else "Unknown"
+    except Exception as e:
+        outputs: Dict[str, Any] = {}
+        return 1, f"[Deploy server] Could not retrieve image due to {e}", {}
+
+    def _get_attached_volumes(server_info: Dict[str, Any]) -> Any:
+        if hasattr(server_info, "_body"):
+            return server_info._body.get("os-extended-volumes:volumes_attached", [])
+
+        return server_info.get("os-extended-volumes:volumes_attached", [])
+
+    volumes = _get_attached_volumes(server_info)
+
+    root_volume = None
+    extra_volumes = []
+    for volume in volumes:
+        volume_id = volume["id"]
+        volume_info = openstack_api.block_storage.get_volume(volume_id)
+
+        if volume["delete_on_termination"]:
+            root_volume = volume_info.size
+        else:
+            extra_volumes.append(volume_info.size)
+
+    vm_info = get_deployed_server_info(
+        federee=federee,
+        server_info=server_info,
+        image_name=image_name_used,
+        root_volume=root_volume,
+        extra_volumes=extra_volumes,
+    )
+
+    list_server_details(vm_info)
 
     internal_ip_machine = post_deploy_server_outputs["internal_ip_machine"]
     external_ip_machine = post_deploy_server_outputs["external_ip_machine"]

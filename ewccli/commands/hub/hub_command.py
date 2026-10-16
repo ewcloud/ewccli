@@ -374,6 +374,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     external_ip: bool = False,
     networks: Optional[Tuple[str, str]] = None,
     security_groups: Optional[Tuple[str, str]] = None,
+    root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
     extra_volume: Optional[Tuple[str, str]] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
@@ -667,6 +668,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             os_security_groups=item_info_values.get(
                 HubItemCLIKeys.OS_SECURITY_GROUPS.value
             ),
+            root_volume=root_volume,
             extra_volume=extra_volume,
         )
 
