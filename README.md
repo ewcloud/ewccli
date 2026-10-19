@@ -250,57 +250,11 @@ If you would like to test the deployment of:
 you can take advantage of the `--path-to-catalog` to point the EWCCLI to the correct source location, and deploy the Item to your target tenant of choice.
 
 ### Preparing a test
-Create a local catalogue file, named `./custom_catalog.yaml`, with the complete metadata for your Item:
+Create a local catalogue file, named `./custom_catalog.yaml`, with the complete metadata for your Item.
 
->⚠️ Always verify the latest Items metadata schema directly from the [EWC Hub Catalogue documentation](https://github.com/ewcloud/ewc-community-hub?tab=readme-ov-file#items-metadata).
+ For reference see the example excerpt of Item metadata, with optional EWCCLI compatibility, enclosed in red below. You can find more concrete examples by browsing over [metadata of Items already indexed in the catalog](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml). Additionally, all details about required or optional attributes can be found on the [schema documentation](https://github.com/ewcloud/ewc-community-hub/blob/main/docs/schema-reference/items/v1alpha1.md).
 
-```yaml
-apiVersion: communityhub.europeanweather.cloud/v1alpha1
-kind: CommunityHubCatalog
-spec:
-  items:
-    my-item:
-      annotations:
-        category: "My Category"
-        licenseType: "My Open Source License (in SPDX format)"
-        others: "Deployable,EWCCLI-compatible"
-        supportLevel: "Community"
-        technology: "My Technology"
-      displayName:  My Item
-      description: |
-        My first ever Item contributed to...
-        the EWC Community Hub.
-
-      ewccli:
-        externalIP: false
-      home: https://my-public-git-server.com/my-repo
-      license: https://my-public-git-server.com/my-repo/blob/main/LICENSE
-      icon: https://raw.my-public-git-server.com/my-repo/refs/heads/main/icon.png
-      maintainers:
-        - email: name@organization.com
-          name: my name or my organization
-          url: https://my-public-git-server.com/my-repo/issues
-      name: "my-item"
-      published: true
-      sources:
-        - https://my-public-git-server.com/my-repo.git OR /local/path/to/custom/catalog/item
-      summary:  My 1st EWC Community Hub Item
-      values:
-        inputSpec:
-          - name: my_required_input
-            description: "My required input."
-            type: str
-          - name: my_optional_input
-            description: "My optional input. The default value implies this input is optional."
-            type: str
-            default: "my default value"
-        osImageName: Full VM image name, like "Ubuntu-24.04-20260519071420" or its short name, like "Ubuntu-24.04"
-        osSecurityGroups:
-          - ssh
-        pathToRequirementsFile: path/to/my/requirements/file
-        pathToMainFile: path/to/my/main/file
-      version: "0.0.1"
-```
+![Item Metadata Excerpt, published on GitHub](./images/item-metadata-excerpt.png)
 
 Attributes of particular interest during Item development and testing include:
 - `ewccli.externalIP` is a flag used to assign a public floating IP address to the target VM
