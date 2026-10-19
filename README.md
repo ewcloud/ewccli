@@ -254,7 +254,7 @@ Create a local catalogue file, named `./custom_catalog.yaml`, with the complete 
 
  For reference see the example excerpt of Item metadata, with optional EWCCLI compatibility, enclosed in red below. You can find more concrete examples by browsing over [metadata of Items already indexed in the catalog](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml). Additionally, all details about required or optional attributes can be found on the [schema documentation](https://github.com/ewcloud/ewc-community-hub/blob/main/docs/schema-reference/items/v1alpha1.md).
 
-![Item Metadata Excerpt, published on GitHub](./images/item-metadata-excerpt.png)
+![Item Metadata Excerpt, published on GitHub](https://raw.githubusercontent.com/ewcloud/ewccli/main/images/item-metadata-excerpt.png)
 
 Attributes of particular interest during Item development and testing include:
 - `ewccli.externalIP` is a flag used to assign a public floating IP address to the target VM
