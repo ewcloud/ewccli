@@ -24,7 +24,7 @@ from click import ClickException
 from openstack import connection
 
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
-from ewccli.enums import Federee, Region
+from ewccli.enums import Federee
 from ewccli.ssh_keys_manager import SSHKeyManager, SSHKeyError
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.logger import get_logger
@@ -1288,7 +1288,6 @@ def deploy_server(  # noqa: CCR001, CFQ004, CFQ002
     federee: str,
     server_inputs: Dict[str, Any],
     pre_deploy_server_outputs: Dict[str, Any],
-    boot_from_volume: bool = False,
     dry_run: bool = False,
     force: bool = False,
 ) -> Tuple[int, Optional[str], Optional[Dict[str, Any]]]:
@@ -1348,7 +1347,6 @@ def deploy_server(  # noqa: CCR001, CFQ004, CFQ002
             networks=networks,
             sec_groups=security_groups,
             keypair_name=keypair_name,
-            boot_from_volume=boot_from_volume,
             root_volume=root_volume,
         )
     )
@@ -1558,11 +1556,6 @@ def create_server_command(  # noqa: CCR001, CFQ002, C901, CFQ004, CFQ001
         force=force,
     )
 
-    boot_from_volume = False
-
-    if region in [Region.R1.value, Region.R2.value]:
-        boot_from_volume = True
-
     if os_status_code != 0 or not pre_deploy_server_outputs:
         console.print(Panel(os_message, title="Error", style="red"))
         # Exit with a non-zero status
@@ -1597,7 +1590,6 @@ def create_server_command(  # noqa: CCR001, CFQ002, C901, CFQ004, CFQ001
         federee=federee,
         server_inputs=server_inputs,
         pre_deploy_server_outputs=pre_deploy_server_outputs,
-        boot_from_volume=boot_from_volume,
         dry_run=dry_run,
         force=force,
     )

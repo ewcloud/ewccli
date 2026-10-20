@@ -118,7 +118,6 @@ class OpenstackBackend:
         attempts: int = 1,
         retry_delay_s: int = 30,
         wait_time_s: int = 600,
-        boot_from_volume: bool = False,
         root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
         dry_run: bool = False,
     ) -> Tuple[ServerResult, Optional[str], Dict[str, Any]]:
@@ -305,37 +304,27 @@ class OpenstackBackend:
                 #   the group param will win.
                 #   (Optional, defaults to None)
 
-                if boot_from_volume:
-                    server = conn.compute.create_server(
-                        name=server_name,
-                        image_id=image.id,
-                        flavor_id=flavour.id,
-                        security_groups=security_group_names,
-                        key_name=keypair_name,
-                        networks=network_info,
-                        # This is the key part for disk=0 flavors
-                        block_device_mapping_v2=[
-                            {
-                                "boot_index": 0,
-                                "uuid": image.id,
-                                "source_type": "image",
-                                "destination_type": "volume",
-                                "volume_size": root_volume,
-                                "delete_on_termination": True,
-                            }
-                        ],
-                        metadata={"deployed": "ewccli"},
-                    )
-                else:
-                    server = conn.compute.create_server(
-                        name=server_name,
-                        image_id=image.id,
-                        flavor_id=flavour.id,
-                        security_groups=security_group_names,
-                        key_name=keypair_name,
-                        networks=network_info,
-                        metadata={"deployed": "ewccli"},
-                    )
+                # Always boot from volume
+                server = conn.compute.create_server(
+                    name=server_name,
+                    image_id=image.id,
+                    flavor_id=flavour.id,
+                    security_groups=security_group_names,
+                    key_name=keypair_name,
+                    networks=network_info,
+                    # This is the key part for disk=0 flavors
+                    block_device_mapping_v2=[
+                        {
+                            "boot_index": 0,
+                            "uuid": image.id,
+                            "source_type": "image",
+                            "destination_type": "volume",
+                            "volume_size": root_volume,
+                            "delete_on_termination": True,
+                        }
+                    ],
+                    metadata={"deployed": "ewccli"},
+                )
 
                 time.sleep(5)
 
