@@ -191,8 +191,7 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
         if provided is None:
             return
 
-        # Special handling for collections where order doesn't matter
-        if isinstance(provided, list):
+        if isinstance(provided, (list, tuple, set)):
             actual_set = {s.strip() for s in actual_str.split(",")}
             provided_set = {str(s).strip() for s in provided}
 
@@ -215,7 +214,7 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
 
     def _get_security_groups_string(info: Any) -> str:
         groups = getattr(info, "security_groups", [])
-        return ",".join(str(sg.get("name")) for sg in groups)
+        return ",".join(sorted(str(sg.get("name")) for sg in groups))
 
     # Image
     if image_name and server_info_image:
@@ -235,18 +234,24 @@ def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
 
     # Networks
     if networks:
-        compare("Network", ",".join(networks), _get_network_names(server_info))
+        compare(
+            field="Network",
+            provided=set(networks),
+            actual=_get_network_names(server_info),
+        )
 
     # Security groups
     if security_groups:
         compare(
-            "Security Groups",
-            ",".join(set(security_groups)),
-            _get_security_groups_string(server_info),
+            field="Security Groups",
+            provided=set(security_groups),
+            actual=_get_security_groups_string(server_info),
         )
 
     # Root Volume
-    compare("Root volume [GB]", server_info_root_volume, root_volume)
+    compare(
+        field="Root volume [GB]", provided=root_volume, actual=server_info_root_volume
+    )
 
     return diffs
 

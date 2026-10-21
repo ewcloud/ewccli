@@ -14,6 +14,7 @@ import tempfile
 import subprocess
 from pathlib import Path
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -28,6 +29,7 @@ from ewccli.commands.commons_infra import pre_deploy_server_setup
 from ewccli.commands.commons_infra import identify_server_reconfiguration
 from ewccli.commands.commons_infra import deploy_server
 from ewccli.commands.commons_infra import post_deploy_server_setup
+from ewccli.commands.commons_infra import check_server_conflict_with_inputs
 
 
 # --- Fake OpenstackBackend for testing -------------------------------------
@@ -1085,3 +1087,172 @@ def test_create_server_command_success(conn):
     mock_pre.assert_called_once()
     mock_identify.assert_called_once()
     mock_deploy.assert_called_once()
+
+def check_conflicts(server, **kwargs):
+    defaults = {
+        "server_info": server,
+        "server_info_image": None,
+        "image_name": None,
+        "keypair_name": None,
+        "flavour_name": None,
+        "networks": None,
+        "security_groups": None,
+        "root_volume": None,
+        "server_info_root_volume": None,
+    }
+    defaults.update(kwargs)
+
+    return check_server_conflict_with_inputs(**defaults)
+
+def test_image_conflict():
+    server = SimpleNamespace()
+
+    assert check_conflicts(
+        server,
+        server_info_image="ubuntu-22.04",
+        image_name="ubuntu-24.04",
+    ) == [
+        ("Image", "ubuntu-22.04", "ubuntu-24.04"),
+    ]
+
+def test_root_volume_no_conflict():
+    server = SimpleNamespace()
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        root_volume=100,
+        server_info_root_volume=100,
+    ) == []
+
+def test_root_volume_conflict():
+    server = SimpleNamespace()
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        root_volume=50,
+        server_info_root_volume=100,
+    ) == [
+        ("Root volume [GB]", "100", "50"),
+    ]
+
+
+def test_keypair_conflict():
+    server = SimpleNamespace(key_name="old-key")
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        keypair_name="new-key",
+        root_volume=None,
+        server_info_root_volume=None,
+    ) == [
+        ("Keypair", "old-key", "new-key"),
+    ]
+
+def test_flavour_conflict():
+    server = SimpleNamespace(
+        flavor=SimpleNamespace(original_name="small")
+    )
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        root_volume=50,
+        server_info_root_volume=50,
+        flavour_name="medium",
+    ) == [
+        ("Flavour", "small", "medium"),
+    ]
+
+def test_network_order_is_ignored():
+    server = SimpleNamespace(
+        addresses={
+            "private": [{}],
+            "sfs": [{}],
+        }
+    )
+
+    assert (
+        check_server_conflict_with_inputs(
+            server_info=server,
+            root_volume=50,
+            server_info_root_volume=50,
+            networks=("sfs", "private"),
+        )
+        == []
+    )
+
+def test_network_conflict():
+    server = SimpleNamespace(
+        addresses={
+            "private": [{}],
+            "sfs": [{}],
+        }
+    )
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        root_volume=50,
+        server_info_root_volume=50,
+        networks=("private",),
+    ) == [
+        (
+            "Network",
+            "private, sfs",
+            "private",
+        )
+    ]
+
+def test_security_group_order_is_ignored():
+    server = SimpleNamespace(
+        security_groups=[
+            {"name": "default"},
+            {"name": "ssh"},
+        ]
+    )
+
+    assert (
+        check_server_conflict_with_inputs(
+            server_info=server,
+            root_volume=50,
+            server_info_root_volume=50,
+            security_groups=("ssh", "default"),
+        )
+        == []
+    )
+
+def test_security_group_conflict():
+    server = SimpleNamespace(
+        security_groups=[
+            {"name": "default"},
+            {"name": "ssh"},
+        ]
+    )
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        root_volume=50,
+        server_info_root_volume=50,
+        security_groups=("default",),
+    ) == [
+        (
+            "Security Groups",
+            "default, ssh",
+            "default",
+        )
+    ]
+
+def test_multiple_conflicts():
+    server = SimpleNamespace(
+        key_name="old-key",
+        flavor=SimpleNamespace(original_name="small"),
+    )
+
+    assert check_server_conflict_with_inputs(
+        server_info=server,
+        root_volume=50,
+        server_info_root_volume=50,
+        keypair_name="new-key",
+        flavour_name="large",
+    ) == [
+        ("Keypair", "old-key", "new-key"),
+        ("Flavour", "small", "large"),
+    ]
