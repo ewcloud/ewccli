@@ -174,6 +174,7 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
     external_ip: bool = False,
     networks: Optional[Tuple[str, str]] = None,
     security_groups: Optional[Tuple[str, str]] = None,
+    root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
     extra_volume: Optional[Tuple[str, str]] = None,
     ssh_private_encoded: Optional[str] = None,
     ssh_public_encoded: Optional[str] = None,
@@ -199,8 +200,8 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
         _LOGGER.info("Dry run enabled...")
 
     cli_profile = ctx.cli_profile
-    federee = federee or cli_profile.federee
-    region = region or cli_profile.region
+    federee = cli_profile.federee
+    region = cli_profile.region
 
     allowed_regions = ewc_hub_config.allowed_regions(federee)
     if region not in allowed_regions:
@@ -209,23 +210,24 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
             f" The following regions are available: {allowed_regions}"
         )
 
-    if not auth_url:
-        site_map = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee)
-        if site_map is None:
-            raise ClickException(f"[Infra] Unknown federee '{federee}'.")
+    site_map = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee)
+    if site_map is None:
+        raise ClickException(f"[Infra] Unknown federee '{federee}'.")
 
-        auth_url = site_map.get(region)
-        if auth_url is None:
-            raise ClickException(
-                f"[Infra] Unknown region '{region}' for federee '{federee}'."
-            )
+    auth_url = site_map.get(region)
+    if auth_url is None:
+        raise ClickException(
+            f"[Infra] Unknown region '{region}' for federee '{federee}'."
+        )
 
     auth = ServerAuthConfig(
         federee=federee,
         region=region,
         auth_url=auth_url,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
+        application_credential_id=application_credential_id
+        or cli_profile.application_credential_id,
+        application_credential_secret=application_credential_secret
+        or cli_profile.application_credential_secret,
     )
 
     # Try to fill from CLI profile if not provided
@@ -280,6 +282,7 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
         networks=networks,
         security_groups=security_groups,
         os_security_groups=ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP[federee],
+        root_volume=root_volume,
         extra_volume=extra_volume,
     )
 
@@ -328,7 +331,9 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
     else:
         # Build the message
         message = "[bold blue]🚀 Deployment Complete[/bold blue]\n"
-        message += f"[bold]Item:[/bold] {server_name} server has been successfully deployed.\n\n"
+        message += (
+            f"[bold]{server_name}[/bold] server has been successfully deployed.\n\n"
+        )
 
         if not net.external_ip:
             if not external_ip_machine:
@@ -340,11 +345,13 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
                     "[bold yellow]External IP already present[/bold yellow]\n"
                 )
             message += f"{initial_message_ip}"
-            message += "You can log in to the VM from another machine in your tenancy with:\n\n"
+            message += (
+                "You can log into the VM from another machine in your tenancy with:\n\n"
+            )
         else:
             message += (
                 "[bold blue]🔐 VM Login Info[/bold blue]\n"
-                "You can log in to the VM using:\n\n"
+                "You can log into the VM using:\n\n"
             )
 
         message += (
