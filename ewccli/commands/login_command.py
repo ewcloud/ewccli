@@ -137,10 +137,11 @@ def validate_tenant_name(
     value: str,
 ) -> str:
     """Validate tenant name."""
-    pattern = r"^[a-zA-Z0-9]+-[a-zA-Z0-9]+-[a-zA-Z0-9]+$"
+    pattern = r"^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+){2,}$"
     if not re.match(pattern, value):
         raise click.BadParameter(
-            "Config name must be exactly 3 alphanumeric parts separated by dashes (e.g. thisis-my-tenancy)."
+            "Tenant name must contain at least three alphanumeric parts separated by dashes "
+            "(e.g. my-new-tenancy, this-is-my-tenancy, that-is-also-mine)."
         )
     return value
 
