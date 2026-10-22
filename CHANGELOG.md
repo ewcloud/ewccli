@@ -3,6 +3,20 @@
 All notable changes to this project are documented in this file. See
 [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.10.0](https://github.com/ewcloud/ewccli/compare/0.9.3...0.10.0) (2026-10-22)
+
+
+### Bug Fixes
+
+* inputs order constraint ([#195](https://github.com/ewcloud/ewccli/issues/195)) ([c1921f7](https://github.com/ewcloud/ewccli/commit/c1921f7a04448c6c278b929ebe1eb0fda297e294))
+* Lower severity of logging statements printed for Items not compatible with EWCCLI ([#185](https://github.com/ewcloud/ewccli/issues/185)) ([9f2a409](https://github.com/ewcloud/ewccli/commit/9f2a4099531a972974e6a467b3c79da1afa3dbd8))
+
+
+### Features
+
+* Add python 3.14 support ([#191](https://github.com/ewcloud/ewccli/issues/191)) ([84e4023](https://github.com/ewcloud/ewccli/commit/84e4023381c477be16b890768db53fb17dc0f60b))
+* allow users to customize root volume size when boot from volume is used ([#192](https://github.com/ewcloud/ewccli/issues/192)) ([d13d1b4](https://github.com/ewcloud/ewccli/commit/d13d1b4769c82c90fbd8f61b2ad470beb1fec1d7))
+
 ## [0.9.3](https://github.com/ewcloud/ewccli/compare/0.9.2...0.9.3) (2026-10-05)
 
 
