@@ -1169,7 +1169,79 @@ class OpenstackBackend:
         )
         return return_value
 
-    def add_external_ip(  # noqa: CFQ004, CCR001
+    def _resolve_external_network(
+        self,
+        conn: openstack.connection.Connection,
+        federee: str,
+    ) -> Network:
+        """Resolve the network used to allocate floating IPs.
+
+        The configured external network name is preferred. Tenant projects
+        may expose additional external-marked networks (e.g. the manila/SFS
+        network): those are never used because a floating IP allocated on
+        them is not internet reachable (issue #194).
+
+        :param conn: The OpenStack connection
+        :param federee: The federee (e.g. "EUMETSAT", "ECMWF")
+        :returns: The external Network to allocate floating IPs from
+        """
+        configured_name = ewc_hub_config.DEFAULT_EXTERNAL_NETWORK_MAP.get(federee)
+
+        if configured_name:
+            network = conn.network.find_network(configured_name)
+            if network:
+                return network
+
+        candidates = [
+            net
+            for net in conn.network.networks(is_router_external=True)
+            if not any(k in net.name.lower() for k in ("manila", "sfs"))
+        ]
+
+        if not candidates:
+            raise openstack.exceptions.NotFoundException(
+                f"No external network found for federee {federee} "
+                f"(configured name: {configured_name})."
+            )
+
+        _LOGGER.warning(
+            f"External network '{configured_name}' not found, "
+            f"using external network '{candidates[0].name}' instead."
+        )
+        return candidates[0]
+
+    def _get_server_port(
+        self,
+        conn: openstack.connection.Connection,
+        server: Server,
+        network_name: str,
+    ) -> Any:
+        """Return the server port attached to the given network.
+
+        Servers can have several ports (e.g. the manila/SFS network):
+        the floating IP must be attached to the port of the private
+        network, not simply to the first port found (issue #194).
+
+        :param conn: The OpenStack connection
+        :param server: Server object
+        :param network_name: Name of the network the port must belong to
+        :returns: The matching Port (falls back to the first port found)
+        """
+        ports = list(conn.network.ports(device_id=server.id))
+        if not ports:
+            raise openstack.exceptions.NotFoundException(
+                f"No port found for server {server.name}."
+            )
+
+        network = conn.network.find_network(network_name)
+        if network:
+            for port in ports:
+                if port.network_id == network.id:
+                    return port
+
+        return ports[0]
+
+    def add_external_ip(  # noqa: CFQ004, CCR001, C901
         self,
         conn: openstack.connection.Connection,
         server: Server,
@@ -1220,20 +1292,31 @@ class OpenstackBackend:
             )
 
         try:
-            network = conn.network.find_network(
-                ewc_hub_config.DEFAULT_EXTERNAL_NETWORK_MAP.get(federee)
+            network = self._resolve_external_network(conn=conn, federee=federee)
+
+            # Only reuse floating IPs allocated on the external network:
+            # a DOWN floating IP on the manila/SFS network is not
+            # internet reachable (issue #194).
+            floating_ips = list(
+                conn.network.ips(status="DOWN", floating_network_id=network.id)
             )
-            floating_ips = list(conn.network.ips(status="DOWN"))
 
             if floating_ips:
                 floating_ip = floating_ips[0]
             else:
                 floating_ip = conn.network.create_ip(floating_network_id=network.id)
 
-            ports = list(conn.network.ports(device_id=server.id))
-            server_port = ports[0]
+            server_port = self._get_server_port(
+                conn=conn, server=server, network_name=private_network_name
+            )
 
-            conn.network.update_ip(floating_ip, port_id=server_port.id)
+            updated_fip = conn.network.update_ip(floating_ip, port_id=server_port.id)
+
+            if not getattr(updated_fip, "port_id", None):
+                raise openstack.exceptions.SDKException(
+                    f"Floating IP {floating_ip.floating_ip_address} was not "
+                    f"associated to any port of server {server.name}."
+                )
 
         except Exception as e:
             return (
