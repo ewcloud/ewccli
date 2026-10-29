@@ -20,6 +20,7 @@ from ewccli.commands.hub.hub_command import ewc_hub_command
 
 # Openstack backend
 from ewccli.commands.infra_command import ewc_infra_command
+from ewccli.commands.quota_command import ewc_quota_command
 
 # Crossplane backend
 # from ewccli.commands.k8s_command import ewc_k8s_command
@@ -108,6 +109,7 @@ def version_cmd() -> None:
 # Register subcommands
 cli.add_command(ewc_hub_command)
 cli.add_command(ewc_infra_command)
+cli.add_command(ewc_quota_command)
 # cli.add_command(ewc_k8s_command)
 # cli.add_command(ewc_dns_command)
 # cli.add_command(ewc_s3_command)

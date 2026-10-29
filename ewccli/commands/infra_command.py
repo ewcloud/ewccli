@@ -34,6 +34,7 @@ from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
+from ewccli.commands.commons import openstack_error_hint
 from ewccli.commands.commons_infra import CreateServerInputs
 from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
@@ -270,6 +271,7 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
+            f"{openstack_error_hint(op_error)}"
         )
 
     server_inputs = CreateServerInputs.safe_create(
@@ -386,6 +388,7 @@ def show_cmd(  # noqa: CCR001
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
+            f"{openstack_error_hint(op_error)}"
         )
 
     try:
@@ -394,6 +397,7 @@ def show_cmd(  # noqa: CCR001
     except Exception as e:
         raise ClickException(
             f"Could not retrieve server {server_name} from Openstack due to: {e}"
+            f"{openstack_error_hint(e)}"
         )
 
     if not server_info:
@@ -479,6 +483,7 @@ def list_cmd(
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
+            f"{openstack_error_hint(op_error)}"
         )
 
     try:
@@ -488,6 +493,7 @@ def list_cmd(
     except Exception as e:
         raise ClickException(
             f"Could not retrieve server list from Openstack due to: {e}"
+            f"{openstack_error_hint(e)}"
         )
     list_server_table(servers=servers)
 
@@ -554,6 +560,7 @@ def delete_cmd(  # noqa: CFQ002, C901
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
+            f"{openstack_error_hint(op_error)}"
         )
 
     server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
@@ -562,7 +569,10 @@ def delete_cmd(  # noqa: CFQ002, C901
     try:
         server_info = openstack_api.get_server(name_or_id=server_name)
     except Exception as e:
-        raise ClickException(f"Could not retrieve server {server_name} due to: {e}")
+        raise ClickException(
+            f"Could not retrieve server {server_name} due to: {e}"
+            f"{openstack_error_hint(e)}"
+        )
 
     # Step 3: Run pre-delete steps
     try:
@@ -598,6 +608,7 @@ def delete_cmd(  # noqa: CFQ002, C901
     except Exception as e:
         raise ClickException(
             f"Could not delete server {server_name} from Openstack due to: {e}"
+            f"{openstack_error_hint(e)}"
         )
 
     _LOGGER.info(delete_message)

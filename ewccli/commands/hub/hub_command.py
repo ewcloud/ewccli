@@ -35,6 +35,7 @@ from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import list_items_table
 from ewccli.commands.commons import show_item_table
 from ewccli.commands.commons import default_username
+from ewccli.commands.commons import openstack_error_hint
 from ewccli.commands.commons import build_dns_record_name
 from ewccli.commands.commons import wait_for_dns_record
 from ewccli.commands.commons import load_hub_items
@@ -587,6 +588,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         except Exception as op_error:
             raise ClickException(
                 f"Could not initialize Openstack config due to the following error: {op_error}"
+                f"{openstack_error_hint(op_error)}"
             )
 
         #####################################################################################
@@ -603,6 +605,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         except Exception as op_error:
             raise ClickException(
                 f"Could not connect to Openstack due to the following error: {op_error}"
+                f"{openstack_error_hint(op_error)}"
             )
 
         ##########################################
