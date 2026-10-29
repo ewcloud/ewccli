@@ -69,12 +69,21 @@ console = Console()
     help="EWC CLI path to catalogue.",
 )
 @click.pass_context  # type: ignore[misc]
-def ewc_hub_command(
+def ewc_hub_command(  # noqa: CCR001
     ctx: click.Context,
     path_to_catalog: Path | None,
 ) -> None:
     """EWC Community Hub commands group."""
-    download_items(force=ewc_hub_config.EWC_CLI_HUB_DOWNLOAD_ITEMS)
+    # Refresh the catalogue on every hub invocation (any subcommand) so
+    # newly indexed item versions are always visible. Previously the
+    # download was skipped when the file existed, and `list --force`
+    # re-downloaded only AFTER ctx.obj["items"] had been loaded, so a
+    # forced run showed stale versions and only the next run picked them up.
+    is_default_catalog = path_to_catalog is None or Path(path_to_catalog) == (
+        ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH
+    )
+    if is_default_catalog:
+        download_items(force=True)
 
     # Create the dict if not existing
     ctx.ensure_object(dict)
@@ -98,6 +107,7 @@ def ewc_hub_command(
 
     # Store the option to make it available to all subcommands
     ctx.obj["items"] = items
+    ctx.obj["path_to_catalog"] = path_to_catalog
 
     ctx.obj["cli_profile"] = None
 
@@ -836,13 +846,21 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     envvar="EWC_CLI_FORCE",
     is_flag=True,
     default=False,
-    help="Force item file re-download.",
+    hidden=True,
+    help="Deprecated: the catalogue is now re-downloaded on every run.",
 )
 @click.pass_context  # type: ignore[misc]
-def list_cmd(ctx: click.Context, force: bool) -> None:
+def list_cmd(ctx: click.Context, force: bool = False) -> None:
     """List EWC Hub items."""
-    if force:
-        download_items(force=force)
+    # The catalogue is re-downloaded on every invocation (see the group
+    # callback), so --force is kept only for backwards compatibility.
+    download_items(force=force)
+    # Reload the catalogue: ctx.obj["items"] was loaded before the
+    # re-download, so without this the table would show stale versions.
+    ctx.obj["items"] = load_hub_items(
+        path_to_catalog=ctx.obj.get("path_to_catalog")
+        or ewc_hub_config.EWC_CLI_HUB_ITEMS_PATH
+    )
 
     list_items_table(hub_items=ctx.obj["items"])
 

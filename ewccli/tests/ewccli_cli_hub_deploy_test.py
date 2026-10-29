@@ -17,6 +17,7 @@ from unittest.mock import patch
 from ewccli.profile import ProfileStore
 from ewccli.ewccli import cli
 from ewccli.enums import Federee, Region
+from ewccli.configuration import config as ewc_hub_config
 
 
 class FakeProfile(SimpleNamespace):
@@ -96,10 +97,45 @@ def mock_profile_loader(tmp_path, valid_private_key_pem, valid_public_key_openss
 # Mock ctx.obj (CRITICAL)
 # -----------------------------
 @pytest.fixture(autouse=True)
-def mock_ctx_obj():
+def mock_ctx_obj(monkeypatch, tmp_path):
+    # Hermetic catalogue: the hub group now refreshes the catalogue on every
+    # invocation, so tests must provide a file instead of relying on the
+    # network or on ~/.ewccli/items.yaml existing.
+    catalog = tmp_path / "items.yaml"
+    catalog.write_text(
+        """
+spec:
+  items:
+    ssh-bastion-flavour:
+      version: "1.0.0"
+      sources:
+        - https://github.com/ewcloud/ssh-bastion-flavour
+      annotations:
+        others: EWCCLI-compatible
+        technology: Ansible Playbook
+      values:
+        inputSpec: []
+      ewccli: {}
+"""
+    )
+
+    # Redirect the group's --path-to-catalog default (bound at import time)
+    # and the config path used for the "is default catalogue" check.
+    from ewccli.commands.hub.hub_command import ewc_hub_command
+
+    # A stray env var would override the option default.
+    monkeypatch.delenv("EWC_CLI_PATH_TO_CATALOGUE", raising=False)
+
+    for param in ewc_hub_command.params:
+        if getattr(param, "name", None) == "path_to_catalog":
+            monkeypatch.setattr(param, "default", catalog)
+    monkeypatch.setattr(ewc_hub_config, "EWC_CLI_HUB_ITEMS_PATH", catalog)
+
     with (
         patch("ewccli.commands.hub.hub_command.categorize_item_inputs") as m1,
         patch("ewccli.commands.hub.hub_command.check_missing_required_inputs") as m2,
+        # Keep tests hermetic: no network access for the catalogue refresh.
+        patch("ewccli.commands.hub.hub_command.download_items"),
     ):
         m1.return_value = ([], [])
         m2.return_value = []
@@ -113,6 +149,35 @@ def mock_ctx_obj():
 def test_deploy_help(runner):
     result = runner.invoke(cli, ["hub", "deploy", "--help"])
     assert result.exit_code == 0
+
+
+def test_hub_list_force_reloads_catalog(runner):
+    """`hub list --force` must reload the catalogue after re-downloading.
+
+    Regression test: the group callback loaded items BEFORE the forced
+    re-download, so the first `--force` run showed stale versions and only
+    the second run picked up the new ones.
+    """
+    stale_items = {"old-item": {"version": "1.0.0"}}
+    fresh_items = {"new-item": {"version": "2.0.0"}}
+
+    with (
+        patch("ewccli.commands.hub.hub_command.download_items") as m_download,
+        patch("ewccli.commands.hub.hub_command.load_hub_items") as m_load,
+        patch("ewccli.commands.hub.hub_command.list_items_table") as m_table,
+    ):
+        # First call: group callback (stale file), second: reload after --force.
+        m_load.side_effect = [stale_items, fresh_items]
+
+        result = runner.invoke(cli, ["hub", "list", "--force"])
+
+    assert result.exit_code == 0
+    # The catalogue is loaded twice: once by the group, once after re-download.
+    assert m_load.call_count == 2
+    # The re-download must be forced.
+    m_download.assert_called_with(force=True)
+    # The table must show the freshly downloaded catalogue, not the stale one.
+    m_table.assert_called_with(hub_items=fresh_items)
 
 
 def test_deploy_dry_run_minimal(runner):
