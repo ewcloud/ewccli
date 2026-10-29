@@ -33,6 +33,7 @@ from ewccli.commands.commons import ssh_options
 from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import list_items_table
+from ewccli.commands.commons import is_ewccli_compatible
 from ewccli.commands.commons import show_item_table
 from ewccli.commands.commons import default_username
 from ewccli.commands.commons import openstack_error_hint
@@ -50,6 +51,7 @@ from ewccli.backends.openstack.backend_ostack import OpenstackBackend
 from ewccli.enums import HubItemTechnologyAnnotation
 from ewccli.enums import HubItemCategoryAnnotation
 from ewccli.enums import HubItemCLIKeys
+from ewccli.enums import HubItemOherAnnotation
 from ewccli.logger import get_logger
 from ewccli.profile import ProfileStore
 
@@ -287,7 +289,7 @@ def _validate_item_inputs_format(
 
 
 def _validate_item(ctx: Context, param: Parameter, value: str) -> str:
-    """Validate that the provided item exists in the Hub and is deployable."""
+    """Validate that the provided item exists in the Hub and is EWC CLI compatible."""
     obj: Dict[str, Any] = ctx.obj or {}
     hub_items: Dict[str, Any] = obj.get("items", {})
 
@@ -299,6 +301,16 @@ def _validate_item(ctx: Context, param: Parameter, value: str) -> str:
         )
 
     item_info = hub_items[value]
+
+    # Item exists but is not annotated as EWCCLI-compatible
+    if not is_ewccli_compatible(item_info):
+        list_items_table(hub_items=hub_items)
+        raise ClickException(
+            f"'{value}' is not compatible with the EWC CLI.\n"
+            f"Only items annotated with `{HubItemOherAnnotation.EWCCLI_COMPATIBLE.value}` "
+            "in the Hub catalog can be deployed.\n"
+            "Please select an item from the list above."
+        )
 
     # Item exists but is not deployable
     if not verify_item_is_deployable(item_info):

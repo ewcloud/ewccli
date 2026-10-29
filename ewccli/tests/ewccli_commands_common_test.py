@@ -15,6 +15,7 @@ from rich.console import Console
 
 from ewccli.commands.commons import (
     show_item_table,
+    is_ewccli_compatible,
 )
 
 
@@ -133,3 +134,31 @@ def test_show_item_table_renders_defaults(console_capture, sample_hub_item):
 
     assert "Image Name: ubuntu:22.04" in output
     assert "Security Group/s: sg-123,sg-456" in output
+
+
+# -----------------------------
+# is_ewccli_compatible (issue #197)
+# -----------------------------
+def test_is_ewccli_compatible_true():
+    item = {"annotations": {"others": "EWCCLI-compatible"}}
+    assert is_ewccli_compatible(item) is True
+
+
+def test_is_ewccli_compatible_among_others():
+    item = {"annotations": {"others": "some-tag, EWCCLI-compatible,other"}}
+    assert is_ewccli_compatible(item) is True
+
+
+def test_is_ewccli_compatible_missing_annotation():
+    item = {"annotations": {"others": "some-tag,other"}}
+    assert is_ewccli_compatible(item) is False
+
+
+def test_is_ewccli_compatible_no_others_key():
+    item = {"annotations": {"category": "test"}}
+    assert is_ewccli_compatible(item) is False
+
+
+def test_is_ewccli_compatible_no_annotations():
+    assert is_ewccli_compatible({}) is False
+    assert is_ewccli_compatible({"annotations": None}) is False

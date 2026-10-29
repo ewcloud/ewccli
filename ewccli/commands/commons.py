@@ -397,6 +397,21 @@ def ssh_options(func: Callable[..., Any]) -> Callable[..., Any]:
     return func
 
 
+def is_ewccli_compatible(item_info: Dict[str, Any]) -> bool:
+    """Check if a Hub item is annotated as compatible with the EWC CLI.
+
+    :param item_info: The item entry from the EWC Hub catalog.
+    :returns: True when the `EWCCLI-compatible` annotation is present in `others`.
+    """
+    annotations = item_info.get("annotations")
+    if not annotations or not isinstance(annotations, dict):
+        return False
+
+    others = annotations.get("others") or ""
+    others_annotations = [a.strip() for a in others.split(",")]
+    return HubItemOherAnnotation.EWCCLI_COMPATIBLE.value in others_annotations
+
+
 def list_items_table(hub_items: Dict[str, Any]) -> None:
     """List items in table."""
     table = Table(
@@ -417,10 +432,8 @@ def list_items_table(hub_items: Dict[str, Any]) -> None:
             _LOGGER.warning(f"Filtering {item} as it doesn't contain annotations.")
             continue
 
-        others_annotations = annotations.get("others", "").split(",")
-
         # Filter items not EWCCLI compatible
-        if HubItemOherAnnotation.EWCCLI_COMPATIBLE.value not in others_annotations:
+        if not is_ewccli_compatible(item_v):
             _LOGGER.debug(
                 f"Filtering {item} as this is not compatible with the EWCCLI according to the catalog:"
                 f"\n`{HubItemOherAnnotation.EWCCLI_COMPATIBLE.value}` annotation is not in `others` annotations list."
