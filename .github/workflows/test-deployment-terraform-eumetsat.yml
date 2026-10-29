@@ -1,0 +1,73 @@
+name: Terraform Deployment Test on EUMETSAT via EWCCLI
+
+on:
+  workflow_dispatch:
+    inputs:
+      itemName:
+        description: Name of the Community Hub Terraform item to test
+        required: false
+        type: string
+
+      catalogRef:
+        description: Branch, tag, or commit SHA of the target Community Hub catalog version.
+        required: false
+        default: "main"
+        type: string
+
+      inputSpecJson:
+        description: JSON object with input values for the selected item(s). If set, overrides, key by key, the default inputs in .github/e2e/terraform/<item>.json.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  EWC_CLI_LOGIN_FEDEREE: 'EUMETSAT'
+  EWC_CLI_LOGIN_REGION: '${{ secrets.EUMETSAT_EWC_CLI_LOGIN_REGION }}'
+  EWC_CLI_LOGIN_TENANT_NAME: '${{ secrets.EUMETSAT_EWC_CLI_LOGIN_TENANT_NAME }}'
+  OS_APPLICATION_CREDENTIAL_ID: '${{ secrets.EUMETSAT_OS_APPLICATION_CREDENTIAL_ID }}'
+  OS_APPLICATION_CREDENTIAL_SECRET: '${{ secrets.EUMETSAT_OS_APPLICATION_CREDENTIAL_SECRET }}'
+  OS_AUTH_URL: '${{ secrets.EUMETSAT_OS_AUTH_URL }}'
+  OS_REGION_NAME: '${{ secrets.EUMETSAT_OS_REGION_NAME }}'
+  SSH_PRIVATE_KEY: '${{ secrets.EUMETSAT_ANSIBLE_SSH_PRIVATE_KEY }}'
+  SSH_PUBLIC_KEY: '${{ secrets.EUMETSAT_ANSIBLE_SSH_PUBLIC_KEY }}'
+  ITEM_NAME: ${{ inputs.itemName }}
+  CATALOG_REF: ${{ inputs.catalogRef }}
+  INPUT_SPEC_JSON: '${{ inputs.inputSpecJson }}'
+  
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Remove preinstalled Terraform and OpenTofu runtimes
+        run: |
+          for runtime in tofu terraform; do
+            for path in $(which -a "${runtime}" || true); do
+              sudo rm -f "${path}"
+            done
+          done
+
+      - name: Install EWCCLI and its dependencies
+        run: pip install .
+
+      - name: Test deployment
+        run: .github/scripts/test-deployment-terraform.sh
+
+      - name: Upload test deployment result
+        uses: actions/upload-artifact@v6
+        if: ${{ always() }}
+        with:
+          name: artifacts_${{ github.run_id }}_${{ matrix.item }}
+          path: ./artifacts
