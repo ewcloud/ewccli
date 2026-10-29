@@ -1012,16 +1012,36 @@ def test_create_server_command_success(conn):
         "external_ip": False,
         "networks": ("private",),
         "security_groups": ("ssh",),
+        "extra_volume": (10,),
     }
 
     pre_deploy_outputs = {
         "normalized_image_name": "Ubuntu-22.04",
+        "resolved_flavour_name": "4cpu-4gbmem",
         "networks": ("private",),
         "security_groups": ("ssh",),
     }
 
     deploy_outputs = {
         "server_info": {"id": "123", "name": "vm1"},
+    }
+
+    # Resources requested by this server creation (as computed by
+    # get_requested_resources from the flavour + volumes + FIP flag).
+    requested_resources = {
+        "flavour": "4cpu-4gbmem",
+        "cpu": 4,
+        "ram_gb": 4.0,
+        "block_gb": 40,
+        "floating_ip": 0,
+    }
+
+    # Quotas as returned by show_quota_table (already fetched from OpenStack).
+    quotas = {
+        "cpu": {"limit": 64, "used": 12, "available": 52, "unlimited": False},
+        "ram": {"limit": 131072, "used": 8192, "available": 122880, "unlimited": False},
+        "block": {"limit": 500, "used": 100, "available": 400, "unlimited": False},
+        "fip": {"limit": 10, "used": 2, "available": 8, "unlimited": False},
     }
 
     from unittest.mock import Mock
@@ -1059,6 +1079,18 @@ def test_create_server_command_success(conn):
             ),
         ) as mock_identify,
         patch(
+            "ewccli.commands.commons_infra.get_requested_resources",
+            return_value=requested_resources,
+        ) as mock_requested,
+        patch(
+            "ewccli.commands.commons_infra.show_quota_table",
+            return_value=quotas,
+        ) as mock_quota_table,
+        patch(
+            "ewccli.commands.commons_infra.check_requested_resources",
+            return_value=True,
+        ) as mock_quota_check,
+        patch(
             "ewccli.commands.commons_infra.deploy_server",
             return_value=(0, "ok", deploy_outputs),
         ) as mock_deploy,
@@ -1087,6 +1119,107 @@ def test_create_server_command_success(conn):
     mock_pre.assert_called_once()
     mock_identify.assert_called_once()
     mock_deploy.assert_called_once()
+
+    # Quota steps: resources computed from the resolved flavour, quota table
+    # shown once, and the sufficiency check receives the fetched quotas.
+    mock_requested.assert_called_once()
+    assert mock_requested.call_args.kwargs["flavour_name"] == "4cpu-4gbmem"
+    assert mock_requested.call_args.kwargs["root_volume"] == 30
+    assert mock_requested.call_args.kwargs["extra_volume"] == (10,)
+    assert mock_requested.call_args.kwargs["external_ip"] is False
+
+    mock_quota_table.assert_called_once_with(backend, conn)
+    mock_quota_check.assert_called_once_with(
+        quotas=quotas, requested=requested_resources
+    )
+
+
+def test_create_server_command_insufficient_quota_exits(conn):
+    """When the requested resources exceed the quota, the command must exit
+    before deploying anything."""
+    backend = MagicMock()
+
+    server_inputs = {
+        "server_name": "vm1",
+        "root_volume": 30,
+        "keypair_name": "mykey",
+        "external_ip": False,
+        "networks": ("private",),
+        "security_groups": ("ssh",),
+        "extra_volume": (10,),
+    }
+
+    pre_deploy_outputs = {
+        "normalized_image_name": "Ubuntu-22.04",
+        "resolved_flavour_name": "4cpu-4gbmem",
+        "networks": ("private",),
+        "security_groups": ("ssh",),
+    }
+
+    requested_resources = {
+        "flavour": "4cpu-4gbmem",
+        "cpu": 4,
+        "ram_gb": 4.0,
+        "block_gb": 40,
+        "floating_ip": 0,
+    }
+
+    quotas = {
+        "cpu": {"limit": 4, "used": 4, "available": 0, "unlimited": False},
+        "ram": {"limit": 8192, "used": 8192, "available": 0, "unlimited": False},
+        "block": {"limit": 50, "used": 50, "available": 0, "unlimited": False},
+        "fip": {"limit": 1, "used": 1, "available": 0, "unlimited": False},
+    }
+
+    with (
+        patch(
+            "ewccli.commands.commons_infra.pre_deploy_server_setup",
+            return_value=(0, "ok", pre_deploy_outputs),
+        ),
+        patch(
+            "ewccli.commands.commons_infra.identify_server_reconfiguration",
+            return_value=(
+                0,
+                "[Identify Server Reconfiguration] No reconfiguration needed.",
+                {},
+            ),
+        ),
+        patch(
+            "ewccli.commands.commons_infra.get_requested_resources",
+            return_value=requested_resources,
+        ),
+        patch(
+            "ewccli.commands.commons_infra.show_quota_table",
+            return_value=quotas,
+        ),
+        patch(
+            "ewccli.commands.commons_infra.check_requested_resources",
+            return_value=False,
+        ),
+        patch(
+            "ewccli.commands.commons_infra.deploy_server",
+        ) as mock_deploy,
+        patch(
+            "ewccli.commands.commons_infra.post_deploy_server_setup",
+        ) as mock_post,
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        from ewccli.commands.commons_infra import create_server_command
+
+        create_server_command(
+            backend,
+            conn,
+            "EUMETSAT",
+            "WAW3-1",
+            server_inputs,
+            ssh_public_key_path="/tmp/id.pub",
+            ssh_private_key_path="/tmp/id",
+        )
+
+    assert exc_info.value.code == 1
+    # Deployment must never start when quota is insufficient.
+    mock_deploy.assert_not_called()
+    mock_post.assert_not_called()
 
 def check_conflicts(server, **kwargs):
     defaults = {

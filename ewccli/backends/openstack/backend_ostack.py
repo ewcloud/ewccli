@@ -1437,3 +1437,178 @@ class OpenstackBackend:
                 KeyPairResult(False, False),
                 f"Failed to delete keypair '{keypair_name}'. Due to: {ex}",
             )
+
+    @staticmethod
+    def _get_project_id(conn: openstack.connection.Connection) -> Optional[str]:
+        """Resolve the project (tenancy) ID for the current connection.
+
+        :param conn: The OpenStack connection
+        :returns: The project ID, or None when it cannot be determined.
+        """
+        project_id = cast(Optional[str], getattr(conn, "current_project_id", None))
+        if project_id:
+            return project_id
+
+        # Fallback: read the project from the auth info.
+        auth = getattr(getattr(conn, "authenticator", None), "auth", None) or {}
+        return auth.get("project_id") or auth.get("project_domain_id")
+
+    @staticmethod
+    def _quota_result(limit: Any, used: Any) -> Dict[str, Any]:
+        """Build a uniform quota result dict.
+
+        :param limit: Quota limit (-1 means unlimited).
+        :param used: Currently used amount (None when unavailable).
+        :returns: Dict with limit, used, available and unlimited flag.
+        """
+        try:
+            limit_i: Optional[int] = int(limit) if limit is not None else None
+        except (TypeError, ValueError):
+            limit_i = None
+        try:
+            used_i: Optional[int] = int(used) if used is not None else None
+        except (TypeError, ValueError):
+            used_i = None
+
+        unlimited = limit_i is not None and limit_i < 0
+        available: Optional[int] = None
+        if limit_i is not None and used_i is not None and not unlimited:
+            available = max(limit_i - used_i, 0)
+
+        return {
+            "limit": limit_i,
+            "used": used_i,
+            "available": available,
+            "unlimited": unlimited,
+        }
+
+    def check_cpu_quota(
+        self,
+        conn: openstack.connection.Connection,
+    ) -> Dict[str, Any]:
+        """Check the vCPU (cores) quota for the current project.
+
+        :param conn: The OpenStack connection
+        :returns: Dict with limit/used/available (in vCPUs).
+        """
+        project_id = self._get_project_id(conn)
+        if not project_id:
+            _LOGGER.warning("Could not determine project ID for CPU quota check.")
+            return self._quota_result(None, None)
+
+        try:
+            quota = conn.compute.get_quota_set(project_id, usage=True)
+            result = self._quota_result(
+                getattr(quota, "cores", None),
+                self._usage_value(getattr(quota, "usage", None), "cores"),
+            )
+        except openstack.exceptions.HttpException as ex:
+            _LOGGER.warning(f"Could not fetch CPU quota: {ex}")
+            return self._quota_result(None, None)
+
+        _LOGGER.debug(f"CPU quota: {result}")
+        return result
+
+    def check_ram_quota(
+        self,
+        conn: openstack.connection.Connection,
+    ) -> Dict[str, Any]:
+        """Check the RAM quota for the current project.
+
+        :param conn: The OpenStack connection
+        :returns: Dict with limit/used/available (in MB).
+        """
+        project_id = self._get_project_id(conn)
+        if not project_id:
+            _LOGGER.warning("Could not determine project ID for RAM quota check.")
+            return self._quota_result(None, None)
+
+        try:
+            quota = conn.compute.get_quota_set(project_id, usage=True)
+            result = self._quota_result(
+                getattr(quota, "ram", None),
+                self._usage_value(getattr(quota, "usage", None), "ram"),
+            )
+        except openstack.exceptions.HttpException as ex:
+            _LOGGER.warning(f"Could not fetch RAM quota: {ex}")
+            return self._quota_result(None, None)
+
+        _LOGGER.debug(f"RAM quota: {result}")
+        return result
+
+    def check_block_storage_quota(
+        self,
+        conn: openstack.connection.Connection,
+    ) -> Dict[str, Any]:
+        """Check the block storage (volume gigabytes) quota for the current project.
+
+        :param conn: The OpenStack connection
+        :returns: Dict with limit/used/available (in GB).
+        """
+        project_id = self._get_project_id(conn)
+        if not project_id:
+            _LOGGER.warning(
+                "Could not determine project ID for block storage quota check."
+            )
+            return self._quota_result(None, None)
+
+        try:
+            quota = conn.block_storage.get_quota_set(project_id, usage=True)
+            result = self._quota_result(
+                getattr(quota, "gigabytes", None),
+                self._usage_value(getattr(quota, "usage", None), "gigabytes"),
+            )
+        except openstack.exceptions.HttpException as ex:
+            _LOGGER.warning(f"Could not fetch block storage quota: {ex}")
+            return self._quota_result(None, None)
+
+        _LOGGER.debug(f"Block storage quota: {result}")
+        return result
+
+    def check_floating_ip_quota(
+        self,
+        conn: openstack.connection.Connection,
+    ) -> Dict[str, Any]:
+        """Check the floating IP quota for the current project.
+
+        :param conn: The OpenStack connection
+        :returns: Dict with limit/used/available (number of floating IPs).
+        """
+        project_id = self._get_project_id(conn)
+        if not project_id:
+            _LOGGER.warning(
+                "Could not determine project ID for floating IP quota check."
+            )
+            return self._quota_result(None, None)
+
+        try:
+            # details=True returns per-field dicts: {"limit": N, "used": M, ...}
+            quota = conn.network.get_quota(project_id, details=True)
+            fip = getattr(quota, "floating_ips", None)
+            if isinstance(fip, dict):
+                result = self._quota_result(fip.get("limit"), fip.get("used"))
+            else:
+                result = self._quota_result(fip, None)
+        except openstack.exceptions.HttpException as ex:
+            _LOGGER.warning(f"Could not fetch floating IP quota: {ex}")
+            return self._quota_result(None, None)
+
+        _LOGGER.debug(f"Floating IP quota: {result}")
+        return result
+
+    @staticmethod
+    def _usage_value(usage: Any, resource_name: str) -> Optional[int]:  # noqa: CFQ004
+        """Extract the used value for a resource from a quota usage mapping.
+
+        :param usage: The ``usage`` dict from a quota set, or None.
+        :param resource_name: Key inside the usage mapping (e.g. 'cores').
+        :returns: The used amount, or None when unavailable.
+        """
+        if not isinstance(usage, dict):
+            return None
+        entry = usage.get(resource_name)
+        if isinstance(entry, dict):
+            return entry.get("in_use")
+        if isinstance(entry, (int, float)):
+            return int(entry)
+        return None

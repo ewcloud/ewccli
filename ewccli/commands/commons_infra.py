@@ -165,6 +165,213 @@ def check_user_ssh_keys(
     _LOGGER.info("SSH private and public keys are matching! Continuing...")
 
 
+def show_quota_table(  # noqa: CFQ004, CCR001
+    openstack_backend: OpenstackBackend,
+    conn: connection.Connection,
+) -> Dict[str, Dict[str, Any]]:
+    """Fetch CPU, RAM, block storage and floating IP quotas and print them as a table.
+
+    RAM is converted from MB to GB; block storage is already in GB.
+
+    :param openstack_backend: The OpenStack backend used to query quotas.
+    :param conn: The OpenStack connection.
+    :returns: The raw quota results keyed by resource, so callers can reuse
+        them without querying the API again.
+    """
+    cpu = openstack_backend.check_cpu_quota(conn)
+    ram = openstack_backend.check_ram_quota(conn)
+    block = openstack_backend.check_block_storage_quota(conn)
+    fip = openstack_backend.check_floating_ip_quota(conn)
+
+    def fmt(value: Optional[int]) -> str:
+        if value is None:
+            return "N/A"
+        return "unlimited" if value < 0 else str(value)
+
+    def fmt_gb(value_mb: Optional[int]) -> str:
+        if value_mb is None:
+            return "N/A"
+        if value_mb < 0:
+            return "unlimited"
+        return str(round(value_mb / 1024, 1))
+
+    table = Table(
+        show_header=True,
+        header_style="bold green",
+        title="Quota Overview",
+        box=box.MINIMAL_DOUBLE_HEAD,
+    )
+
+    table.add_column("Resource", style="cyan", no_wrap=True)
+    table.add_column("Limit", justify="right", style="yellow")
+    table.add_column("Used", justify="right", style="magenta")
+    table.add_column("Available", justify="right", style="green")
+
+    table.add_row(
+        "CPU (vCPUs)",
+        fmt(cpu["limit"]),
+        fmt(cpu["used"]),
+        fmt(cpu["available"]),
+    )
+    table.add_row(
+        "RAM (GB)",
+        fmt_gb(ram["limit"]),
+        fmt_gb(ram["used"]),
+        fmt_gb(ram["available"]),
+    )
+    table.add_row(
+        "Block Storage (GB)",
+        fmt(block["limit"]),
+        fmt(block["used"]),
+        fmt(block["available"]),
+    )
+    table.add_row(
+        "Floating IPs",
+        fmt(fip["limit"]),
+        fmt(fip["used"]),
+        fmt(fip["available"]),
+    )
+
+    console.print(table)
+
+    return {"cpu": cpu, "ram": ram, "block": block, "fip": fip}
+
+
+def get_requested_resources(
+    conn: connection.Connection,
+    flavour_name: str,
+    root_volume: int,
+    external_ip: bool,
+    extra_volume: Optional[Tuple[int, ...]],
+) -> Dict[str, Any]:
+    """Extract the resources a server creation request will consume.
+
+    Resolves the flavour (falling back to the federee/region default when not
+    provided) to obtain vCPUs and RAM, sums root + extra volumes for block
+    storage, and checks whether a floating IP was requested.
+
+    :param server_inputs: The validated server creation inputs.
+    :param conn: The OpenStack connection (used to look up the flavour).
+    :param federee: Target federee (used for default flavour lookup).
+    :param region: Target region (used for default flavour lookup).
+    :returns: Dict with cpu, ram_gb, block_gb and floating_ip requested values.
+    """
+    cpu: Optional[int] = None
+    ram_gb: Optional[float] = None
+
+    try:
+        flavour = conn.compute.find_flavor(flavour_name)
+        if flavour:
+            cpu = flavour.vcpus
+            ram_gb = round(flavour.ram / 1024, 1)  # flavour.ram is in MB
+        else:
+            _LOGGER.warning(f"Flavour '{flavour_name}' not found; resources unknown.")
+    except Exception as ex:
+        _LOGGER.warning(f"Could not resolve flavour '{flavour_name}': {ex}")
+
+    block_gb: int = root_volume + sum(extra_volume or ())
+    floating_ip: int = 1 if external_ip else 0
+
+    return {
+        "flavour": flavour_name,
+        "cpu": cpu,
+        "ram_gb": ram_gb,
+        "block_gb": block_gb,
+        "floating_ip": floating_ip,
+    }
+
+
+def check_requested_resources(  # noqa: CCR001
+    quotas: Dict[str, Dict[str, Any]],
+    requested: Dict[str, Any],
+) -> bool:
+    """Check whether the requested resources fit within the available quotas.
+
+    Compares the resources from ``get_requested_resources`` against the
+    quotas already fetched by ``show_quota_table`` (no additional API calls)
+    and prints a table with a green row when there is enough room and a red
+    row when the request exceeds the available quota.
+
+    :param quotas: Quota results returned by ``show_quota_table``.
+    :param requested: Dict from ``get_requested_resources``.
+    :returns: True when all requested resources fit, False otherwise.
+    """
+    cpu_quota = quotas["cpu"]
+    ram_quota = quotas["ram"]
+    block_quota = quotas["block"]
+    fip_quota = quotas["fip"]
+
+    # (resource label with unit, requested value, available value)
+    checks: List[Tuple[str, Optional[float], Optional[float]]] = [
+        ("CPU (vCPUs)", requested.get("cpu"), cpu_quota.get("available")),
+        # Quota RAM is in MB, requested RAM is in GB.
+        (
+            "RAM (GB)",
+            requested.get("ram_gb"),
+            (
+                None
+                if ram_quota.get("available") is None
+                else round(ram_quota["available"] / 1024, 1)
+            ),
+        ),
+        ("Block Storage (GB)", requested.get("block_gb"), block_quota.get("available")),
+        ("Floating IPs", requested.get("floating_ip"), fip_quota.get("available")),
+    ]
+
+    table = Table(
+        show_header=True,
+        header_style="bold green",
+        title="Requested vs Available Quota",
+        box=box.MINIMAL_DOUBLE_HEAD,
+    )
+
+    table.add_column("Resource", style="cyan", no_wrap=True)
+    table.add_column("Requested", justify="right", style="yellow")
+    table.add_column("Available", justify="right", style="magenta")
+    table.add_column("Status", justify="center")
+
+    all_ok = True
+
+    for label, req, avail in checks:
+        req_str = "N/A" if req is None else str(req)
+        avail_str = "N/A" if avail is None else str(avail)
+
+        if req is None or avail is None:
+            # Cannot verify (unknown flavour or quota) — do not block.
+            status = "[bold yellow]?[/bold yellow]"
+        elif req <= avail:
+            status = "[bold green]✔ OK[/bold green]"
+        else:
+            status = "[bold red]✘ EXCEEDED[/bold red]"
+            all_ok = False
+
+        table.add_row(label, req_str, avail_str, status)
+
+    console.print(table)
+
+    if all_ok:
+        console.print(
+            Panel(
+                "[bold green]✔ Sufficient quota: all requested resources fit"
+                " within the available quotas.[/bold green]",
+                title="Quota Check",
+                style="green",
+            )
+        )
+    else:
+        console.print(
+            Panel(
+                "[bold red]✘ Insufficient quota: one or more requested resources"
+                " exceed the available quotas. Reduce the request or ask your"
+                " administrator to raise the quota.[/bold red]",
+                title="Quota Check",
+                style="red",
+            )
+        )
+
+    return all_ok
+
+
 def check_server_conflict_with_inputs(  # noqa: C901, CCR001, CFQ004, CFQ002
     server_info: Dict[str, Any],
     root_volume: int,
@@ -1587,6 +1794,37 @@ def create_server_command(  # noqa: CCR001, CFQ002, C901, CFQ004, CFQ001
             sys.exit(1)
 
         console.print(Panel(sr_message, title="OK", style="green"))
+
+    # CHECK QUOTA BEFORE DEPLOYING
+
+    # Show the resources this server creation will consume.
+    requested = get_requested_resources(
+        flavour_name=pre_deploy_server_outputs["resolved_flavour_name"],
+        root_volume=server_inputs["root_volume"],
+        extra_volume=server_inputs["extra_volume"],
+        external_ip=server_inputs["external_ip"],
+        conn=openstack_api,
+    )
+    _LOGGER.info(
+        "Requested resources — "
+        f"flavour: {requested['flavour']}, "
+        f"CPU: {requested['cpu']} vCPU, "
+        f"RAM: {requested['ram_gb']} GB, "
+        f"Block: {requested['block_gb']} GB, "
+        f"FIP: {requested['floating_ip']}"
+    )
+
+    # Show current quota overview (CPU, RAM, Block Storage, Floating IPs).
+    quotas = show_quota_table(openstack_backend, openstack_api)
+
+    # Check if the requested resources fit within the available quotas.
+    resources_available = check_requested_resources(
+        quotas=quotas,
+        requested=requested,
+    )
+
+    if not resources_available:
+        sys.exit(1)
 
     # DEPLOY SERVER ACTION
     os_status_code, os_message, deploy_server_outputs = deploy_server(
