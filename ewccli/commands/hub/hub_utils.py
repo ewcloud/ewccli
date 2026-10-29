@@ -50,8 +50,8 @@ def verify_item_is_deployable(item_info: Dict[str, str]) -> bool:  # noqa: CCR00
     if not check_deployable:
         _LOGGER.warning(
             "You selected an item that cannot be deployed. "
-            "Only with the following technology annotations are allowed"
-            f" into the EWCCLI: {[item.value for item in HubItemTechnologyAnnotation]}"
+            "Only items with the following technology annotations are allowed "
+            f"into the EWCCLI: {[item.value for item in HubItemTechnologyAnnotation]}. "
             "Exiting."
         )
         return False

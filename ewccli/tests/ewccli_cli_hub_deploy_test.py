@@ -219,3 +219,74 @@ def test_deploy_with_env_vars(
     )
 
     assert result.exit_code == 0
+
+
+# -----------------------------
+# _validate_item EWCCLI-compatibility check (issue #197)
+# -----------------------------
+def _make_ctx(items):
+    return SimpleNamespace(obj={"items": items})
+
+
+COMPATIBLE_ITEM = {
+    "annotations": {
+        "others": "EWCCLI-compatible",
+        "technology": "Ansible Playbook",
+    },
+    "cli": {"inputs": []},
+}
+
+NOT_COMPATIBLE_ITEM = {
+    "annotations": {
+        "others": "some-other-tag",
+        "technology": "Ansible Playbook",
+    },
+    "cli": {"inputs": []},
+}
+
+
+def test_validate_item_accepts_compatible_item():
+    from ewccli.commands.hub.hub_command import _validate_item
+
+    ctx = _make_ctx({"good-item": COMPATIBLE_ITEM})
+    assert _validate_item(ctx, None, "good-item") == "good-item"
+
+
+def test_validate_item_rejects_non_compatible_item():
+    from click import ClickException
+    from ewccli.commands.hub.hub_command import _validate_item
+
+    ctx = _make_ctx({"bad-item": NOT_COMPATIBLE_ITEM})
+    with pytest.raises(ClickException) as exc:
+        _validate_item(ctx, None, "bad-item")
+
+    assert "not compatible with the EWC CLI" in str(exc.value)
+    assert "EWCCLI-compatible" in str(exc.value)
+
+
+def test_validate_item_rejects_unknown_item():
+    from click import ClickException
+    from ewccli.commands.hub.hub_command import _validate_item
+
+    ctx = _make_ctx({"good-item": COMPATIBLE_ITEM})
+    with pytest.raises(ClickException) as exc:
+        _validate_item(ctx, None, "missing-item")
+
+    assert "not available in the EWC Hub" in str(exc.value)
+
+
+def test_validate_item_rejects_compatible_but_not_deployable():
+    from click import ClickException
+    from ewccli.commands.hub.hub_command import _validate_item
+
+    item = {
+        "annotations": {
+            "others": "EWCCLI-compatible",
+            "technology": "Some Unknown Technology",
+        },
+    }
+    ctx = _make_ctx({"item": item})
+    with pytest.raises(ClickException) as exc:
+        _validate_item(ctx, None, "item")
+
+    assert "not deployable" in str(exc.value)
