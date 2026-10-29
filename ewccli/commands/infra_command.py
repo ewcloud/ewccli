@@ -28,13 +28,11 @@ from openstack import connection
 
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.backends.openstack.backend_ostack import OpenstackBackend
-from ewccli.commands.commons import openstack_options
-from ewccli.commands.commons import ssh_options
-from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
+from ewccli.commands.commons import openstack_error_hint
 from ewccli.commands.commons import CommonBackendContext
 from ewccli.commands.commons import login_options
-from ewccli.commands.commons import openstack_error_hint
+
 from ewccli.commands.commons_infra import CreateServerInputs
 from ewccli.commands.commons_infra import check_user_ssh_keys
 from ewccli.commands.commons_infra import get_deployed_server_info, list_server_details
@@ -119,8 +117,6 @@ class ServerSSHConfig(BaseModel):  # type: ignore[misc]
     keypair_name: str
     ssh_public_key_path: Optional[str] = None
     ssh_private_key_path: Optional[str] = None
-    ssh_private_encoded: Optional[str] = None
-    ssh_public_encoded: Optional[str] = None
 
 
 class ServerNetworkConfig(BaseModel):  # type: ignore[misc]
@@ -138,9 +134,6 @@ class ServerCreateOptions(BaseModel):  # type: ignore[misc]
 
 @ewc_infra_command.command("create", help="Create server in Openstack.")  # type: ignore[misc]
 @infra_context  # type: ignore[misc]
-@ssh_options
-@ssh_options_encoded
-@openstack_options
 @openstack_optional_options
 @click.option(  # type: ignore[misc]
     "--dry-run",
@@ -163,13 +156,8 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
     dry_run: bool,
     force: bool,
     keypair_name: str,
-    ssh_public_key_path: Optional[str] = None,
-    ssh_private_key_path: Optional[str] = None,
     federee: Optional[str] = None,
     region: Optional[str] = None,
-    auth_url: Optional[str] = None,
-    application_credential_id: Optional[str] = None,
-    application_credential_secret: Optional[str] = None,
     image_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
     external_ip: bool = False,
@@ -177,16 +165,12 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
     security_groups: Optional[Tuple[str, str]] = None,
     root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
     extra_volume: Optional[Tuple[str, str]] = None,
-    ssh_private_encoded: Optional[str] = None,
-    ssh_public_encoded: Optional[str] = None,
 ) -> None:
     """Show Server from Openstack."""
     ssh = ServerSSHConfig(
         keypair_name=keypair_name,
-        ssh_public_key_path=ssh_public_key_path,
-        ssh_private_key_path=ssh_private_key_path,
-        ssh_private_encoded=ssh_private_encoded,
-        ssh_public_encoded=ssh_public_encoded,
+        ssh_public_key_path=ctx.cli_profile.ssh_public_key_path,
+        ssh_private_key_path=ctx.cli_profile.ssh_private_key_path,
     )
 
     net = ServerNetworkConfig(
@@ -225,18 +209,13 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
         federee=federee,
         region=region,
         auth_url=auth_url,
-        application_credential_id=application_credential_id
-        or cli_profile.application_credential_id,
-        application_credential_secret=application_credential_secret
-        or cli_profile.application_credential_secret,
+        application_credential_id=cli_profile.application_credential_id,
+        application_credential_secret=cli_profile.application_credential_secret,
     )
 
-    # Try to fill from CLI profile if not provided
-    if not ssh.ssh_public_key_path:
-        ssh_public_key_path = cli_profile.ssh_public_key_path
-
-    if not ssh.ssh_private_key_path:
-        ssh_private_key_path = cli_profile.ssh_private_key_path
+    # SSH keys always come from the profile (set via `ewc login`)
+    ssh_public_key_path = ssh.ssh_public_key_path
+    ssh_private_key_path = ssh.ssh_private_key_path
 
     check_user_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
@@ -300,8 +279,6 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
         federee=federee,
         region=region,
         server_inputs=server_inputs,
-        ssh_private_encoded=ssh.ssh_private_encoded,
-        ssh_public_encoded=ssh.ssh_public_encoded,
         ssh_public_key_path=ssh_public_key_path,
         ssh_private_key_path=ssh_private_key_path,
         dry_run=opts.dry_run,
@@ -365,26 +342,18 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
 
 @ewc_infra_command.command("show", help="Show Openstack server information.")  # type: ignore[misc]
 @infra_context  # type: ignore[misc]
-@openstack_options
 @click.argument("server_name")  # type: ignore[misc]
 def show_cmd(  # noqa: CCR001
     ctx: click.Context,
     server_name: str,
     federee: Optional[str] = None,
-    auth_url: Optional[str] = None,
-    application_credential_id: Optional[str] = None,
-    application_credential_secret: Optional[str] = None,
 ) -> None:
     """Show Server from Openstack."""
     federee = federee or ctx.cli_profile.federee
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
+        openstack_api = ctx.openstack_backend.connect()
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
@@ -453,7 +422,6 @@ def show_cmd(  # noqa: CCR001
 
 @ewc_infra_command.command(name="list", help="List servers in Openstack.")  # type: ignore[misc]
 @infra_context  # type: ignore[misc]
-@openstack_options
 @click.option(  # type: ignore[misc]
     "--show-all",
     is_flag=True,
@@ -465,9 +433,6 @@ def show_cmd(  # noqa: CCR001
 def list_cmd(
     ctx: click.Context,
     federee: Optional[str] = None,
-    auth_url: Optional[str] = None,
-    application_credential_id: Optional[str] = None,
-    application_credential_secret: Optional[str] = None,
     show_all: bool = False,
 ) -> None:
     """List Servers from Openstack."""
@@ -475,11 +440,7 @@ def list_cmd(
 
     try:
         # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth_url,
-            application_credential_id=application_credential_id,
-            application_credential_secret=application_credential_secret,
-        )
+        openstack_api = ctx.openstack_backend.connect()
     except Exception as op_error:
         raise ClickException(
             f"Could not connect to Openstack due to the following error: {op_error}"
@@ -523,7 +484,6 @@ class ServerDeleteOptions(BaseModel):  # type: ignore[misc]
     help="Force deletion of machines not created by the ewccli.",
 )
 @infra_context  # type: ignore[misc]
-@openstack_options
 def delete_cmd(  # noqa: CFQ002, C901
     ctx: click.Context,
     server_name: str,
@@ -531,9 +491,6 @@ def delete_cmd(  # noqa: CFQ002, C901
     force: bool,
     federee: Optional[str] = None,
     region: Optional[str] = None,
-    auth_url: Optional[str] = None,
-    application_credential_id: Optional[str] = None,
-    application_credential_secret: Optional[str] = None,
 ) -> None:
     """Delete VM from Openstack."""
     cli_profile = ctx.cli_profile
@@ -542,9 +499,9 @@ def delete_cmd(  # noqa: CFQ002, C901
     auth = ServerAuthConfig(
         federee=federee,
         region=region,
-        auth_url=auth_url,
-        application_credential_id=application_credential_id,
-        application_credential_secret=application_credential_secret,
+        auth_url=ctx.openstack_backend.auth_url,
+        application_credential_id=cli_profile.application_credential_id,
+        application_credential_secret=cli_profile.application_credential_secret,
     )
 
     opts = ServerDeleteOptions(dry_run=dry_run, force=force)

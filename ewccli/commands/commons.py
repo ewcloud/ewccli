@@ -174,34 +174,6 @@ def split_config_name(config_name: str) -> tuple[str, str]:
     return federee, tenant_name
 
 
-def openstack_options(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Openstack options for the CLI commands."""
-    func = click.option(
-        "--auth-url",
-        "-url",
-        required=False,
-        envvar="OS_AUTH_URL",
-        type=str,
-        help="Openstack Auth URL. (or set env var OS_AUTH_URL)",
-    )(func)
-    func = click.option(
-        "--application-credential-id",
-        required=False,
-        envvar="OS_APPLICATION_CREDENTIAL_ID",
-        type=str,
-        help="Openstack Application Credentials ID. (or set env var OS_APPLICATION_CREDENTIAL_ID)",
-    )(func)
-    func = click.option(
-        "--application-credential-secret",
-        required=False,
-        envvar="OS_APPLICATION_CREDENTIAL_SECRET",
-        type=str,
-        help="Openstack Application Credentials Secret. (or set env var OS_APPLICATION_CREDENTIAL_SECRET)",
-    )(func)
-
-    return func
-
-
 def _split_env_var(
     ctx: click.Context,
     param: click.Parameter,
@@ -323,26 +295,6 @@ def openstack_optional_options(func: Callable[..., Any]) -> Callable[..., Any]:
     return func
 
 
-def ssh_options_encoded(func: Callable[..., Any]) -> Callable[..., Any]:
-    """SSH options encoded for the CLI commands."""
-    func = click.option(
-        "--ssh-private-encoded",
-        required=False,
-        envvar="EWC_CLI_ENCODED_SSH_PRIVATE_KEY",
-        type=str,
-        help="Base64 encoded SSH private key. (or set env var EWC_CLI_ENCODED_SSH_PRIVATE_KEY)",
-    )(func)
-    func = click.option(
-        "--ssh-public-encoded",
-        required=False,
-        envvar="EWC_CLI_ENCODED_SSH_PUBLIC_KEY",
-        type=str,
-        help="Base64 encoded SSH public key. (or set env var EWC_CLI_ENCODED_SSH_PUBLIC_KEY)",
-    )(func)
-
-    return func
-
-
 def validate_path(
     ctx: click.Context,
     param: click.Parameter,
@@ -373,28 +325,6 @@ def validate_path(
 
     except Exception as e:
         raise click.BadParameter(f"Invalid path '{value}': {e}")
-
-
-def ssh_options(func: Callable[..., Any]) -> Callable[..., Any]:
-    """SSH options for the CLI commands."""
-    func = click.option(
-        "--ssh-public-key-path",
-        required=False,
-        envvar="EWC_CLI_SSH_PUBLIC_KEY_PATH",
-        type=str,
-        help="Path to SSH public key. (or set env var EWC_CLI_SSH_PUBLIC_KEY_PATH)",
-        callback=validate_path,
-    )(func)
-    func = click.option(
-        "--ssh-private-key-path",
-        required=False,
-        envvar="EWC_CLI_SSH_PRIVATE_KEY_PATH",
-        type=str,
-        help="Path to SSH private key. (or set env var EWC_CLI_SSH_PRIVATE_KEY_PATH)",
-        callback=validate_path,
-    )(func)
-
-    return func
 
 
 def is_ewccli_compatible(item_info: Dict[str, Any]) -> bool:
