@@ -1439,13 +1439,18 @@ class OpenstackBackend:
             )
 
     @staticmethod
-    def _get_project_id(conn: openstack.connection.Connection) -> Optional[str]:
+    def get_project_id(conn: openstack.connection.Connection) -> Optional[str]:
         """Resolve the project (tenancy) ID for the current connection.
 
         :param conn: The OpenStack connection
         :returns: The project ID, or None when it cannot be determined.
         """
-        project_id = cast(Optional[str], getattr(conn, "current_project_id", None))
+        # Invalid credentials make current_project_id raise HTTP errors here.
+        try:
+            project_id = cast(Optional[str], getattr(conn, "current_project_id", None))
+        except Exception as ex:  # noqa: BLE001
+            _LOGGER.warning(f"Could not resolve the current project ID: {ex}")
+            project_id = None
         if project_id:
             return project_id
 
@@ -1491,7 +1496,7 @@ class OpenstackBackend:
         :param conn: The OpenStack connection
         :returns: Dict with limit/used/available (in vCPUs).
         """
-        project_id = self._get_project_id(conn)
+        project_id = self.get_project_id(conn)
         if not project_id:
             _LOGGER.warning("Could not determine project ID for CPU quota check.")
             return self._quota_result(None, None)
@@ -1518,7 +1523,7 @@ class OpenstackBackend:
         :param conn: The OpenStack connection
         :returns: Dict with limit/used/available (in MB).
         """
-        project_id = self._get_project_id(conn)
+        project_id = self.get_project_id(conn)
         if not project_id:
             _LOGGER.warning("Could not determine project ID for RAM quota check.")
             return self._quota_result(None, None)
@@ -1545,7 +1550,7 @@ class OpenstackBackend:
         :param conn: The OpenStack connection
         :returns: Dict with limit/used/available (in GB).
         """
-        project_id = self._get_project_id(conn)
+        project_id = self.get_project_id(conn)
         if not project_id:
             _LOGGER.warning(
                 "Could not determine project ID for block storage quota check."
@@ -1574,7 +1579,7 @@ class OpenstackBackend:
         :param conn: The OpenStack connection
         :returns: Dict with limit/used/available (number of floating IPs).
         """
-        project_id = self._get_project_id(conn)
+        project_id = self.get_project_id(conn)
         if not project_id:
             _LOGGER.warning(
                 "Could not determine project ID for floating IP quota check."
@@ -1594,6 +1599,37 @@ class OpenstackBackend:
             return self._quota_result(None, None)
 
         _LOGGER.debug(f"Floating IP quota: {result}")
+        return result
+
+    def check_sfs_quota(
+        self,
+        conn: openstack.connection.Connection,
+    ) -> Dict[str, Any]:
+        """Check the shared file system (Manila share gigabytes) quota.
+
+        :param conn: The OpenStack connection
+        :returns: Dict with limit/used/available (in GB).
+        """
+        try:
+            # Manila exposes absolute limits (max/used) via GET /limits.
+            limits = list(conn.shared_file_system.limits())
+        except Exception as ex:
+            # The shared file system endpoint may be unavailable in some
+            # regions, so any failure here is non-fatal.
+            _LOGGER.warning(f"Could not fetch SFS quota: {ex}")
+            return self._quota_result(None, None)
+
+        if not limits:
+            _LOGGER.warning("No SFS limits returned; SFS quota unknown.")
+            return self._quota_result(None, None)
+
+        limit = limits[0]
+        result = self._quota_result(
+            getattr(limit, "maxTotalShareGigabytes", None),
+            getattr(limit, "totalShareGigabytesUsed", None),
+        )
+
+        _LOGGER.debug(f"SFS quota: {result}")
         return result
 
     @staticmethod

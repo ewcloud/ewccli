@@ -86,6 +86,32 @@ def login_options(func: Callable[..., Any]) -> Callable[..., Any]:
     return func
 
 
+_AUTH_ERROR_MARKERS = (
+    "application credential",
+    "unauthorized",
+    "forbidden",
+    "authentication",
+    "invalid credentials",
+    "http 401",
+    "http 403",
+)
+
+
+def openstack_error_hint(error: Exception) -> str:
+    """Build a user-facing hint for OpenStack errors that look credential-related.
+
+    :param error: The exception raised by the OpenStack SDK.
+    :returns: A hint string to append to the error message, or an empty string.
+    """
+    error_text = str(error).lower()
+    if not any(marker in error_text for marker in _AUTH_ERROR_MARKERS):
+        return ""
+    return (
+        "\nHint: the OpenStack credentials of the selected profile look invalid "
+        "or expired. Check the profile in ~/.ewccli/profiles or rerun `ewc login`."
+    )
+
+
 def default_keypair_name() -> str:
     """Retrieve default keypair name from username."""
     # Safest way to get Linux username
