@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Optional, Tuple, Dict, List, Any
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from pydantic import ValidationError
 
 from rich.console import Console
@@ -53,8 +53,9 @@ class CreateServerInputs(BaseModel):  # type: ignore[misc]
 
     extra_volume: Optional[Tuple[int, ...]] = None
 
-    @validator("networks", "security_groups", "os_security_groups", pre=True)  # type: ignore[misc]
-    def normalize_tuple(cls: type, v: Any) -> Tuple[str, ...]:  # noqa: N805, CFQ004
+    @field_validator("networks", "security_groups", "os_security_groups", mode="before")  # type: ignore[misc]
+    @classmethod
+    def normalize_tuple(cls: type, v: Any) -> Tuple[str, ...]:  # noqa: CFQ004
         """
         Normalize network/security group fields into a tuple[str, ...].
 
@@ -79,8 +80,9 @@ class CreateServerInputs(BaseModel):  # type: ignore[misc]
         # Fallback: reject unsupported types
         raise TypeError(f"Invalid type for tuple normalization: {type(v).__name__}")
 
-    @validator("extra_volume", pre=True)  # type: ignore[misc]
-    def normalize_extra_volume(cls, v: Any) -> Tuple[int, ...]:  # noqa: N805, CCR001
+    @field_validator("extra_volume", mode="before")  # type: ignore[misc]
+    @classmethod
+    def normalize_extra_volume(cls, v: Any) -> Tuple[int, ...]:  # noqa: CCR001
         """
         Normalize extra_volume into a tuple[int, ...].
 

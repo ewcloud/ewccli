@@ -13,7 +13,7 @@ from unittest.mock import patch
 import tempfile
 import subprocess
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -36,7 +36,7 @@ from ewccli.commands.commons_infra import check_server_conflict_with_inputs
 class FakeImage:
     def __init__(self, name: str):
         self.name = name
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
 
 
 # --- Mock backend completely -------------------------------------------------
