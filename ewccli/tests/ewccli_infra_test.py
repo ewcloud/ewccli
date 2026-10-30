@@ -391,3 +391,31 @@ def test_pre_delete_dry_run():
     assert rc == 0
     assert "Dry Run" in msg
     backend.detach_volumes_from_server.assert_not_called()
+
+
+def test_pre_delete_error_state_no_addresses():
+    """A VM in ERROR state has no addresses: deletion must still proceed."""
+    backend = MagicMock()
+    api = MagicMock()
+
+    server_info = {
+        "id": "server-123",
+        "status": "ERROR",
+        "attached_volumes": [],
+        "addresses": {},  # ERROR-state servers have no network addresses
+        "metadata": {"deployed": "ewccli"},
+    }
+
+    rc, msg = pre_delete_server(
+        openstack_backend=backend,
+        openstack_api=api,
+        federee="EUMETSAT",
+        server_name="ssh-bastion-flavour",
+        server_info=server_info,
+        dry_run=False,
+    )
+
+    assert rc == 0
+    assert "finished successfully" in msg
+    # No floating IP to detach, so remove_external_ip must not be called.
+    backend.remove_external_ip.assert_not_called()

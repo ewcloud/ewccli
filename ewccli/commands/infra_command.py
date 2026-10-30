@@ -614,7 +614,7 @@ def delete_cmd(  # noqa: CFQ002, C901
     _LOGGER.info(delete_message)
 
 
-def pre_delete_server(  # noqa: C901, CCR001, CFQ004
+def pre_delete_server(  # noqa: C901, CCR001, CFQ004, CFQ001
     openstack_backend: OpenstackBackend,
     openstack_api: connection.Connection,
     federee: str,
@@ -636,23 +636,34 @@ def pre_delete_server(  # noqa: C901, CCR001, CFQ004
     # Resolve machine IPs
     ############################################################
 
-    sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
-        federee=federee, server_info=server_info
-    )
-    if sc_resolve_ip != 0:
-        return 1, resolve_ip_message
-
-    if resolve_ip_outputs is None:
-        return 1, "[Pre delete server] No IPs identified."
-
-    external_ip_machine = resolve_ip_outputs.get("external_ip_machine")
-    internal_ip_machine = resolve_ip_outputs.get("internal_ip_machine")
-
-    if not internal_ip_machine:
-        return (
-            1,
-            f"[Pre delete server] internal_ip_machine {internal_ip_machine} is missing or empty",
+    # Servers in ERROR state (or not yet booted) have no addresses:
+    # there is no floating IP to detach, so skip IP resolution and
+    # continue with the rest of the pre-delete steps (issue: VM in
+    # ERROR state cannot be deleted).
+    if not server_info.get("addresses"):
+        _LOGGER.warning(
+            f"Server {server_name} has no network addresses "
+            "(it may be in ERROR state): skipping external IP detach."
         )
+        external_ip_machine = None
+    else:
+        sc_resolve_ip, resolve_ip_message, resolve_ip_outputs = resolve_machine_ip(
+            federee=federee, server_info=server_info
+        )
+        if sc_resolve_ip != 0:
+            return 1, resolve_ip_message
+
+        if resolve_ip_outputs is None:
+            return 1, "[Pre delete server] No IPs identified."
+
+        external_ip_machine = resolve_ip_outputs.get("external_ip_machine")
+        internal_ip_machine = resolve_ip_outputs.get("internal_ip_machine")
+
+        if not internal_ip_machine:
+            return (
+                1,
+                f"[Pre delete server] internal_ip_machine {internal_ip_machine} is missing or empty",
+            )
 
     ############################################################
     # Detach and release external IP (if present)
