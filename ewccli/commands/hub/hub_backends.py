@@ -153,14 +153,95 @@ def check_github_repo_accessible(source: str) -> bool:
     return False
 
 
+def _clone_repository(  # noqa: CFQ004
+    source: str,
+    repo_name: str,
+    command_path: str,
+    repo_path: Path,
+    force: bool,
+    dry_run: bool,
+) -> Tuple[int, str]:
+    """Clone the item repository unless it already exists and force is False.
+
+    :returns: Tuple of (return code, message).
+    """
+    if repo_path.exists() and not force:
+        _LOGGER.info(
+            f"📁 Main Repository {repo_name} already exists at {command_path}."
+            " Skipping git clone."
+        )
+        return 0, ""
+
+    _LOGGER.info(
+        f"⬇️ Starting to clone the repository '{repo_name}' into {command_path}..."
+    )
+    git_command = [
+        f"""[ -d "$(basename '{source}' .git)/.git" ] || git clone '{source}' """
+    ]
+    return run_command_from_host(
+        description="git clone repository",
+        command=git_command,
+        cwd=command_path,
+        dry_run=dry_run,
+    )
+
+
+def _checkout_ref(
+    repo_path: Path,
+    repo_name: str,
+    ref: str,
+    command_path: str,
+    dry_run: bool,
+) -> Tuple[int, str]:
+    """Checkout the requested ref so the deployed code matches the item version.
+
+    :returns: Tuple of (return code, message).
+    """
+    _LOGGER.info(f"🔒 Checking out ref '{ref}' for repository '{repo_name}'...")
+
+    checkout_command = [
+        f"git -C '{repo_path}' fetch --tags --force origin && "
+        f"git -C '{repo_path}' checkout --force '{ref}'"
+    ]
+    return_code, message = run_command_from_host(
+        description=f"git checkout ref {ref}",
+        command=checkout_command,
+        cwd=command_path,
+        dry_run=dry_run,
+    )
+
+    if return_code != 0:
+        return (
+            return_code,
+            f"Could not checkout ref '{ref}' for item repository"
+            f" '{repo_name}'. Make sure the catalogue version matches a"
+            f" tag, branch or commit of the repository.\n{message}",
+        )
+
+    return 0, f"🔒 Checked out ref '{ref}' for repository '{repo_name}'."
+
+
 def git_clone_item(
     source: str,
     repo_name: str,
     command_path: str,
     dry_run: bool = False,
     force: bool = False,
+    ref: Optional[str] = None,
 ) -> Tuple[int, str]:
-    """Git clone item."""
+    """Git clone item and checkout the requested ref.
+
+    :param source: Git repository URL to clone.
+    :param repo_name: Name of the repository directory inside command_path.
+    :param command_path: Directory the repository is cloned into.
+    :param dry_run: When True, no action is performed.
+    :param force: When True, delete an existing clone before cloning again.
+    :param ref: Git ref (tag, branch or commit) to checkout after cloning.
+        When provided, the repository is always brought to this ref, even
+        when the clone itself is skipped because it already exists, so that
+        different users deploying the same item version run the same code.
+    :returns: Tuple of (return code, message).
+    """
     ########################################################################
     # Prepare input for items
     ########################################################################
@@ -178,12 +259,9 @@ def git_clone_item(
     # Create the directory if it doesn't exist
     dir_path.mkdir(parents=True, exist_ok=True)
 
-    # main_file_name = os.path.basename(source)
-
     repo_path = Path(f"{command_path}/{repo_name}")
-    # file_name_path = Path(f"{repo_path}/{main_file_name}")
 
-    if force:
+    if force and repo_path.exists():
         # Delete the folder and all its contents
         shutil.rmtree(repo_path)
 
@@ -191,25 +269,23 @@ def git_clone_item(
         _LOGGER.error("The repository is not accessible or does not exist.")
         sys.exit(1)
 
-    if repo_path.exists() and not force:
-        return (
-            0,
-            f"📁 Main Repository {repo_name} already exists at {command_path}. Skipping git clone.",
-        )
-
-    _LOGGER.info(
-        f"⬇️ Starting to clone the repository '{repo_name}' into {command_path}..."
-    )
-    git_command = [
-        f"""[ -d "$(basename '{source}' .git)/.git" ] || git clone '{source}' """
-    ]
-    # Get Git Repository URL
-    return_code, message = run_command_from_host(
-        description="git clone repository",
-        command=git_command,
-        cwd=command_path,
+    return_code, message = _clone_repository(
+        source=source,
+        repo_name=repo_name,
+        command_path=command_path,
+        repo_path=repo_path,
+        force=force,
         dry_run=dry_run,
     )
+
+    if return_code == 0 and ref:
+        return_code, message = _checkout_ref(
+            repo_path=repo_path,
+            repo_name=repo_name,
+            ref=ref,
+            command_path=command_path,
+            dry_run=dry_run,
+        )
 
     return return_code, message
 
