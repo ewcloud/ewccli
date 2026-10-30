@@ -13,6 +13,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import rich_click as click
 from click import ClickException
 from click.testing import CliRunner
 
@@ -24,6 +25,7 @@ from ewccli.ewccli import cli
 from ewccli.enums import Federee, Region
 from ewccli.configuration import config as ewc_hub_config
 from ewccli.commands.login_command import check_and_generate_ssh_keys, init_command
+from ewccli.commands.login_command import validate_tenant_name
 from ewccli.profile import ProfileStore
 from ewccli.commands.login_command import LoginInput
 from pydantic import ValidationError
@@ -386,3 +388,16 @@ clouds:
         print(result.exception)
 
     assert result.exit_code == 0
+
+def test_validate_tenant_name_valid():
+    assert validate_tenant_name(None, None, "my-new-tenancy") == "my-new-tenancy"
+
+
+def test_validate_tenant_name_two_parts_invalid():
+    with pytest.raises(click.BadParameter):
+        validate_tenant_name(None, None, "my-tenancy")
+
+
+def test_validate_tenant_name_no_dashes_invalid():
+    with pytest.raises(click.BadParameter):
+        validate_tenant_name(None, None, "mytenancy")
