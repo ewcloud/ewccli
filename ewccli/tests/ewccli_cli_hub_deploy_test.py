@@ -172,9 +172,8 @@ def test_deploy_dry_run_minimal(runner):
     assert result.exit_code == 0
 
 
-def test_deploy_with_ssh_paths(
-    runner, tmp_path, valid_private_key_pem, valid_public_key_openssh
-):
+def test_deploy_ssh_flags_removed(runner, tmp_path, valid_private_key_pem, valid_public_key_openssh):
+    """SSH key flags are login-only now (issue #188): hub deploy must reject them."""
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
 
@@ -196,12 +195,15 @@ def test_deploy_with_ssh_paths(
         obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
 
-    assert result.exit_code == 0
+    assert result.exit_code != 0
+    # rich_click renders usage errors in a panel; just verify the flag is rejected.
+    assert "--ssh-public-key-path" in result.output or "option" in result.output.lower()
 
 
-def test_deploy_with_env_vars(
+def test_deploy_uses_profile_ssh_keys(
     runner, tmp_path, valid_private_key_pem, valid_public_key_openssh
 ):
+    """hub deploy resolves SSH keys from the profile created by `ewc login`."""
     pub_key = tmp_path / "id_rsa.pub"
     priv_key = tmp_path / "id_rsa"
 
@@ -211,10 +213,6 @@ def test_deploy_with_env_vars(
     result = runner.invoke(
         cli,
         ["hub", "deploy", "ssh-bastion-flavour", "--dry-run"],
-        env={
-            "EWC_CLI_SSH_PUBLIC_KEY_PATH": str(pub_key),
-            "EWC_CLI_SSH_PRIVATE_KEY_PATH": str(priv_key),
-        },
         obj={"items": {"ssh-bastion-flavour": {"cli": {"inputs": []}}}},
     )
 

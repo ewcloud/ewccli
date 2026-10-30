@@ -97,14 +97,6 @@ def mock_profile_loader(
         yield mock_load
 
 
-@pytest.fixture(autouse=True)
-def patch_infra_decorators(monkeypatch):
-    monkeypatch.setattr("ewccli.commands.infra_command.ssh_options", lambda f: f)
-    monkeypatch.setattr(
-        "ewccli.commands.infra_command.ssh_options_encoded", lambda f: f
-    )
-
-
 @pytest.fixture
 def mock_create_server():
     with patch("ewccli.commands.infra_command.create_server_command") as mock:
@@ -194,7 +186,7 @@ def test_create_dry_run(runner):
     assert "Dry run" in result.output
 
 
-def test_create_with_ssh_paths(
+def test_create_ssh_flags_removed(
     runner,
     tmp_path,
     valid_private_key_pem,
@@ -262,7 +254,10 @@ def test_create_with_ssh_paths(
     print("EXCEPTION:", result.exception)
     print("TRACEBACK:", result.exc_info)
 
-    assert result.exit_code == 0
+    # SSH key flags are login-only now (issue #188): infra create must reject them.
+    assert result.exit_code != 0
+    # rich_click renders usage errors in a panel; just verify the flag is rejected.
+    assert "--ssh-public-key-path" in result.output or "option" in result.output.lower()
 
 
 def test_create_openstack_failure(runner):

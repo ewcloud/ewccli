@@ -28,9 +28,6 @@ from ewccli.commands.hub.hub_utils import verify_item_is_deployable
 from ewccli.commands.hub.hub_utils import extract_annotations
 from ewccli.commands.hub.hub_utils import prepare_missing_inputs_error_message
 from ewccli.commands.hub.hub_utils import classify_source
-from ewccli.commands.commons import openstack_options
-from ewccli.commands.commons import ssh_options
-from ewccli.commands.commons import ssh_options_encoded
 from ewccli.commands.commons import openstack_optional_options
 from ewccli.commands.commons import list_items_table
 from ewccli.commands.commons import is_ewccli_compatible
@@ -320,9 +317,6 @@ def _validate_item(ctx: Context, param: Parameter, value: str) -> str:
 
 
 @ewc_hub_command.command("deploy")  # type: ignore[misc]
-@ssh_options
-@ssh_options_encoded
-@openstack_options
 @openstack_optional_options
 @click.option(  # type: ignore[misc]
     "--server-name",
@@ -371,17 +365,12 @@ def _validate_item(ctx: Context, param: Parameter, value: str) -> str:
 def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     ctx: click.Context,
     item: str,
-    application_credential_id: str,
-    application_credential_secret: str,
     dry_run: bool,
     force: bool,
     keypair_name: str,
-    ssh_public_key_path: Optional[str] = None,
-    ssh_private_key_path: Optional[str] = None,
     server_name: Optional[str] = None,
     profile: Optional[str] = None,
     item_inputs: Optional[Any] = None,
-    auth_url: Optional[str] = None,
     image_name: Optional[str] = None,
     flavour_name: Optional[str] = None,
     external_ip: bool = False,
@@ -389,8 +378,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
     security_groups: Optional[Tuple[str, str]] = None,
     root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
     extra_volume: Optional[Tuple[str, str]] = None,
-    ssh_private_encoded: Optional[str] = None,
-    ssh_public_encoded: Optional[str] = None,
 ) -> None:
     """Deploy EWC Hub item.
 
@@ -422,12 +409,9 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             f" The following regions are available: {allowed_regions}"
         )
 
-    # Try to fill from CLI profile if not provided
-    if not ssh_public_key_path:
-        ssh_public_key_path = cli_profile.ssh_public_key_path
-
-    if not ssh_private_key_path:
-        ssh_private_key_path = cli_profile.ssh_private_key_path
+    # SSH keys always come from the profile (set via `ewc login`)
+    ssh_public_key_path = cli_profile.ssh_public_key_path
+    ssh_private_key_path = cli_profile.ssh_private_key_path
 
     check_user_ssh_keys(
         ssh_public_key_path=ssh_public_key_path,
@@ -563,12 +547,8 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             f"The item {item} uses {HubItemTechnologyAnnotation.ANSIBLE.value} techonology."
         )
 
-        application_credential_id = (
-            cli_profile.application_credential_id or application_credential_id
-        )
-        application_credential_secret = (
-            cli_profile.application_credential_secret or application_credential_secret
-        )
+        application_credential_id = cli_profile.application_credential_id
+        application_credential_secret = cli_profile.application_credential_secret
 
         site_map = ewc_hub_config.EWC_CLI_SITE_MAP.get(federee)
         if site_map is None:
@@ -693,8 +673,6 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             federee=federee,
             region=region,
             server_inputs=server_inputs,
-            ssh_private_encoded=ssh_private_encoded,
-            ssh_public_encoded=ssh_public_encoded,
             ssh_public_key_path=ssh_public_key_path,
             ssh_private_key_path=ssh_private_key_path,
             dry_run=dry_run,
