@@ -13,7 +13,7 @@ from typing import Optional
 import pytest
 from pydantic import BaseModel
 from unittest.mock import MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from ewccli.tests.ewccli_base_test import ServerInfo
 from ewccli.tests.ewccli_base_test import Address
@@ -70,7 +70,7 @@ def clean_config(monkeypatch):
 
 
 def test_find_latest_rocky8_cpu(finder, conn, monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     img_old = FakeImage(
         name="Rocky-8.9-20250101010101", created_at=now - timedelta(days=10)
     )
@@ -94,7 +94,7 @@ def test_find_latest_rocky8_cpu(finder, conn, monkeypatch):
 
 
 def test_find_latest_ubuntu_2204_cpu(finder, conn, monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     img1 = FakeImage(
         name="Ubuntu-22.04-20250101010101", created_at=now - timedelta(days=5)
     )
@@ -117,7 +117,7 @@ def test_find_latest_ubuntu_2204_cpu(finder, conn, monkeypatch):
 
 
 def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     img1 = FakeImage(
         name="Rocky-9.6-GPU-20250101010101", created_at=now - timedelta(days=3)
     )
@@ -140,7 +140,7 @@ def test_find_latest_rocky_gpu(finder, conn, monkeypatch):
 
 
 def test_find_latest_ubuntu_gpu(finder, conn, monkeypatch):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     img1 = FakeImage(name="Ubuntu 22.04 NVIDIA_AI", created_at=now - timedelta(days=1))
     img2 = FakeImage(name="Ubuntu 22.04 NVIDIA_AI", created_at=now)
 
@@ -175,7 +175,7 @@ def test_find_latest_ubuntu_gpu(finder, conn, monkeypatch):
 
 def test_no_matching_images(finder, conn, monkeypatch):
     conn.compute.images.return_value = [
-        FakeImage(name="UnrelatedImage", created_at=datetime.utcnow())
+        FakeImage(name="UnrelatedImage", created_at=datetime.now(timezone.utc))
     ]
 
     monkeypatch.setattr(

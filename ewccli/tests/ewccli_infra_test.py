@@ -210,7 +210,10 @@ class FakeVolume:
         self.metadata = metadata
 
 
-def test_pre_delete_no_volumes():
+def test_pre_delete_no_volumes(monkeypatch):
+    # Avoid the real 15s sleep after external IP detach
+    monkeypatch.setattr("ewccli.commands.infra_command.time.sleep", lambda *_: None)
+
     backend = MagicMock()
     api = MagicMock()
 

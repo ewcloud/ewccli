@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Optional, Dict
 
 from configparser import ConfigParser, SectionProxy
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 import rich_click as click
 
@@ -45,8 +45,7 @@ class ProfileData(BaseModel):  # type: ignore[misc]
     application_credential_id: Optional[str] = None
     application_credential_secret: Optional[str] = None
 
-    class Config:
-        validate_by_name = True
+    model_config = ConfigDict(validate_by_name=True)
 
     # ------------------------------------------------------------------
     # Conversion helpers
