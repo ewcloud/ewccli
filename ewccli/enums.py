@@ -57,6 +57,7 @@ class HubItemCLIKeys(Enum):
     PATH_TO_REQUIREMENTS_FILE = "pathToRequirementsFile"
     OS_IMAGE_NAME = "osImageName"
     OS_SECURITY_GROUPS = "osSecurityGroups"
+    OS_FLAVOR_NAME = "osFlavorName"
 
     EWCCLI = "ewccli"
     EXTERNAL_IP = "externalIP"

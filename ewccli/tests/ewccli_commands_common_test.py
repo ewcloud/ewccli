@@ -59,6 +59,7 @@ def sample_hub_item():
                 },
             ],
             "osImageName": "ubuntu:22.04",
+            "osFlavorName": "4cpu-4gbmem",
             "osSecurityGroups": ["sg-123", "sg-456"],
         },
     }
@@ -133,6 +134,7 @@ def test_show_item_table_renders_defaults(console_capture, sample_hub_item):
     output = console_capture.export_text()
 
     assert "Image Name: ubuntu:22.04" in output
+    assert "Flavour Name: 4cpu-4gbmem" in output
     assert "Security Group/s: sg-123,sg-456" in output
 
 
