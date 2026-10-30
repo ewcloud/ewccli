@@ -105,8 +105,11 @@ class ProfileStore:
     Manage reading/writing EWC CLI profiles from the profiles file.
     """
 
-    def __init__(self, path: Path = ewc_hub_config.EWC_CLI_PROFILES_PATH):
-        self.path = path
+    def __init__(self, path: Optional[Path] = None):
+        # Resolve the default at call time (not import time) so the path can
+        # be redirected at runtime, e.g. by tests pointing the configuration
+        # at a temporary directory.
+        self.path = path if path is not None else ewc_hub_config.EWC_CLI_PROFILES_PATH
         self.cfg = self._load_or_init()
 
     # ------------------------------------------------------------------
