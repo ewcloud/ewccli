@@ -327,7 +327,7 @@ def _validate_item(ctx: Context, param: Parameter, value: str) -> str:
 
 
 @ewc_hub_command.command("deploy")  # type: ignore[misc]
-@openstack_optional_options
+@openstack_optional_options(hub_item=True)
 @click.option(  # type: ignore[misc]
     "--server-name",
     is_flag=False,
@@ -656,13 +656,29 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         # Deploy Server (Openstack)
         #####################################################################################
 
+        # Log when the user overrides the catalogue default flavour
+        item_default_flavour_name = item_info_values.get(
+            HubItemCLIKeys.OS_FLAVOR_NAME.value
+        )
+        if (
+            flavour_name
+            and item_default_flavour_name
+            and flavour_name != item_default_flavour_name
+        ):
+            _LOGGER.info(
+                f"Using user-provided flavour '{flavour_name}' instead of the"
+                f" catalogue default flavour '{item_default_flavour_name}'"
+                f" for item '{server_name}'."
+            )
+
         server_inputs = CreateServerInputs.safe_create(
             server_name=server_name,
             is_gpu=is_gpu,
             image_name=image_name
             or item_info_values.get(HubItemCLIKeys.OS_IMAGE_NAME.value),
             keypair_name=keypair_name,
-            flavour_name=flavour_name,
+            flavour_name=flavour_name
+            or item_info_values.get(HubItemCLIKeys.OS_FLAVOR_NAME.value),
             external_ip=(
                 item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value)
                 if item_info_ewccli.get(HubItemCLIKeys.EXTERNAL_IP.value) is not None

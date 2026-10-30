@@ -200,99 +200,125 @@ def _split_env_var(
     return tuple(unique_parameters)
 
 
-def openstack_optional_options(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Openstack optional options for the CLI commands."""
-    func = click.option(
-        "--networks",
-        "-n",
-        required=False,
-        envvar="EWC_CLI_OPENSTACK_NETWORKS",
-        type=str,
-        multiple=True,
-        callback=_split_env_var,
-        help=(
-            "List of networks (comma-separated in env var EWC_CLI_OPENSTACK_NETWORKS "
-            "or multiple arguments with the flag)."
-        ),
-    )(func)
-    func = click.option(
-        "--security-groups",
-        "-sg",
-        required=False,
-        envvar="EWC_CLI_OPENSTACK_SECURITY_GROUPS",
-        type=str,
-        multiple=True,
-        callback=_split_env_var,
-        help=(
-            "List of security groups (comma-separated in env var EWC_CLI_OPENSTACK_SECURITY_GROUPS "
-            "or multiple arguments with the flag)."
-        ),
-    )(func)
-    func = click.option(
-        "--keypair-name",
-        "-kp",
-        is_flag=False,
-        required=False,
-        default=default_keypair_name,  # callable, so evaluated at runtime
-        envvar="EWC_CLI_OPENSTACK_KEYPAIR_NAME",
-        show_default=KEYPAIT_DEFAULT,  # <-- override help display
-        type=str,
-        help=(
-            "Select a name for the keypair in Openstack. "
-            "(or set env var EWC_CLI_OPENSTACK_KEYPAIR_NAME)"
-        ),
-    )(func)
-    func = click.option(
-        "--image-name",
-        "-ig",
-        is_flag=False,
-        required=False,
-        envvar="EWC_CLI_OPENSTACK_IMAGE_NAME",
-        show_default=True,
-        type=str,
-        help=(
-            "Select image name to be used (or set env var EWC_CLI_OPENSTACK_IMAGE_NAME). "
-            "See available EWC images: https://confluence.ecmwf.int/x/pU2xG"
-        ),
-    )(func)
-    func = click.option(
-        "--flavour-name",
-        "-fr",
-        is_flag=False,
-        required=False,
-        envvar="EWC_CLI_OPENSTACK_FLAVOUR_NAME",
-        show_default=True,
-        type=str,
-        help=(
+def openstack_optional_options(  # noqa: CFQ001
+    func: Optional[Callable[..., Any]] = None, *, hub_item: bool = False
+) -> Callable[..., Any]:
+    """Openstack optional options for the CLI commands.
+
+    :param func: The command function to decorate (when used bare).
+    :param hub_item: When True, the ``--flavour-name`` help mentions that the
+        value overrides the hub item default (``values.osFlavorName``).
+        Only meaningful for ``ewc hub deploy``.
+    """
+
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
+        func_: Callable[..., Any] = f
+        func_ = click.option(
+            "--networks",
+            "-n",
+            required=False,
+            envvar="EWC_CLI_OPENSTACK_NETWORKS",
+            type=str,
+            multiple=True,
+            callback=_split_env_var,
+            help=(
+                "List of networks (comma-separated in env var EWC_CLI_OPENSTACK_NETWORKS "
+                "or multiple arguments with the flag)."
+            ),
+        )(func_)
+        func_ = click.option(
+            "--security-groups",
+            "-sg",
+            required=False,
+            envvar="EWC_CLI_OPENSTACK_SECURITY_GROUPS",
+            type=str,
+            multiple=True,
+            callback=_split_env_var,
+            help=(
+                "List of security groups (comma-separated in env var EWC_CLI_OPENSTACK_SECURITY_GROUPS "
+                "or multiple arguments with the flag)."
+            ),
+        )(func_)
+        func_ = click.option(
+            "--keypair-name",
+            "-kp",
+            is_flag=False,
+            required=False,
+            default=default_keypair_name,  # callable, so evaluated at runtime
+            envvar="EWC_CLI_OPENSTACK_KEYPAIR_NAME",
+            show_default=KEYPAIT_DEFAULT,  # <-- override help display
+            type=str,
+            help=(
+                "Select a name for the keypair in Openstack. "
+                "(or set env var EWC_CLI_OPENSTACK_KEYPAIR_NAME)"
+            ),
+        )(func_)
+        func_ = click.option(
+            "--image-name",
+            "-ig",
+            is_flag=False,
+            required=False,
+            envvar="EWC_CLI_OPENSTACK_IMAGE_NAME",
+            show_default=True,
+            type=str,
+            help=(
+                "Select image name to be used (or set env var EWC_CLI_OPENSTACK_IMAGE_NAME). "
+                "See available EWC images: https://confluence.ecmwf.int/x/pU2xG"
+            ),
+        )(func_)
+
+        flavour_help = (
             "Select a name for the flavor in OpenStack "
             "(or set env var EWC_CLI_OPENSTACK_FLAVOUR_NAME). "
-            "See EWC VM plans: https://confluence.ecmwf.int/x/evWHEw"
-        ),
-    )(func)
-    func = click.option(
-        "--external-ip",
-        is_flag=True,
-        default=False,
-        envvar="EWC_CLI_EXTERNAL_IP",
-        type=bool,
-        show_default=True,
-        help="Add External IP to the machine.",
-    )(func)
-    func = click.option(
-        "--root-volume",
-        type=int,
-        default=ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
-        show_default=True,
-        help="Root volume given size in GB. Only if OpenStack boot from volume is enabled.",
-    )(func)
-    func = click.option(
-        "--extra-volume",
-        type=int,
-        multiple=True,
-        help="Attach an extra volume of the given size in GB. Can be used multiple times.",
-    )(func)
+        )
+        if hub_item:
+            flavour_help += (
+                "Overrides the item default flavour (values.osFlavorName), if present, "
+                "when deploying a hub item. "
+            )
+        flavour_help += "See EWC VM plans: https://confluence.ecmwf.int/x/evWHEw"
 
-    return func
+        func_ = click.option(
+            "--flavour-name",
+            "-fr",
+            is_flag=False,
+            required=False,
+            envvar="EWC_CLI_OPENSTACK_FLAVOUR_NAME",
+            show_default=True,
+            type=str,
+            help=flavour_help,
+        )(func_)
+        func_ = click.option(
+            "--external-ip",
+            is_flag=True,
+            default=False,
+            envvar="EWC_CLI_EXTERNAL_IP",
+            type=bool,
+            show_default=True,
+            help="Add External IP to the machine.",
+        )(func_)
+        func_ = click.option(
+            "--root-volume",
+            type=int,
+            default=ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE,
+            show_default=True,
+            help="Root volume given size in GB. Only if OpenStack boot from volume is enabled.",
+        )(func_)
+        func_ = click.option(
+            "--extra-volume",
+            type=int,
+            multiple=True,
+            help="Attach an extra volume of the given size in GB. Can be used multiple times.",
+        )(func_)
+
+        return func_
+
+    if func is None:
+        # Called as @openstack_optional_options(hub_item=True)
+        return decorator
+
+    # Called bare as @openstack_optional_options
+    return decorator(func)
 
 
 def validate_path(
@@ -476,6 +502,10 @@ def _render_defaults(item_info: Dict[str, Any]) -> str:
     image = item_info.get("osImageName")
     if image:
         defaults.append(f"Image Name: {image}")
+
+    flavour = item_info.get("osFlavorName")
+    if flavour:
+        defaults.append(f"Flavour Name: {flavour}")
 
     sgs = item_info.get("osSecurityGroups", [])
     if sgs:
