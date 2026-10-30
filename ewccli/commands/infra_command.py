@@ -343,7 +343,7 @@ def create_cmd(  # noqa: CFQ001, CCR001, C901, CFQ002
 @ewc_infra_command.command("show", help="Show Openstack server information.")  # type: ignore[misc]
 @infra_context  # type: ignore[misc]
 @click.argument("server_name")  # type: ignore[misc]
-def show_cmd(  # noqa: CCR001
+def show_cmd(  # noqa: CCR001, C901
     ctx: click.Context,
     server_name: str,
     federee: Optional[str] = None,
@@ -373,10 +373,22 @@ def show_cmd(  # noqa: CCR001
         click.echo(f"Server '{server_name}' not found.")
         return
 
-    image_id = server_info.get("image", "").get("id")
-    image_info = openstack_api.image.find_image(image_id)
+    image = server_info.get("image") or {}
+    image_id = image.get("id") if isinstance(image, dict) else None
 
-    image_name = image_info.get("name")
+    image_name: Optional[str] = None
+    if image_id:
+        try:
+            image_info = openstack_api.image.find_image(image_id, ignore_missing=True)
+            image_name = image_info.get("name") if image_info else None
+        except Exception:
+            _LOGGER.warning(
+                f"Could not retrieve image {image_id} for server {server_name};"
+                " continuing without image name."
+            )
+            image_name = None
+    else:
+        image_name = "N/A (booted from volume)"
 
     root_volume = None
     extra_volumes = []
