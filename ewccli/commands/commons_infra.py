@@ -47,13 +47,12 @@ class CreateServerInputs(BaseModel):  # type: ignore[misc]
 
     networks: Optional[Tuple[str, ...]] = None
     security_groups: Optional[Tuple[str, ...]] = None
-    os_security_groups: Optional[Tuple[str, ...]] = None
 
     root_volume: int = ewc_hub_config.ROOT_VOLUME_DEFAULT_SIZE
 
     extra_volume: Optional[Tuple[int, ...]] = None
 
-    @field_validator("networks", "security_groups", "os_security_groups", mode="before")  # type: ignore[misc]
+    @field_validator("networks", "security_groups", mode="before")  # type: ignore[misc]
     @classmethod
     def normalize_tuple(cls: type, v: Any) -> Tuple[str, ...]:  # noqa: CFQ004
         """
@@ -1174,7 +1173,6 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     image_name: Optional[str] = server_inputs["image_name"]
     flavour_name: Optional[str] = server_inputs["flavour_name"]
     security_groups: Optional[Tuple[str, ...]] = server_inputs["security_groups"]
-    os_security_groups: Optional[Tuple[str, ...]] = server_inputs["os_security_groups"]
 
     if dry_run:
         return 0, "[Dry Run] skipping pre deploy server setup...", outputs
@@ -1270,15 +1268,6 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
     ##################################################################################
     # Network (private) and security groups
     ##################################################################################
-    security_groups_inputs: Tuple[str, ...] = ()
-
-    if security_groups:
-        security_groups_inputs += security_groups
-
-    if os_security_groups:
-        _LOGGER.debug(f"Adding default security group: {os_security_groups}")
-        security_groups_inputs += tuple(dsc for dsc in os_security_groups)
-
     if not networks:
         default_network = ewc_hub_config.DEFAULT_NETWORK_MAP.get(federee)
 
@@ -1293,8 +1282,8 @@ def pre_deploy_server_setup(  # noqa: C901, CCR001, CFQ004, CFQ001, CFQ002
 
         outputs["networks"] = networks
 
-    security_groups = (
-        security_groups_inputs or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(federee)
+    security_groups = security_groups or ewc_hub_config.DEFAULT_SECURITY_GROUP_MAP.get(
+        federee
     )
 
     if not security_groups:

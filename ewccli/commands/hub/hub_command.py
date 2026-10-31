@@ -656,6 +656,27 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
         # Deploy Server (Openstack)
         #####################################################################################
 
+        catalog_sec_groups = item_info_values.get(
+            HubItemCLIKeys.OS_SECURITY_GROUPS.value
+        )
+        effective_security_groups = security_groups or catalog_sec_groups
+
+        if security_groups:
+            catalog_desc = (
+                ", ".join(catalog_sec_groups) if catalog_sec_groups else "none defined"
+            )
+            console.print(
+                Panel(
+                    f"Using custom security groups: {', '.join(security_groups)}\n"
+                    f"instead of the security groups recommended by the {item} item"
+                    f" ({catalog_desc}).\n"
+                    "Make sure the selected security groups allow the traffic required by the item, otherwise"
+                    " the item might not deploy successfully or work as expected.",
+                    title="Warning",
+                    style="yellow",
+                )
+            )
+
         server_inputs = CreateServerInputs.safe_create(
             server_name=server_name,
             is_gpu=is_gpu,
@@ -669,10 +690,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
                 else external_ip
             ),
             networks=networks,
-            security_groups=security_groups,
-            os_security_groups=item_info_values.get(
-                HubItemCLIKeys.OS_SECURITY_GROUPS.value
-            ),
+            security_groups=effective_security_groups,
             root_volume=root_volume,
             extra_volume=extra_volume,
         )
