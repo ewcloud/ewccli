@@ -10,6 +10,20 @@ on:
 
 jobs:
 
+  gate:
+    name: Check commit messages
+    runs-on: ubuntu-latest
+    outputs:
+      run_tests: ${{ steps.check.outputs.run_tests }}
+    steps:
+      - name: Decide whether tests should run
+        id: check
+        env:
+          COMMIT_MESSAGES: ${{ toJson(github.event.commits.*.message) }}
+        run: |
+          run_tests=$(jq -n --argjson msgs "$COMMIT_MESSAGES" 'if ($msgs | length) == 0 then true else any($msgs[]; startswith("docs:") | not) end')
+          echo "run_tests=$run_tests" >> "$GITHUB_OUTPUT"
+
   lint:
     name: Linting
     runs-on: ubuntu-latest
@@ -32,8 +46,8 @@ jobs:
   unittest:
     name: Unittesting
     runs-on: ubuntu-latest
-    needs: lint
-    if: ${{ always() }}
+    needs: [gate, lint]
+    if: ${{ always() && needs.gate.outputs.run_tests == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,8 +72,8 @@ jobs:
   e2e:
     name: End-to-end Testing
     runs-on: ubuntu-latest
-    needs: unittest
-    if: ${{ always() }}
+    needs: [unittest, gate]
+    if: ${{ always() && needs.gate.outputs.run_tests == 'true' }}
     strategy:
       max-parallel: 1
       fail-fast: false
