@@ -9,6 +9,7 @@
 """CLI EWC Hub: EWC Hub interaction items specific methods."""
 
 import shutil
+import socket
 import sys
 import json
 import time
@@ -214,7 +215,112 @@ def git_clone_item(
     return return_code, message
 
 
-def run_ansible_item(  # noqa: CCR001, CFQ002
+def wait_for_ssh_ready(
+    ip_machine: str,
+    port: int = ewc_hub_config.SSH_PORT,
+    timeout_seconds: int = ewc_hub_config.SSH_READY_TIMEOUT_SECONDS,
+    poll_interval_seconds: int = ewc_hub_config.SSH_READY_POLL_INTERVAL_SECONDS,
+) -> bool:
+    """
+    Wait until sshd on a newly provisioned VM starts accepting connections.
+
+    Newly provisioned VMs may need some time after boot before sshd takes in
+    traffic. Poll the SSH port silently instead of letting Ansible fail loudly
+    with alarming UNREACHABLE errors on the first attempts.
+
+    Args:
+        ip_machine: IP address of the machine to probe.
+        port: SSH port to probe.
+        timeout_seconds: Business-defined SSH connection timeout.
+        poll_interval_seconds: Delay between two probes.
+
+    Returns:
+        bool: True when the SSH port accepts connections, False on timeout
+        or when no IP address is available.
+    """
+    if not ip_machine:
+        return False
+
+    _LOGGER.info(
+        f"⏳ Waiting for SSH on {ip_machine}:{port} to become ready"
+        f" (timeout: {timeout_seconds}s)..."
+    )
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection((ip_machine, port), timeout=5):
+                _LOGGER.info(f"✅ SSH on {ip_machine}:{port} is ready.")
+                return True
+        except OSError:
+            time.sleep(poll_interval_seconds)
+
+    _LOGGER.error(
+        f"❌ SSH on {ip_machine}:{port} did not accept connections"
+        f" within {timeout_seconds} seconds."
+    )
+    return False
+
+
+def _run_ansible_attempts(  # noqa: CFQ002
+    item: str,
+    server_name: str,
+    username: str,
+    hosts_file_path: str,
+    ssh_private_key_path: str,
+    main_file_path: str,
+    working_directory_path: str,
+    extra_vars: str,
+    env: Dict[str, str],
+) -> int:
+    """Run the item playbook, retrying on failure."""
+    ansible_command = [
+        f"ansible-playbook -i {hosts_file_path} -u {username}"
+        f" --private-key {ssh_private_key_path} {main_file_path}"
+    ]
+
+    max_attempts = 5
+    delay_seconds = 10  # wait between attempts
+
+    for attempt in range(1, max_attempts + 1):
+        _LOGGER.info(f"Running attempt {attempt}/{max_attempts}...")
+
+        return_code = ansible_backend.run_ansible_live(
+            working_directory_path=f"{working_directory_path}",
+            description=ansible_command[0],
+            host=server_name,
+            cmdline=[
+                "ansible-playbook",
+                "-i",
+                hosts_file_path,
+                "-u",
+                username,
+                "--private-key",
+                ssh_private_key_path,
+                main_file_path,
+            ],
+            extra_vars=extra_vars,
+            env=env,
+        )
+
+        if return_code == 0:
+            # Success
+            _LOGGER.info(f"Attempt {attempt}/{max_attempts} succeeded.")
+            return 0
+
+        _LOGGER.warning(f"Attempt {attempt}/{max_attempts} failed")
+        if attempt < max_attempts:
+            _LOGGER.info(f"Retrying in {delay_seconds} seconds...")
+            time.sleep(delay_seconds)
+        else:
+            _LOGGER.error(
+                f"All attempts failed. EWC CLI could not install {item} Ansible Playbook item."
+            )
+
+    return 1
+
+
+def run_ansible_item(  # noqa: CFQ002
     item: str,
     item_inputs: Optional[Dict[str, str]],
     server_name: str,
@@ -271,62 +377,37 @@ def run_ansible_item(  # noqa: CCR001, CFQ002
         # "ANSIBLE_SSH_ARGS": "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no",
     }
 
-    ansible_command = [
-        f"ansible-playbook -i {hosts_file_path} -u {username}"
-        f" --private-key {ssh_private_key_path} {main_file_path}"
-    ]
-
     _LOGGER.info(f"Deploying Ansible Playbook item {item}...")
     _LOGGER.info("⏳ This could take a few minutes, grab a beverage meanwhile...")
-
-    # Sleep some time to wait to start.
-    time.sleep(15)
 
     if item_inputs:
         extra_vars = json.dumps(item_inputs)
     else:
         extra_vars = ""
 
-    max_attempts = 5
-    delay_seconds = 10  # wait between attempts
-
-    for attempt in range(1, max_attempts + 1):
-        _LOGGER.info(f"Running attempt {attempt}/{max_attempts}...")
-
-        return_code = ansible_backend.run_ansible_live(
-            working_directory_path=f"{working_directory_path}",
-            description=ansible_command[0],
-            host=server_name,
-            cmdline=[
-                "ansible-playbook",
-                "-i",
-                hosts_file_path,
-                "-u",
-                username,
-                "--private-key",
-                ssh_private_key_path,
-                main_file_path,
-            ],
-            extra_vars=extra_vars,
-            env=env,
+    # A freshly provisioned VM may need some time before sshd starts taking in
+    # traffic. Wait for it silently instead of letting Ansible fail loudly on
+    # the first attempts. An error is raised only when the business-defined
+    # SSH connection timeout is reached.
+    if ip_machine and not wait_for_ssh_ready(ip_machine):
+        _LOGGER.error(
+            f"❌ Could not reach {ip_machine}:{ewc_hub_config.SSH_PORT} within"
+            f" {ewc_hub_config.SSH_READY_TIMEOUT_SECONDS} seconds."
+            f" EWC CLI could not install {item} Ansible Playbook item."
         )
+        return 1
 
-        if return_code == 0:
-            # Success
-            _LOGGER.info(f"Attempt {attempt}/{max_attempts} succeeded.")
-            return return_code
-        else:
-            _LOGGER.warning(f"Attempt {attempt}/{max_attempts} failed")
-            if attempt < max_attempts:
-                _LOGGER.info(f"Retrying in {delay_seconds} seconds...")
-                time.sleep(delay_seconds)
-            else:
-                _LOGGER.error(
-                    f"All attempts failed. EWC CLI could not install {item} Ansible Playbook item."
-                )
-                return_code = 1
-
-    return return_code
+    return _run_ansible_attempts(
+        item=item,
+        server_name=server_name,
+        username=username,
+        hosts_file_path=hosts_file_path,
+        ssh_private_key_path=ssh_private_key_path,
+        main_file_path=main_file_path,
+        working_directory_path=working_directory_path,
+        extra_vars=extra_vars,
+        env=env,
+    )
 
 
 def run_post_ansible_operations(
