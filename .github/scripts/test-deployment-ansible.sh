@@ -132,7 +132,7 @@ pip freeze > "$ARTIFACTS_DIR/requirements.txt"
 
 printf "%s" "{\"ewccli_login_exit_code\":\"$EWCCLI_LOGIN_EXIT_CODE\"}" > "$ARTIFACTS_DIR/ewccli_login_exit_code.json"
 printf "%s" "{\"ewccli_deploy_exit_code\":\"$EWCCLI_DEPLOY_EXIT_CODE\"}" > "$ARTIFACTS_DIR/ewccli_deploy_exit_code.json"
-printf "%s" "{\"ewccli_cleanup_exit_code\":\"$EWCCLI_DEPLOY_EXIT_CODE\"}" > "$ARTIFACTS_DIR/ewccli_cleanup_exit_code.json"
+printf "%s" "{\"ewccli_cleanup_exit_code\":\"$EWCCLI_CLEANUP_EXIT_CODE\"}" > "$ARTIFACTS_DIR/ewccli_cleanup_exit_code.json"
 printf "%s" "${item_metadata}" > "$ARTIFACTS_DIR/item_metadata.yaml"
 echo "${EWCCLI_LOGIN_CMD[@]}" > "$ARTIFACTS_DIR/login.sh"
 echo "${EWCCLI_DEPLOY_CMD[@]}" > "$ARTIFACTS_DIR/deploy.sh"
