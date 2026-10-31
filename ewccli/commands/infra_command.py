@@ -496,7 +496,7 @@ class ServerDeleteOptions(BaseModel):  # type: ignore[misc]
     help="Force deletion of machines not created by the ewccli.",
 )
 @infra_context  # type: ignore[misc]
-def delete_cmd(  # noqa: CFQ002, C901
+def delete_cmd(  # noqa: CFQ002, C901, CCR001
     ctx: click.Context,
     server_name: str,
     dry_run: bool,
@@ -542,6 +542,16 @@ def delete_cmd(  # noqa: CFQ002, C901
             f"Could not retrieve server {server_name} due to: {e}"
             f"{openstack_error_hint(e)}"
         )
+
+    # get_server returns None (without raising) when the server does not
+    # exist. Without this guard, pre_delete_server would crash with
+    # "'NoneType' object has no attribute 'get'" (e.g. CI cleanup after a
+    # failed deploy that never created the VM).
+    if not server_info:
+        _LOGGER.warning(
+            f"Server '{server_name}' not found in Openstack; nothing to delete."
+        )
+        return
 
     # Step 3: Run pre-delete steps
     try:

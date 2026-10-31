@@ -14,12 +14,10 @@ import yaml
 import typing
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
-
 import rich_click as click
 from rich.console import Console
 from rich.panel import Panel
 from click import ClickException, Context, Parameter
-from click import get_current_context
 from pydantic import ValidationError, create_model
 
 from ewccli.configuration import config as ewc_hub_config
@@ -113,8 +111,6 @@ def ewc_hub_command(  # noqa: CCR001
 
 
 def categorize_item_inputs(  # noqa CCR001
-    ctx: click.Context,
-    item_info: Dict[str, str],
     item_info_input_spec: List[Dict[str, str]],
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     """Categorize item inputs into default and mandatory."""
@@ -141,12 +137,6 @@ def categorize_item_inputs(  # noqa CCR001
         else:
             # In other case, the input is mandatory and it needs to be provided by the user.
             required_inputs.append(item_input)
-
-    ctx = get_current_context()  # <-- Get Click Context
-
-    ctx.command.params[3].type = click.Choice(required_inputs)
-    ctx.command.params[3].required = True
-    ctx.command.params[3].nargs = len(required_inputs)
 
     return required_inputs, default_inputs
 
@@ -240,6 +230,57 @@ class KeyValueType(click.ParamType):  # type: ignore[misc]
 
     name = "key=value"
 
+    def split_envvar_value(self, rv: str) -> List[str]:  # noqa: CCR001
+        """Split an EWC_CLI_ITEM_INPUTS value into key=value chunks.
+
+        Click's default splits on whitespace only, which breaks the
+        documented list syntax (``names="['a', 'b']"``) because the list
+        itself contains spaces: the chunk ``'b']`` then fails the
+        key=value check. This splitter honours both separators (whitespace
+        and commas) but only at the top level: commas and spaces inside
+        brackets ``[...]``/``{...}``/``(...)`` or inside quotes are kept
+        as part of the same chunk, so YAML list/dict literals survive.
+        """
+        chunks: List[str] = []
+        current: List[str] = []
+        depth = 0
+        quote: Optional[str] = None
+
+        for char in rv or "":
+            if quote:
+                current.append(char)
+                if char == quote:
+                    quote = None
+                continue
+
+            if char in "\"'":
+                quote = char
+                current.append(char)
+                continue
+
+            if char in "[{(":
+                depth += 1
+                current.append(char)
+                continue
+
+            if char in "]})":
+                depth = max(0, depth - 1)
+                current.append(char)
+                continue
+
+            if depth == 0 and (char.isspace() or char == ","):
+                if current:
+                    chunks.append("".join(current))
+                    current = []
+                continue
+
+            current.append(char)
+
+        if current:
+            chunks.append("".join(current))
+
+        return [chunk for chunk in chunks if chunk]
+
     def convert(
         self,
         value: str,
@@ -274,7 +315,9 @@ _ITEM_INPUT_MESSAGE = (
     "  --item-inputs retries=3\n"
     "  --item-inputs names=\"['a', 'b']\"\n\n"
     "Note:\n"
-    "  When passing lists or dictionaries, the syntax used to parse inputs is same as yaml.\n"
+    "  When passing lists or dictionaries, the syntax used to parse inputs is same as yaml.\n\n"
+    "Via environment variable (comma-separated):\n"
+    "  EWC_CLI_ITEM_INPUTS=\"key1=value1,retries=3,names=['a', 'b']\"\n"
 )
 
 
@@ -447,7 +490,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
 
     # Categorize items inputs from the item info in the catalog (Required and Default)
     required_item_inputs, default_item_inputs = categorize_item_inputs(
-        ctx, item_info=item_info, item_info_input_spec=item_info_input_spec
+        item_info_input_spec=item_info_input_spec
     )
 
     # If no item inputs provided by the user, make default as empty dictionary
