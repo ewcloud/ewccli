@@ -475,6 +475,94 @@ class ServerDeleteOptions(BaseModel):  # type: ignore[misc]
     force: bool = False
 
 
+def _connect_for_delete(
+    ctx: click.Context, auth: ServerAuthConfig
+) -> connection.Connection:
+    """Authenticate and open the OpenStack connection for a delete run."""
+    try:
+        return ctx.openstack_backend.connect(
+            auth_url=auth.auth_url,
+            application_credential_id=auth.application_credential_id,
+            application_credential_secret=auth.application_credential_secret,
+        )
+    except Exception as op_error:
+        raise ClickException(
+            f"Could not connect to Openstack due to the following error: {op_error}"
+            f"{openstack_error_hint(op_error)}"
+        )
+
+
+def _fetch_server_for_delete(
+    openstack_api: connection.Connection, server_name: str
+) -> Optional[Dict[str, Any]]:
+    """Fetch the server to delete, or None when it does not exist."""
+    try:
+        server_info: Optional[Dict[str, Any]] = openstack_api.get_server(
+            name_or_id=server_name
+        )
+        return server_info
+    except Exception as e:
+        raise ClickException(
+            f"Could not retrieve server {server_name} due to: {e}"
+            f"{openstack_error_hint(e)}"
+        )
+
+
+def _run_pre_delete_steps(
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    federee: Optional[str],
+    server_name: str,
+    server_info: Dict[str, Any],
+    dry_run: bool,
+) -> None:
+    """Run pre-delete steps and abort the command when they fail."""
+    try:
+        if federee is None:
+            raise ValueError("Missing federee in ServerAuthConfig")
+
+        sc_pre, msg_pre = pre_delete_server(
+            openstack_backend=openstack_backend,
+            openstack_api=openstack_api,
+            federee=federee,
+            server_name=server_name,
+            server_info=server_info,
+            dry_run=dry_run,
+        )
+    except Exception as e:
+        raise ClickException(
+            f"Pre-delete steps failed for server {server_name} due to: {e}"
+        )
+
+    if sc_pre != 0:
+        raise ClickException(msg_pre)
+
+    _LOGGER.info(msg_pre)
+
+
+def _delete_server_on_openstack(
+    openstack_backend: OpenstackBackend,
+    openstack_api: connection.Connection,
+    server_name: str,
+    opts: ServerDeleteOptions,
+) -> None:
+    """Delete the server and log the backend result."""
+    try:
+        _, delete_message = openstack_backend.delete_server(
+            conn=openstack_api,
+            server_name=server_name,
+            force=opts.force,
+            dry_run=opts.dry_run,
+        )
+    except Exception as e:
+        raise ClickException(
+            f"Could not delete server {server_name} from Openstack due to: {e}"
+            f"{openstack_error_hint(e)}"
+        )
+
+    _LOGGER.info(delete_message)
+
+
 @ewc_infra_command.command(name="delete", help="Delete server in Openstack.")  # type: ignore[misc]
 @click.option(  # type: ignore[misc]
     "--dry-run",
@@ -495,7 +583,7 @@ class ServerDeleteOptions(BaseModel):  # type: ignore[misc]
     help="Force deletion of machines not created by the ewccli.",
 )
 @infra_context  # type: ignore[misc]
-def delete_cmd(  # noqa: CFQ002, C901
+def delete_cmd(
     ctx: click.Context,
     server_name: str,
     dry_run: bool,
@@ -518,68 +606,40 @@ def delete_cmd(  # noqa: CFQ002, C901
     opts = ServerDeleteOptions(dry_run=dry_run, force=force)
 
     # Step 1: Authenticate and initialize the OpenStack connection
-    try:
-        # Step 1: Authenticate and initialize the OpenStack connection
-        openstack_api = ctx.openstack_backend.connect(
-            auth_url=auth.auth_url,
-            application_credential_id=auth.application_credential_id,
-            application_credential_secret=auth.application_credential_secret,
-        )
-    except Exception as op_error:
-        raise ClickException(
-            f"Could not connect to Openstack due to the following error: {op_error}"
-            f"{openstack_error_hint(op_error)}"
-        )
+    openstack_api = _connect_for_delete(ctx, auth)
 
     server_name = os.getenv("EWC_CLI_OS_SERVER_NAME") or server_name
 
     # Step 2: Fetch server_info
-    try:
-        server_info = openstack_api.get_server(name_or_id=server_name)
-    except Exception as e:
-        raise ClickException(
-            f"Could not retrieve server {server_name} due to: {e}"
-            f"{openstack_error_hint(e)}"
+    server_info = _fetch_server_for_delete(openstack_api, server_name)
+
+    # get_server returns None (without raising) when the server does not
+    # exist. Without this guard, pre_delete_server would crash with
+    # "'NoneType' object has no attribute 'get'" (e.g. CI cleanup after a
+    # failed deploy that never created the VM).
+    if not server_info:
+        _LOGGER.warning(
+            f"Server '{server_name}' not found in Openstack; nothing to delete."
         )
+        return
 
     # Step 3: Run pre-delete steps
-    try:
-        if auth.federee is None:
-            raise ValueError("Missing federee in ServerAuthConfig")
-
-        sc_pre, msg_pre = pre_delete_server(
-            openstack_backend=ctx.openstack_backend,
-            openstack_api=openstack_api,
-            federee=auth.federee,
-            server_name=server_name,
-            server_info=server_info,
-            dry_run=opts.dry_run,
-        )
-    except Exception as e:
-        raise ClickException(
-            f"Pre-delete steps failed for server {server_name} due to: {e}"
-        )
-
-    if sc_pre != 0:
-        raise ClickException(msg_pre)
-
-    _LOGGER.info(msg_pre)
+    _run_pre_delete_steps(
+        openstack_backend=ctx.openstack_backend,
+        openstack_api=openstack_api,
+        federee=auth.federee,
+        server_name=server_name,
+        server_info=server_info,
+        dry_run=opts.dry_run,
+    )
 
     # Step 4: Delete server
-    try:
-        _, delete_message = ctx.openstack_backend.delete_server(
-            conn=openstack_api,
-            server_name=server_name,
-            force=opts.force,
-            dry_run=opts.dry_run,
-        )
-    except Exception as e:
-        raise ClickException(
-            f"Could not delete server {server_name} from Openstack due to: {e}"
-            f"{openstack_error_hint(e)}"
-        )
-
-    _LOGGER.info(delete_message)
+    _delete_server_on_openstack(
+        openstack_backend=ctx.openstack_backend,
+        openstack_api=openstack_api,
+        server_name=server_name,
+        opts=opts,
+    )
 
 
 def pre_delete_server(  # noqa: C901, CCR001, CFQ004, CFQ001
