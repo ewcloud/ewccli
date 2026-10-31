@@ -28,6 +28,7 @@
     <li><a href="#prerequisties">Prerequisites</a>
       <ul>
         <li><a href="#openstack-inputs">Openstack Inputs</a></li>
+        <li><a href="#security-groups">Security Groups</a></li>
       </ul>
     </li>
     <li><a href="#installing">Installing</a></li>
@@ -39,6 +40,7 @@
       </ul>
     <li><a href="#getting-started">Getting started</a></li>
     <li><a href="#login-to-prepare-the-environment">Login to prepare the environment</a></li>
+    <li><a href="#commands-overview">Commands overview</a></li>
     <li><a href="#list-items-in-the-catalog">List Items in the catalog</a></li>
     <li><a href="#deploy-items-from-the-catalog">Deploy Items from the catalog</a></li>
     <li><a href="#test-items-unreleased-or-from-private-sources">Test Items unreleased or from private sources</a></li>
@@ -88,6 +90,33 @@ The `ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). T
 
 You can use the following [link](https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+-+How+to+request+Openstack+Application+Credentials) to obtain:
 - Applications Credentials (ID and secret)
+
+The following OpenStack options are shared by `ewc hub deploy` and
+`ewc infra create`:
+
+| Option | Env var | Default | Description |
+| --- | --- | --- | --- |
+| `--networks`, `-n` | `EWC_CLI_OPENSTACK_NETWORKS` | EWC default network | Target network(s); flag can be repeated |
+| `--security-groups`, `-sg` | `EWC_CLI_OPENSTACK_SECURITY_GROUPS` | see [Security groups](#security-groups) | Security group(s); flag can be repeated |
+| `--keypair-name`, `-kp` | `EWC_CLI_OPENSTACK_KEYPAIR_NAME` | `<linux-username>-ewccli-keypair` | OpenStack keypair name |
+| `--image-name`, `-ig` | `EWC_CLI_OPENSTACK_IMAGE_NAME` | `Rocky-9` (latest minor version) | Image short or full name ([EWC Virtual Images](https://confluence.ecmwf.int/spaces/EWCLOUDKB/pages/414272933/EWC+Virtual+Images+Available)) |
+| `--flavour-name`, `-fr` | `EWC_CLI_OPENSTACK_FLAVOUR_NAME` | auto-selected | VM flavour ([EWC VM plans](https://confluence.ecmwf.int/x/evWHEw)) |
+| `--external-ip` | `EWC_CLI_EXTERNAL_IP` | `false` | Assign a public floating IP to the VM |
+| `--root-volume` | — | `50` GB | Root volume size in GB |
+| `--extra-volume` | — | — | Extra volume size in GB; flag can be repeated |
+
+### Security groups
+
+Security groups control which network traffic reaches the target VM. The
+effective set used at deploy time is:
+
+- the `--security-groups` / `-sg` flag (or env var
+  `EWC_CLI_OPENSTACK_SECURITY_GROUPS`), **combined with**
+- `values.osSecurityGroups` from the item metadata (catalogue default),
+
+falling back to the EWC default (`ssh` on both federees) when neither is
+provided. Pass the flag when you need different ports than the catalogue
+default.
 
 ## Installing
 
@@ -216,6 +245,25 @@ ssh_public_key_path =
 ssh_private_key_path =
 ```
 
+## Commands overview
+
+| Command | Description |
+| --- | --- |
+| `ewc --help` | Show the top-level command index |
+| `ewc version` | Print the installed `ewccli` version |
+| `ewc login` | Create or update a login profile in `~/.ewccli/profiles` |
+| `ewc quota [--profile NAME]` | Show the resource quota overview: CPU, RAM, block storage, floating IPs |
+| `ewc hub list` | List the items in the catalog |
+| `ewc hub show ITEM` | Show one item's metadata, inputs and defaults |
+| `ewc hub deploy ITEM` | Deploy a catalog item (see below) |
+| `ewc infra create SERVER` | Create a server in OpenStack with the shared Openstack inputs |
+| `ewc infra list [--show-all]` | List servers created by `ewccli` (`--show-all` also lists servers not created by it) |
+| `ewc infra show SERVER` | Show server information |
+| `ewc infra delete SERVER` | Delete a server (`--dry-run` to simulate, `--force` for servers not created by `ewccli`) |
+
+Every command accepts `--help` for its full option list, and `--profile` to
+select the login profile where applicable.
+
 ## List Items in the catalog
 
 The following command shows the current available Items. Official Items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
@@ -234,6 +282,27 @@ ewc hub list
 ewc hub deploy ITEM
 ```
 where ITEM is taken from `ewc hub list` command under Item column.
+
+A complete deployment command, showing all mandatory parameters:
+
+```bash
+ewc hub deploy ITEM \
+  --profile my-profile \
+  --server-name my-server \
+  --item-inputs key1=value1 \
+  --item-inputs key2=value2
+```
+
+- `--profile` selects the login profile (defaults to the default profile).
+- Every item input **without a `default`** in `values.inputSpec` is mandatory:
+  pass one `--item-inputs name=value` per required input (or answer the
+  prompts). Inputs with defaults can be omitted or overridden the same way.
+- Useful optional flags: `--dry-run` (validate without deploying) and the
+  shared Openstack inputs `--keypair-name`, `--image-name`, `--flavour-name`,
+  `--networks`, `--security-groups`, `--external-ip`, `--root-volume`,
+  `--extra-volume` — env vars and defaults for all of them are listed under
+  [Openstack inputs](#openstack-inputs). Item inputs can also be set via the
+  `EWC_CLI_ITEM_INPUTS` env var.
 
 ## Test Items unreleased or from private sources
 
@@ -263,9 +332,9 @@ Attributes of particular interest during Item development and testing include:
     - Absolute path to a local directory with the Item. The path needs to point to an existing non-empty directory
 - `values.inputSpec` is the list of inputs you want the user to be able to provide. Any input without default values is treated as required; users can set them when prompted during deployment, or by passing the `--item-inputs` arg as part of the deploy command.
 - `values.osImageName`, which can be:
-    - The full name of one of the OpenStack image listed on the [EWC Knowledge Base](https://confluence.ecmwf.int/x/pU2xG)
+    - The full name of one of the OpenStack image listed on the [EWC Knowledge Base](https://confluence.ecmwf.int/spaces/EWCLOUDKB/pages/414272933/EWC+Virtual+Images+Available)
     - The short name of the the OpenStack image; the EWCCLI will auto-resolve to the latest available minor version for the specified operative system
-- `values.osSecurityGroups` is a list of OpenStack Security Groups assigned to the target VM such that network traffic can reach it on certain ports.
+- `values.osSecurityGroups` is a list of OpenStack Security Groups assigned to the target VM such that network traffic can reach it on certain ports. It is combined with any groups passed via the `--security-groups` flag; if neither is provided, the EWC default (`ssh`) applies.
 - `values.pathToMainFile` is the relative path to your directory or repository
 - `values.pathToRequirementsFile` is the relative path to your directory or repository
 
@@ -274,14 +343,17 @@ Attributes of particular interest during Item development and testing include:
 Once metadata is correct and complete, execute `list`, `show` or `deploy` commands as needed:
 
 ```bash
-ewc hub --path-to-catalog ./custom_catalog.yaml list|show|deploy
+ewc hub --path-to-catalog ./custom_catalog.yaml list
 ```
 ```bash
-ewc hub --path-to-catalog ./custom_catalog.yaml show
+ewc hub --path-to-catalog ./custom_catalog.yaml show ITEM
 ```
 ```bash
-ewc hub --path-to-catalog ./custom_catalog.yaml deploy
+ewc hub --path-to-catalog ./custom_catalog.yaml deploy ITEM --dry-run
 ```
+
+Add `--item-inputs name=value` for each mandatory input, then drop
+`--dry-run` for the real deployment.
 
 ## Backends
 
