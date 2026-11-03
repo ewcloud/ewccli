@@ -648,7 +648,6 @@ def test_pre_deploy_server_setup_invalid_encoded_keys(conn):
         "image_name": None,
         "flavour_name": None,
         "security_groups": (),
-        "os_security_groups": (),
         "networks": ("private",),
     }
 
@@ -710,7 +709,6 @@ def test_pre_deploy_server_setup_success(conn):
             "image_name": None,
             "flavour_name": None,
             "security_groups": (),
-            "os_security_groups": (),
             "networks": ("private",),
         }
 
@@ -771,7 +769,6 @@ def test_pre_deploy_server_setup_invalid_inputs(conn):
             "image_name": None,
             "flavour_name": None,
             "security_groups": (),
-            "os_security_groups": (),
             "networks": ("private",),
         }
 
