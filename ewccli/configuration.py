@@ -195,6 +195,14 @@ class EWCCLIConfiguration:
         Federee.EUMETSAT.value: FedereeDNSMapping.EUMETSAT.value,
     }
 
+    # Business-defined SSH connection timeout: how long to wait (silently) for a
+    # newly provisioned VM to start accepting SSH traffic before running Ansible.
+    SSH_READY_TIMEOUT_SECONDS = 300
+    # How often to poll the SSH port while waiting.
+    SSH_READY_POLL_INTERVAL_SECONDS = 5
+    # Default SSH port used by the provisioned VMs.
+    SSH_PORT = 22
+
     DEFAULT_SECURITY_GROUP_MAP = {
         Federee.ECMWF.value: ("ssh",),
         Federee.EUMETSAT.value: ("ssh",),
