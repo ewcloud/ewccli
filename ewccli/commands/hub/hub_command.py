@@ -517,6 +517,7 @@ def deploy_cmd(  # noqa: CFQ002, CFQ001, CCR001, C901
             command_path=command_path,
             dry_run=dry_run,
             force=force,
+            ref=version,
         )
 
         if git_clone_return_code == 0:
