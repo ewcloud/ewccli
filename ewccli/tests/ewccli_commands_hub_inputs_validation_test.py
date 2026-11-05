@@ -277,3 +277,124 @@ def test_prepare_missing_inputs_error_message():
     assert (
         msg == "Missing 2 required item input(s):\n- ipa_domain\n- ipa_admin_password"
     )
+
+
+# ------------------------------------------------------------
+# EWC_CLI_ITEM_INPUTS environment variable parsing
+# ------------------------------------------------------------
+
+
+@pytest.fixture
+def item_inputs_command():
+    """A minimal click command mirroring the --item-inputs option wiring."""
+    import click
+    from click.testing import CliRunner
+
+    from ewccli.commands.hub.hub_command import (
+        KeyValueType,
+        _validate_item_inputs_format,
+    )
+
+    @click.command()
+    @click.option(
+        "--item-inputs",
+        "-iu",
+        envvar="EWC_CLI_ITEM_INPUTS",
+        type=KeyValueType(),
+        multiple=True,
+        callback=_validate_item_inputs_format,
+    )
+    def cmd(item_inputs):
+        click.echo(repr(item_inputs))
+
+    return cmd, CliRunner()
+
+
+def _invoke_with_env(item_inputs_command, env_value):
+    cmd, runner = item_inputs_command
+    result = runner.invoke(cmd, [], env={"EWC_CLI_ITEM_INPUTS": env_value})
+    assert result.exit_code == 0, result.output
+    return eval(result.output.strip())  # noqa: S307 - output is our own repr
+
+
+def test_envvar_space_separated_pairs(item_inputs_command):
+    """The historical whitespace format must keep working."""
+    parsed = _invoke_with_env(item_inputs_command, "a=1 b=2")
+    assert parsed == {"a": 1, "b": 2}
+
+
+def test_envvar_comma_separated_pairs(item_inputs_command):
+    parsed = _invoke_with_env(item_inputs_command, "a=1,b=2")
+    assert parsed == {"a": 1, "b": 2}
+
+
+def test_envvar_list_value_with_spaces(item_inputs_command):
+    """Spaces inside a YAML list must not split the chunk."""
+    parsed = _invoke_with_env(item_inputs_command, "names=['a', 'b']")
+    assert parsed == {"names": ["a", "b"]}
+
+
+def test_envvar_mixed_separators_with_list(item_inputs_command):
+    parsed = _invoke_with_env(
+        item_inputs_command, "retries=3, names=['a', 'b'] other=9"
+    )
+    assert parsed == {"retries": 3, "names": ["a", "b"], "other": 9}
+
+
+def test_envvar_dict_value_keeps_inner_commas(item_inputs_command):
+    parsed = _invoke_with_env(item_inputs_command, "cfg={x: 1, y: 2} n=5")
+    assert parsed == {"cfg": {"x": 1, "y": 2}, "n": 5}
+
+
+def test_envvar_quoted_string_with_space(item_inputs_command):
+    parsed = _invoke_with_env(item_inputs_command, "msg='hello world' n=5")
+    assert parsed == {"msg": "hello world", "n": 5}
+
+
+def test_envvar_empty_value_yields_empty_dict(item_inputs_command):
+    parsed = _invoke_with_env(item_inputs_command, "")
+    assert parsed == {}
+
+
+def test_flags_still_work(item_inputs_command):
+    cmd, runner = item_inputs_command
+    result = runner.invoke(
+        cmd,
+        ["--item-inputs", "a=1", "--item-inputs", "names=['x', 'y']"],
+    )
+    assert result.exit_code == 0, result.output
+    assert eval(result.output.strip()) == {"a": 1, "names": ["x", "y"]}  # noqa: S307
+
+
+# ------------------------------------------------------------
+# Regression: categorize_item_inputs must not mutate command params
+# ------------------------------------------------------------
+
+
+def test_categorize_item_inputs_does_not_mutate_deploy_params():
+    """Regression: the function used to overwrite ctx.command.params[3]
+    (which is --flavour-name, not --item-inputs) with a click.Choice over
+    dicts, corrupting the shared command object so a second invocation in
+    the same process failed with "TypeError: unhashable type: 'dict'".
+    """
+    from ewccli.commands.hub.hub_command import (
+        categorize_item_inputs,
+        ewc_hub_command,
+    )
+
+    spec = [
+        {"name": "with_default", "type": "str", "default": "x"},
+        {"name": "required_one", "type": "str"},
+        {"name": "required_two", "type": "str"},
+    ]
+
+    before = list(ewc_hub_command.params)
+    required, defaults = categorize_item_inputs(item_info_input_spec=spec)
+    after = list(ewc_hub_command.params)
+
+    assert [i["name"] for i in required] == ["required_one", "required_two"]
+    assert [i["name"] for i in defaults] == ["with_default"]
+    assert after == before
+    # The deploy subcommand's params must be untouched as well.
+    deploy = next(p for p in ewc_hub_command.commands["deploy"].params)
+    assert deploy.name == "extra_volume"
