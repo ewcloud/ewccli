@@ -265,6 +265,7 @@ Attributes of particular interest during Item development and testing include:
 - `values.osImageName`, which can be:
     - The full name of one of the OpenStack image listed on the [EWC Knowledge Base](https://confluence.ecmwf.int/x/pU2xG)
     - The short name of the the OpenStack image; the EWCCLI will auto-resolve to the latest available minor version for the specified operative system
+- `values.osFlavorName` is the OpenStack flavor (e.g. `4cpu-4gbmem`) used as default for the target VM during deployment of an hub item; it can be overridden with the `--flavour-name` CLI flag. If omitted, the federee/region default flavour is used.
 - `values.osSecurityGroups` is a list of OpenStack Security Groups assigned to the target VM such that network traffic can reach it on certain ports.
 - `values.pathToMainFile` is the relative path to your directory or repository
 - `values.pathToRequirementsFile` is the relative path to your directory or repository
