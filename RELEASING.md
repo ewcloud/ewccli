@@ -69,3 +69,20 @@ You'll be prompted for your PyPI username & password.
 ## Release on conda-forge (only admins)
 
 Every time you create a new release on PyPI, an automatic PR is opened on the ewccli [conda-forge feedstock](https://github.com/conda-forge/ewccli-feedstock). Once tests pass and PR is merged, a new release will be created on conda-forge automatically in few seconds. Check [README](https://github.com/conda-forge/ewccli-feedstock#updating-ewccli-feedstock) in the feedstock.
+
+## Update the ewccli skill
+
+The `ewccli` skill in the [eumetsat/skills](https://github.com/eumetsat/skills/tree/main/skills) repository documents the CLI for AI assistants. After each release, check whether the new version changed anything user-facing (commands, options, defaults, workflows) and, if so, open a PR against `skills/skills/ewccli` in that repository to keep the skill in sync with the released version.
+
+## Update Community Hub Item
+
+The `ewccli` hub item in the [ewcloud/ewc-community-hub](https://github.com/ewcloud/ewc-community-hub) catalog lists the supported `ewccli` versions. After each release, open a PR in that repository to bump the item's `version` field to the new release so users installing the EWCCLI know about the updated version.
+
+
+## Share news in EWC Rocketchat
+
+Advertise the release on the [EWC Rocket.Chat](https://chat.europeanweather.cloud/) (e.g. in the EWC CLI / Community Hub channel):
+
+- Announce the new version and highlight the new features and fixes (pull the highlights from the [CHANGELOG.md](./CHANGELOG.md) for that release).
+- Mention how to get it: `pip install --upgrade ewccli` (or `conda update conda-forge::ewccli`).
+- Remind users to share feedback and report issues: open an issue on [ewcloud/ewccli/issues](https://github.com/ewcloud/ewccli/issues) or contact the EWC Support Portal.
