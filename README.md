@@ -39,6 +39,7 @@
       </ul>
     <li><a href="#getting-started">Getting started</a></li>
     <li><a href="#login-to-prepare-the-environment">Login to prepare the environment</a></li>
+    <li><a href="#commands-overview">Commands overview</a></li>
     <li><a href="#list-items-in-the-catalog">List Items in the catalog</a></li>
     <li><a href="#deploy-items-from-the-catalog">Deploy Items from the catalog</a></li>
     <li><a href="#test-items-unreleased-or-from-private-sources">Test Items unreleased or from private sources</a></li>
@@ -88,6 +89,12 @@ The `ewccli` is the European Weather Cloud (EWC) Command Line Interface (CLI). T
 
 You can use the following [link](https://confluence.ecmwf.int/display/EWCLOUDKB/EWC+-+How+to+request+Openstack+Application+Credentials) to obtain:
 - Applications Credentials (ID and secret)
+
+The OpenStack options shared by `ewc hub deploy` and `ewc infra create`
+(networks, security groups, keypair, image, flavour, external IP and volumes)
+are documented where they are used: run `ewc hub deploy --help` or
+`ewc infra create --help` to see every option together with its environment
+variable and default.
 
 ## Installing
 
@@ -216,6 +223,13 @@ ssh_public_key_path =
 ssh_private_key_path =
 ```
 
+## Commands overview
+
+Run `ewc --help` to see the available commands (`login`, `version`, `quota`,
+`hub`, `infra`) and `ewc <command> --help` for the full option list of any
+command, including environment variables and defaults. Where applicable,
+`--profile` selects the login profile to use.
+
 ## List Items in the catalog
 
 The following command shows the current available Items. Official Items are listed [here](https://github.com/ewcloud/ewc-community-hub/blob/main/items.yaml).
@@ -234,6 +248,21 @@ ewc hub list
 ewc hub deploy ITEM
 ```
 where ITEM is taken from `ewc hub list` command under Item column.
+
+A complete deployment command, showing all mandatory parameters:
+
+```bash
+ewc hub deploy ITEM \
+  --profile my-profile \
+  --server-name my-server \
+  --item-inputs key1=value1 \
+  --item-inputs key2=value2
+```
+
+- `--profile` selects the login profile (defaults to the default profile).
+- Every item input **without a `default`** in `values.inputSpec` is mandatory:
+  pass one `--item-inputs name=value` per required input. Inputs with defaults can be omitted or overridden the same way.
+- Use `--dry-run` to validate without deploying. All other options — including the shared OpenStack inputs, their environment variables and defaults — are listed by `ewc hub deploy --help`. Item inputs can also be set via the `EWC_CLI_ITEM_INPUTS` env var.
 
 ## Test Items unreleased or from private sources
 
@@ -266,7 +295,7 @@ Attributes of particular interest during Item development and testing include:
     - The full name of one of the OpenStack image listed on the [EWC Knowledge Base](https://confluence.ecmwf.int/x/pU2xG)
     - The short name of the the OpenStack image; the EWCCLI will auto-resolve to the latest available minor version for the specified operative system
 - `values.osFlavorName` is the OpenStack flavor (e.g. `4cpu-4gbmem`) used as default for the target VM during deployment of an hub item; it can be overridden with the `--flavour-name` CLI flag. If omitted, the federee/region default flavour is used.
-- `values.osSecurityGroups` is a list of OpenStack Security Groups assigned to the target VM such that network traffic can reach it on certain ports.
+- `values.osSecurityGroups` is a list of OpenStack Security Groups assigned to the target VM such that network traffic can reach it on certain ports. It is overridden by any groups passed via the `--security-groups` flag; if neither is provided, the EWC default (`ssh`) applies.
 - `values.pathToMainFile` is the relative path to your directory or repository
 - `values.pathToRequirementsFile` is the relative path to your directory or repository
 
@@ -275,14 +304,17 @@ Attributes of particular interest during Item development and testing include:
 Once metadata is correct and complete, execute `list`, `show` or `deploy` commands as needed:
 
 ```bash
-ewc hub --path-to-catalog ./custom_catalog.yaml list|show|deploy
+ewc hub --path-to-catalog ./custom_catalog.yaml list
 ```
 ```bash
-ewc hub --path-to-catalog ./custom_catalog.yaml show
+ewc hub --path-to-catalog ./custom_catalog.yaml show ITEM
 ```
 ```bash
-ewc hub --path-to-catalog ./custom_catalog.yaml deploy
+ewc hub --path-to-catalog ./custom_catalog.yaml deploy ITEM --dry-run
 ```
+
+Add `--item-inputs name=value` for each mandatory input, then drop
+`--dry-run` for the real deployment.
 
 ## Backends
 
